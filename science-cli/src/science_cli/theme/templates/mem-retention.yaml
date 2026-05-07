@@ -1,0 +1,8 @@
+technique: mem-retention
+plot_type: line
+defaults:
+  linewidth: 1.2
+  linestyle: "-"
+labels:
+  xlabel: Time (s)
+  ylabel: Resistance (Ω)

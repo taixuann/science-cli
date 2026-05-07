@@ -1,0 +1,8 @@
+technique: iv-leakage
+plot_type: line
+defaults:
+  linewidth: 1.5
+  linestyle: "-"
+labels:
+  xlabel: Voltage (V)
+  ylabel: "|Current| (A)"

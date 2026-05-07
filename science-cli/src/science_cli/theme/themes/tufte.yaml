@@ -1,0 +1,50 @@
+name: tufte
+description: Edward Tufte "Maximal Data, Minimal Ink" — clean, gridless, axis-only
+figure:
+  facecolor: white
+  figsize: [6.4, 4.8]
+  dpi: 100
+axes:
+  facecolor: white
+  edgecolor: "#555555"
+  labelcolor: "#333333"
+  titlecolor: "#333333"
+  grid: false
+  linewidth: 0.8
+  spines_top: false
+  spines_right: false
+grid:
+  color: "#cccccc"
+  alpha: 0.2
+  linestyle: "-"
+ticks:
+  color: "#555555"
+  direction: out
+  major_width: 0.5
+font:
+  family: serif
+  size: 9
+  axes_labelsize: 11
+  axes_titlesize: 12
+  tick_labelsize: 9
+  legend_size: 8
+legend:
+  frameon: false
+  fancybox: false
+  loc: best
+lines:
+  linewidth: 1.0
+  markersize: 4
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#E69F00"
+    - "#56B4E9"
+    - "#009E73"
+    - "#0072B2"
+    - "#D55E00"
+savefig:
+  dpi: 300
+  bbox: tight
+  pad_inches: 0.05
+  format: pdf

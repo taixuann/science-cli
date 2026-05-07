@@ -1,0 +1,53 @@
+name: default
+description: Clean, modern default — good for exploration
+figure:
+  facecolor: white
+  figsize: [6.4, 4.8]
+  dpi: 100
+axes:
+  facecolor: white
+  edgecolor: black
+  labelcolor: black
+  titlecolor: black
+  grid: false
+  linewidth: 1.0
+  spines_top: true
+  spines_right: true
+grid:
+  color: "#e0e0e0"
+  alpha: 0.3
+  linestyle: "-"
+ticks:
+  color: black
+  direction: in
+  major_width: 0.8
+font:
+  family: sans-serif
+  size: 10
+  axes_labelsize: 12
+  axes_titlesize: 14
+  tick_labelsize: 10
+  legend_size: 10
+legend:
+  frameon: true
+  fancybox: true
+  loc: best
+lines:
+  linewidth: 1.5
+  markersize: 6
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#E69F00"
+    - "#56B4E9"
+    - "#009E73"
+    - "#F0E442"
+    - "#0072B2"
+    - "#D55E00"
+    - "#CC79A7"
+    - "#000000"
+savefig:
+  dpi: 300
+  bbox: tight
+  pad_inches: 0.1
+  format: pdf

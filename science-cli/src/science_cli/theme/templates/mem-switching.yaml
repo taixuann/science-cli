@@ -1,0 +1,10 @@
+technique: mem-switching
+plot_type: scatter
+defaults:
+  linewidth: 1.0
+  linestyle: "none"
+  marker: "o"
+  markersize: 4
+labels:
+  xlabel: Cycle #
+  ylabel: Voltage (V)

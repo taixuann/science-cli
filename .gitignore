@@ -1,0 +1,33 @@
+# Ignore everything except science-cli and extensions/science-memristor
+/*
+!/.gitignore
+!/science-cli
+!/extensions
+/extensions/*
+!/extensions/science-memristor
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*

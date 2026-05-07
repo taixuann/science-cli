@@ -1,0 +1,53 @@
+name: acs-annotated
+description: ACS-based with annotation-friendly layout — lighter grid, spacious, arrow callouts
+figure:
+  facecolor: white
+  figsize: [4.0, 3.2]
+  dpi: 300
+axes:
+  facecolor: white
+  edgecolor: black
+  labelcolor: black
+  titlecolor: black
+  grid: false
+  linewidth: 0.8
+  spines_top: true
+  spines_right: true
+grid:
+  color: "#e0e0e0"
+  alpha: 0.3
+  linestyle: "-"
+ticks:
+  color: black
+  direction: in
+  major_width: 0.5
+font:
+  family: sans-serif
+  size: 8
+  axes_labelsize: 10
+  axes_titlesize: 11
+  tick_labelsize: 8
+  legend_size: 8
+legend:
+  frameon: false
+  fancybox: false
+  loc: best
+lines:
+  linewidth: 1.2
+  markersize: 5
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#E69F00"
+    - "#56B4E9"
+    - "#009E73"
+    - "#F0E442"
+    - "#0072B2"
+    - "#D55E00"
+    - "#CC79A7"
+    - "#000000"
+savefig:
+  dpi: 600
+  bbox: tight
+  pad_inches: 0.1
+  format: pdf

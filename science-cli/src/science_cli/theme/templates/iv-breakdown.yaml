@@ -1,0 +1,12 @@
+technique: iv-breakdown
+plot_type: line
+defaults:
+  linewidth: 1.2
+  linestyle: "-"
+labels:
+  xlabel: Voltage (V)
+  ylabel: Current (A)
+sweep:
+  rate_v_s: auto
+  direction: auto
+  segments: auto

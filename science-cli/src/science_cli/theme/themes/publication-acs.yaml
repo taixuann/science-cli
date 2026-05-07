@@ -1,0 +1,53 @@
+name: publication-acs
+description: ACS style — Helvetica 6-9pt, 8.5cm single column, 300/600 DPI, boxed axes
+figure:
+  facecolor: white
+  figsize: [3.35, 2.6]
+  dpi: 300
+axes:
+  facecolor: white
+  edgecolor: black
+  labelcolor: black
+  titlecolor: black
+  grid: false
+  linewidth: 0.8
+  spines_top: true
+  spines_right: true
+grid:
+  color: "#cccccc"
+  alpha: 0.3
+  linestyle: "-"
+ticks:
+  color: black
+  direction: in
+  major_width: 0.5
+font:
+  family: sans-serif
+  size: 8
+  axes_labelsize: 9
+  axes_titlesize: 10
+  tick_labelsize: 8
+  legend_size: 7
+legend:
+  frameon: false
+  fancybox: false
+  loc: best
+lines:
+  linewidth: 1.0
+  markersize: 4
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#E69F00"
+    - "#56B4E9"
+    - "#009E73"
+    - "#F0E442"
+    - "#0072B2"
+    - "#D55E00"
+    - "#CC79A7"
+    - "#000000"
+savefig:
+  dpi: 600
+  bbox: tight
+  pad_inches: 0.05
+  format: pdf

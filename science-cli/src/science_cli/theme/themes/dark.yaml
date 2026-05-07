@@ -1,0 +1,53 @@
+name: dark
+description: Dark background — for presentations, posters, screen viewing
+figure:
+  facecolor: "#2b2b2b"
+  figsize: [6.4, 4.8]
+  dpi: 100
+axes:
+  facecolor: "#3c3c3c"
+  edgecolor: "#e0e0e0"
+  labelcolor: "#e0e0e0"
+  titlecolor: "#ffffff"
+  grid: false
+  linewidth: 1.0
+  spines_top: false
+  spines_right: false
+grid:
+  color: "#555555"
+  alpha: 0.4
+  linestyle: "-"
+ticks:
+  color: "#e0e0e0"
+  direction: in
+  major_width: 0.8
+font:
+  family: sans-serif
+  size: 10
+  axes_labelsize: 12
+  axes_titlesize: 14
+  tick_labelsize: 10
+  legend_size: 10
+legend:
+  frameon: true
+  fancybox: true
+  loc: best
+lines:
+  linewidth: 2.0
+  markersize: 6
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#F5A623"
+    - "#73C7F0"
+    - "#00B884"
+    - "#F7EC60"
+    - "#0088CC"
+    - "#E87100"
+    - "#D989B4"
+    - "#505050"
+savefig:
+  dpi: 300
+  bbox: tight
+  pad_inches: 0.1
+  format: pdf

@@ -1,0 +1,53 @@
+name: poster
+description: Large fonts, high contrast, thick lines — for poster sessions
+figure:
+  facecolor: white
+  figsize: [12.0, 8.0]
+  dpi: 100
+axes:
+  facecolor: white
+  edgecolor: black
+  labelcolor: black
+  titlecolor: black
+  grid: false
+  linewidth: 2.0
+  spines_top: false
+  spines_right: false
+grid:
+  color: "#cccccc"
+  alpha: 0.3
+  linestyle: "-"
+ticks:
+  color: black
+  direction: in
+  major_width: 1.5
+font:
+  family: sans-serif
+  size: 18
+  axes_labelsize: 24
+  axes_titlesize: 28
+  tick_labelsize: 18
+  legend_size: 16
+legend:
+  frameon: true
+  fancybox: true
+  loc: best
+lines:
+  linewidth: 3.0
+  markersize: 10
+  linestyle: "-"
+colors:
+  prop_cycle:
+    - "#0072B2"
+    - "#E69F00"
+    - "#D55E00"
+    - "#009E73"
+    - "#56B4E9"
+    - "#CC79A7"
+    - "#F0E442"
+    - "#000000"
+savefig:
+  dpi: 150
+  bbox: tight
+  pad_inches: 0.2
+  format: pdf
