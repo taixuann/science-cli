@@ -1,9 +1,9 @@
 """Self-contained HTML dashboard for memristor IV curve plots.
 
 Reads devices.yaml and scans results/ for generated SVGs,
-assembles a pure HTML+CSS page with per-material matrix grids
-and inline plot galleries. Works with file:// protocol — no
-web server required.
+assembles a pure HTML+CSS page with per-cell click-to-show
+``<details>`` elements and per-material matrix grids at the top.
+Works with file:// protocol — no web server required.
 """
 
 from __future__ import annotations
@@ -34,6 +34,53 @@ def _get_material_color(material_key: str) -> str:
     return _COLOR_INDEX[material_key]
 
 
+# ── Number range formatting (Issue 3) ──────────────────────────
+
+
+def _format_number_ranges(numbers: list[int]) -> str:
+    """Collapse consecutive numbers into ranges.
+
+    Args:
+        numbers: Sorted (or unsorted) list of integers.
+
+    Returns:
+        String like ``"1-10"`` or ``"1-5, 11-15"``.
+        Single numbers shown as just the number.
+
+    Examples:
+        >>> _format_number_ranges([1,2,3,4,5,6,7,8,9,10])
+        '1-10'
+        >>> _format_number_ranges([1,2,3,4,5,11,12,13,14,15])
+        '1-5, 11-15'
+        >>> _format_number_ranges([3])
+        '3'
+    """
+    if not numbers:
+        return ""
+    numbers = sorted(set(numbers))
+    ranges: list[tuple[int, int]] = []
+    start = numbers[0]
+    end = numbers[0]
+    for n in numbers[1:]:
+        if n == end + 1:
+            end = n
+        else:
+            ranges.append((start, end))
+            start = end = n
+    ranges.append((start, end))
+
+    parts: list[str] = []
+    for s, e in ranges:
+        if s == e:
+            parts.append(str(s))
+        else:
+            parts.append(f"{s}-{e}")
+    return ", ".join(parts)
+
+
+# ── Dashboard generation ──────────────────────────────────────
+
+
 def generate_dashboard(
     config,
     results_dir: Path,
@@ -51,7 +98,7 @@ def generate_dashboard(
     """
     from science_memristor.plotting import _extract_sweep_annotations
 
-    # Collect all plots: (material_key, row, col, sweep_type, order, plot_filename, fe)
+    # Collect all plots
     plots: list[dict] = []
     for pt, fe in config.get_all_files("iv"):
         plot_file = fe.extra.get("plot", "")
@@ -62,6 +109,7 @@ def generate_dashboard(
             continue
 
         from science_memristor.device import extract_material_batch
+
         mb = extract_material_batch(fe.file)
         if mb:
             mat_name, batch = mb
@@ -78,15 +126,16 @@ def generate_dashboard(
                         order = idx
                         break
 
-        # Build caption annotations from sweep metadata
+        # Build annotation text from sweep metadata
         annotations = _extract_sweep_annotations(fe.sweep)
-        caption_parts = [f"r{pt.row}c{pt.col}", mat_key, fe.sweep_type or "uc"]
+        caption_parts = [f"#{order:02d}"]
         if annotations["sweep_rate"]:
             caption_parts.append(annotations["sweep_rate"])
-        if annotations["voltage_range"]:
-            caption_parts.append(annotations["voltage_range"])
-
-        anchor = f"r{pt.row}c{pt.col}-{mat_key.replace('/', '-').replace(' ', '_')}-{order:02d}"
+        direction = annotations.get("direction")
+        if direction:
+            caption_parts.append(direction)
+        else:
+            caption_parts.append(fe.sweep_type or "uc")
 
         plots.append({
             "material_key": mat_key,
@@ -95,8 +144,8 @@ def generate_dashboard(
             "sweep_type": fe.sweep_type or "uc",
             "order": order,
             "plot_file": plot_file,
-            "caption": " | ".join(caption_parts),
-            "anchor": anchor,
+            "caption": "  |  ".join(caption_parts),
+            "material_caption": f"r{pt.row}c{pt.col} | {mat_key} | {fe.sweep_type or 'uc'}",
         })
 
     if not plots:
@@ -109,11 +158,11 @@ def generate_dashboard(
     for p in plots:
         material_groups.setdefault(p["material_key"], []).append(p)
 
-    # Group by position → material → sweep_type for plot galleries
-    position_groups: dict[tuple, list[dict]] = {}
+    # Group by cell position (row, col) for cell-level <details>
+    cell_groups: dict[tuple[int, int], list[dict]] = {}
     for p in plots:
-        key = (p["row"], p["col"], p["material_key"], p["sweep_type"])
-        position_groups.setdefault(key, []).append(p)
+        pos = (p["row"], p["col"])
+        cell_groups.setdefault(pos, []).append(p)
 
     # Determine global row/col bounds
     all_rows = {p["row"] for p in plots}
@@ -127,7 +176,7 @@ def generate_dashboard(
     html = _build_html(
         config=config,
         material_groups=material_groups,
-        position_groups=position_groups,
+        cell_groups=cell_groups,
         total_plots=len(plots),
         min_row=min_row,
         max_row=max_row,
@@ -140,17 +189,20 @@ def generate_dashboard(
     return out
 
 
+# ── HTML construction ─────────────────────────────────────────
+
+
 def _build_html(
     config,
     material_groups: dict[str, list[dict]],
-    position_groups: dict[tuple, list[dict]],
+    cell_groups: dict[tuple[int, int], list[dict]],
     total_plots: int,
     min_row: int,
     max_row: int,
     min_col: int,
     max_col: int,
 ) -> str:
-    """Build the full HTML document string."""
+    """Build the full HTML document."""
     device_label = config.device.label or config.device.id or "Memristor Device"
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -162,7 +214,13 @@ def _build_html(
         max_col=max_col,
     )
 
-    galleries_html = _build_position_galleries(position_groups)
+    cell_details_html = _build_cell_details(
+        cell_groups=cell_groups,
+        min_row=min_row,
+        max_row=max_row,
+        min_col=min_col,
+        max_col=max_col,
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -178,13 +236,17 @@ def _build_html(
 
 <header>
   <h1>{device_label}</h1>
-  <p>{total_plots} IV plots | {len(material_groups)} material(s) | Generated: {date_str}</p>
+  <p>{total_plots} IV plots | {len(material_groups)} material(s) | {len(cell_groups)} cell(s) | Generated: {date_str}</p>
 </header>
 
 <main>
 {matrices_html}
-{galleries_html}
+{cell_details_html}
 </main>
+
+<script>
+{_js_click_to_open()}
+</script>
 
 </body>
 </html>"""
@@ -199,8 +261,8 @@ def _build_matrices_row(
 ) -> str:
     """Build a horizontal flex row containing ALL material matrix grids.
 
-    Each material gets one compact matrix table in the row.
-    Anchor links in cells point down to the plot galleries below.
+    Each material gets one compact matrix table. Anchor links point
+    to per-cell ``<details>`` elements below (``#cell-r0c0``).
     """
     matrices = ""
     for mat_key in sorted(material_groups.keys()):
@@ -229,84 +291,6 @@ def _build_matrices_row(
     return f'<div class="matrix-row">{matrices}</div>'
 
 
-def _build_position_galleries(
-    position_groups: dict[tuple, list[dict]],
-) -> str:
-    """Build plot galleries grouped by cell position → material → sweep_type.
-
-    Each group gets a heading: ``T{row+1}-B{col+1}  |  {material}  |  {sweep_type}``
-    and a grid of plot figures.
-    """
-    sections = ""
-    for key in sorted(position_groups.keys()):
-        row, col, mat_key, sweep_type = key
-        plots = position_groups[key]
-
-        heading = f"T{row + 1}-B{col + 1}  |  {mat_key}  |  {sweep_type}"
-        gallery_html = _build_plot_gallery(plots)
-
-        sections += f"""
-<section class="plot-group" id="group-{row}-{col}-{mat_key.replace('/', '-').replace(' ', '_')}-{sweep_type}">
-  <h3>{heading}</h3>
-  <div class="plot-gallery">
-    {gallery_html}
-  </div>
-</section>"""
-
-    return sections
-
-
-def _build_material_section(
-    mat_key: str,
-    plots: list[dict],
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
-) -> str:
-    """Build a collapsible section for one material."""
-    color = _get_material_color(mat_key)
-    n_plots = len(plots)
-
-    # Gather unique positions for this material
-    positions = set()
-    for p in plots:
-        positions.add((p["row"], p["col"]))
-
-    # Build matrix table
-    matrix_html = _build_matrix_table(
-        plots=plots,
-        mat_key=mat_key,
-        positions=positions,
-        min_row=min_row,
-        max_row=max_row,
-        min_col=min_col,
-        max_col=max_col,
-        color=color,
-    )
-
-    # Build plot gallery
-    gallery_html = _build_plot_gallery(plots)
-
-    return f"""
-<section class="material-section" style="border-left: 4px solid {color};">
-<details open>
-<summary>
-  <span class="material-name">{mat_key}</span>
-  <span class="material-count">{n_plots} plot(s) in {len(positions)} cell(s)</span>
-</summary>
-
-<div class="material-body">
-  {matrix_html}
-  <h3>IV Curves</h3>
-  <div class="plot-gallery">
-    {gallery_html}
-  </div>
-</div>
-</details>
-</section>"""
-
-
 def _build_matrix_table(
     plots: list[dict],
     mat_key: str,
@@ -317,14 +301,15 @@ def _build_matrix_table(
     max_col: int,
     color: str,
 ) -> str:
-    """Build an HTML table representing the crossbar matrix for one material."""
+    """Build an HTML table representing the crossbar matrix for one material.
+
+    Cell links point to ``#cell-r{row}c{col}``.  Cell text uses
+    ``_format_number_ranges`` for compact display (Issue 3).
+    """
     # Build lookup: (row, col) -> list of plot orders
     cell_plots: dict[tuple[int, int], list[int]] = {}
     for p in plots:
         cell_plots.setdefault((p["row"], p["col"]), []).append(p["order"])
-
-    n_rows = max_row - min_row + 1
-    n_cols = max_col - min_col + 1
 
     rows_html = ""
     # Display rows from max (top) to min (bottom) — like T labels
@@ -334,21 +319,26 @@ def _build_matrix_table(
             pos = (r, c)
             orders = cell_plots.get(pos, [])
             if orders:
-                # Build anchor link
-                # Find the first plot with this position
-                first_order = sorted(orders)[0]
-                anchor = f"r{r}c{c}-{mat_key.replace('/', '-').replace(' ', '_')}-{first_order:02d}"
-                order_text = ",".join(str(o) for o in sorted(orders))
+                sorted_orders = sorted(set(orders))
+                range_text = _format_number_ranges(sorted_orders)
+                anchor = f"cell-r{r}c{c}"
+                # Material info in the link for context
+                n_files = len(sorted_orders)
+                label = (
+                    f"#{range_text}"
+                    if n_files == 1
+                    else f"#{range_text} ({n_files})"
+                )
                 cells += (
                     f'<td class="cell measured" style="background-color: {color};"'
-                    f'><a href="#{anchor}">{order_text}</a></td>'
+                    f'><a href="#{anchor}" class="matrix-cell-link"'
+                    f' title="T{r+1}-B{c+1}: {n_files} file(s)">{label}</a></td>'
                 )
             else:
                 cells += '<td class="cell empty"></td>'
         t_label = f"T{r + 1}" if r >= 0 else ""
         rows_html += f"<tr><th>{t_label}</th>{cells}</tr>\n"
 
-    # Bottom electrode labels
     b_labels = "".join(f"<th>B{c + 1}</th>" for c in range(min_col, max_col + 1))
 
     return f"""
@@ -365,16 +355,114 @@ def _build_matrix_table(
 </div>"""
 
 
+def _build_cell_details(
+    cell_groups: dict[tuple[int, int], list[dict]],
+    min_row: int,
+    max_row: int,
+    min_col: int,
+    max_col: int,
+) -> str:
+    """Build one ``<details>`` element per (row, col) cell position.
+
+    Each ``<details>`` contains ALL plots at that position across all
+    materials. The ``id`` matches the matrix-cell anchor so native
+    link navigation + a small JS snippet opens it on click.
+
+    ``<summary>`` shows: ``T1-B1 (3 materials, 20 files: #1-#20)``
+    """
+    if not cell_groups:
+        return '<p class="no-data">No plotted cells found.</p>'
+
+    sections = ""
+    for row in range(min_row, max_row + 1):
+        for col in range(min_col, max_col + 1):
+            pos = (row, col)
+            cell_plots = cell_groups.get(pos)
+            if not cell_plots:
+                continue
+
+            # Gather metadata for summary
+            materials_in_cell = sorted(set(p["material_key"] for p in cell_plots))
+            orders = sorted(set(p["order"] for p in cell_plots))
+            n_files = len(orders)
+            range_text = _format_number_ranges(orders)
+            n_materials = len(materials_in_cell)
+
+            t_label = row + 1
+            b_label = col + 1
+            mat_summary = ", ".join(materials_in_cell)
+
+            # Build summary line
+            if n_materials == 1:
+                summary_line = (
+                    f"T{t_label}-B{b_label}  |  {mat_summary}"
+                    f"  ({n_files} files: #{range_text})"
+                )
+            else:
+                summary_line = (
+                    f"T{t_label}-B{b_label}  ({n_materials} materials, "
+                    f"{n_files} files: #{range_text})"
+                )
+
+            # Build plot gallery — grouped by material within the cell
+            gallery_parts = ""
+            for mat_key in materials_in_cell:
+                mat_plots = [
+                    p for p in cell_plots if p["material_key"] == mat_key
+                ]
+                # Sub-heading for material
+                gallery_parts += (
+                    f'<h5 class="cell-material-heading">{mat_key}</h5>'
+                )
+                gallery_parts += _build_plot_gallery(mat_plots)
+
+            sections += f"""
+<details class="cell-details" id="cell-r{row}c{col}">
+  <summary>
+    <span class="cell-summary-text">{summary_line}</span>
+  </summary>
+  <div class="cell-body">
+    {gallery_parts}
+  </div>
+</details>"""
+
+    return sections
+
+
 def _build_plot_gallery(plots: list[dict]) -> str:
-    """Build the plot gallery for a material section."""
+    """Build a 2-column grid of plot figures."""
     items = ""
     for p in plots:
         items += f"""
-  <figure class="plot-figure" id="{p['anchor']}">
-    <img src="{p['plot_file']}" alt="{p['caption']}" loading="lazy">
+  <figure class="plot-figure">
+    <img src="{p['plot_file']}" alt="{p['material_caption']}" loading="lazy">
     <figcaption>{p['caption']}</figcaption>
   </figure>"""
-    return items
+    return f'<div class="plot-gallery">{items}</div>'
+
+
+def _js_click_to_open() -> str:
+    """Return inline JavaScript that opens ``<details>`` on matrix-cell click."""
+    return r"""
+/* ── Click-to-open: matrix cell links → <details> ── */
+(function() {
+  document.querySelectorAll('.matrix-cell-link').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      var id = this.getAttribute('href').substring(1);
+      var details = document.getElementById(id);
+      if (details) {
+        details.open = true;
+        setTimeout(function() {
+          details.scrollIntoView({behavior: 'smooth', block: 'start'});
+        }, 50);
+      }
+    });
+  });
+})();
+"""
+
+
+# ── CSS ───────────────────────────────────────────────────────
 
 
 def css() -> str:
@@ -423,68 +511,65 @@ header p  { color: #666; font-size: 0.9rem; }
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
-/* ── Material sections ─────────────────────── */
-.material-section {
+/* ── Per-cell <details> (Issue 2, 5) ────────── */
+.cell-details {
   background: #fff;
   border-radius: 8px;
-  margin-bottom: 16px;
-  padding: 20px 24px;
+  margin-bottom: 12px;
+  padding: 16px 24px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border-left: 4px solid #aaa;
 }
-.material-section details summary {
+.cell-details summary {
   cursor: pointer;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   user-select: none;
+  color: #333;
 }
-.material-section details summary::-webkit-details-marker { display: none; }
-.material-section details summary::before {
+.cell-details summary::-webkit-details-marker { display: none; }
+.cell-details summary::before {
   content: "▸";
   display: inline-block;
   width: 16px;
   transition: transform 0.2s;
   font-size: 0.8rem;
+  color: #888;
 }
-.material-section details[open] summary::before {
+.cell-details[open] summary::before {
   transform: rotate(90deg);
 }
-.material-name  { color: #222; }
-.material-count { color: #888; font-weight: 400; font-size: 0.9rem; }
-.material-body  { margin-top: 16px; }
+.cell-summary-text { flex: 1; }
+.cell-body { margin-top: 16px; }
 
-/* ── Plot groups (per cell → material → sweep_type) ── */
-.plot-group {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px 24px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.plot-group h3 {
-  font-size: 1.0rem;
+/* ── Material sub-headings inside cell details ── */
+.cell-material-heading {
+  font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 14px;
-  color: #333;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e0e0e0;
+  color: #555;
+  margin: 12px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #eee;
 }
+.cell-material-heading:first-child { margin-top: 0; }
 
 /* ── Matrix table ──────────────────────────── */
-.matrix-container { margin-bottom: 24px; overflow-x: auto; }
+.matrix-container { margin-bottom: 0; overflow-x: auto; }
 .matrix-container h4 { font-size: 0.95rem; margin-bottom: 8px; color: #555; }
 .matrix {
   border-collapse: collapse;
   font-size: 0.85rem;
+  width: 100%;
 }
 .matrix th, .matrix td {
   border: 1px solid #ddd;
-  padding: 6px 10px;
+  padding: 5px 8px;
   text-align: center;
-  min-width: 36px;
-  height: 32px;
+  min-width: 32px;
+  height: 30px;
 }
 .matrix th {
   background: #eee;
@@ -495,26 +580,25 @@ header p  { color: #666; font-size: 0.9rem; }
   background: #fafafa;
   color: #ccc;
 }
+.matrix td.measured {
+  font-weight: 600;
+}
 .matrix td.measured a {
   color: #222;
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 .matrix td.measured a:hover {
   text-decoration: underline;
 }
 
 /* ── Plot gallery ──────────────────────────── */
-.material-body h3 {
-  font-size: 0.95rem;
-  margin-bottom: 12px;
-  color: #555;
-}
 .plot-gallery {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  gap: 16px;
+  margin-bottom: 8px;
 }
 @media (max-width: 900px) {
   .plot-gallery { grid-template-columns: 1fr; }
@@ -533,9 +617,17 @@ header p  { color: #666; font-size: 0.9rem; }
 }
 .plot-figure figcaption {
   margin-top: 8px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #555;
   font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   word-break: break-all;
+}
+
+/* ── No data fallback ───────────────────────── */
+.no-data {
+  text-align: center;
+  color: #999;
+  font-size: 1rem;
+  padding: 40px;
 }
 """

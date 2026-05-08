@@ -870,6 +870,16 @@ def cmd_plot(args: argparse.Namespace) -> None:
         sys.exit(1)
     config = read_devices(pdir)
 
+    # ── Issue 1: Auto-sync if no sweep metadata found ──
+    total_sweep = sum(1 for _, fe in config.get_all_files("iv") if fe.sweep)
+    if total_sweep == 0:
+        print("No sweep metadata found. Running sync first...")
+        sync_devices(pdir)
+        config = read_devices(pdir)
+        if config is None:
+            print("Failed to re-read devices.yaml after sync.")
+            sys.exit(1)
+
     # Collect all IV files
     row_filter = args.row if getattr(args, "row", None) is not None else None
     col_filter = args.col if getattr(args, "col", None) is not None else None
@@ -927,6 +937,16 @@ def cmd_plot(args: argparse.Namespace) -> None:
     overwrite = getattr(args, "overwrite", False)
     dpi = getattr(args, "dpi", 150)
 
+    # ── Issue 4: Compute per-cell file index for line style cycling ──
+    position_files: dict[tuple[int, int], list[dict]] = {}
+    for t in targets:
+        pos = (t["row"], t["col"])
+        position_files.setdefault(pos, []).append(t)
+    for pos, files in position_files.items():
+        files.sort(key=lambda x: x["order"])
+        for i, f in enumerate(files):
+            f["file_index"] = i
+
     plotted = 0
     skipped = 0
     errors = 0
@@ -972,6 +992,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
             "row": t["row"],
             "col": t["col"],
             "order": t["order"],
+            "file_index": t.get("file_index", 0),
+            "time": info.get("time"),  # for auto-detection fallback in generate_iv_svg
         }
 
         # Generate SVG

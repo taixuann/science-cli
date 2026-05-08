@@ -45,9 +45,52 @@ Time    Bi          BV
 When `Bi`/`BV` files are assigned to protocol steps, sweep direction and rate are auto-detected from the data:
 
 - **Column mapping**: `BV` → voltage, `Bi` → current, `Time` → time
-- **Segment detection**: Voltage reversal points split the data into forward/reverse sweeps
-- **Zero-crossing split**: Bipolar sweeps (e.g., `+V → 0 → -V`) are split at `V = 0`
+- **Reversal detection**: Uses **hysteresis-based** detection (0.1V threshold) — tracks running max/min of voltage, only triggers when voltage deviates from extremum by >0.1V. Sub-mV noise never creates false reversals.
+- **Zero-derivative handling**: Voltage hold at compliance limits (flat `dV=0` steps) are correctly detected as reversal boundaries
+- **First-cycle-only**: Clarius+ files may contain appended measurement cycles; plotting uses only the first forward+reverse cycle per file
 - **Storage**: Per-file metadata written to protocol YAML or `devices.yaml`
+
+### Clarius+ / Keysight B1500A multi-segment CSV support
+
+CSV files exported from Keysight B1500A / Clarius+ contain multiple data segments
+separated by metadata blocks and re-appearing `Time,BI,BV` headers. `read_iv_csv()`
+reads **all** numeric rows from **all** segments (skipping metadata lines via `continue`),
+concatenating them into a single array. For plotting, only the first sweep cycle
+(first forward + first reverse) is used via `_split_at_reversals(voltage)[:2]`.
+
+Embedded metadata blocks are collected and parsed by `_parse_clarius_metadata()`, which
+extracts sweep parameters:
+
+| Metadata key | Parsed field | Example |
+|-------------|--------------|---------|
+| `Start/Bias` | `start_v` | `3.5` V |
+| `Stop` | `stop_v` | `-3.5` V |
+| `Step` | `step_v` | `-0.05` V |
+| `Number of Points` | `n_points` | `242` |
+| `Compliance` | `compliance` | `0.1` A |
+| `Dual Sweep` | `dual_sweep_enabled` | `True` |
+| `Sweep Delay` | `sweep_delay_s` | `0.5` s |
+
+The `info` dict returned by `read_iv_csv()` now includes:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `time` | `Optional[np.ndarray]` | Time column data (for sweep rate calculation) |
+| `skipped_lines` | `int` | Count of skipped metadata/header lines |
+| `clarius_metadata` | `dict` | Parsed Clarius+ sweep parameters |
+| `time_col` | `Optional[str]` | Detected time column header name |
+
+### Plot auto-detection fallback
+
+`generate_iv_svg()` automatically:
+
+1. **Detects bipolar sweeps**: If `_split_at_reversals()` finds multiple voltage segments,
+   the `sweep_type` is overridden to `"f"` regardless of the filename label.
+   Uses hysteresis threshold (0.1V) to prevent noise-induced false detections.
+
+2. **Fills missing sweep metadata**: When stored sweep metadata (`devices.yaml`) is missing
+   or lacks a sweep rate, the plot title is rebuilt from auto-detected annotations derived
+   directly from the voltage/time data — including direction path and sweep rate (V/s).
 
 See `PLAN.md` for the full crossbar device configuration system and `science-iv/README.md` for sweep detection details.
 
@@ -355,11 +398,19 @@ Each SVG includes:
 - IV curve with voltage (x-axis) vs current (y-axis)
 - Automatic log scale for current when span exceeds 2 decades
 - **ACS publication style**: sans-serif font (Arial/Helvetica), no grid lines,
-  inward tick marks, all four axes visible, black lines (0.8 pt)
+  inward tick marks, all four axes visible, 0.8 pt lines
+- **Line style cycling**: multiple files at the same (row, col) position use
+  cycled line styles and gray shades for visual differentiation:
+  ``#000000`` solid, ``#444444`` dashed, ``#888888`` dotted, ``#BBBBBB`` dash-dot
 - **Sweep-aware plotting**: bipolar sweeps (``f`` type) split into forward
-  (black) and reverse (gray) segments; unipolar sweeps drawn as a single line
-- **Title**: ``#01  |  0.10 V/s  |  0→+2V→0→-2V→0`` (file order, sweep rate, direction path)
+  (cycled color, solid) and reverse (``#888888``, dashed) segments;
+  unipolar sweeps drawn as a single line with cycled style
+- **Title**: ``#01  |  0.33 V/s  |  +3.5V → -3.5V → +3.5V`` (file order, sweep rate, voltage path)
 - **Legend**: shows ``#01`` (or ``#01 fwd`` / ``#01 rev`` for bipolar sweeps), drawn without box frame; thin-axis spines on all four sides
+
+**Auto-sync**: `memristor plot` checks for sweep metadata before plotting.
+If no files have sweep data, it automatically runs `memristor sync` to populate
+sweep rates and direction paths from the CSV data.
 
 Plot filenames are stored in `devices.yaml` as `FileEntry.extra["plot"]` for tracking.
 
@@ -387,15 +438,20 @@ memristor dashboard --open
 memristor dashboard --output ~/Desktop/iv_dashboard.html
 ```
 
-**Dashboard layout** (pure HTML+CSS, no JavaScript frameworks):
-- **Header**: device label, total plots, generation date
+**Dashboard layout** (pure HTML+CSS, minimal inline JavaScript):
+- **Header**: device label, total plots, cell count, materials, generation date
 - **Matrix row** (at page top): all material crossbar grids in a single horizontal
-  flex row (scrollable) — clickable cell entries link to plot galleries below
-- **Plot galleries** (grouped by `T#-B#  |  material  |  sweep_type`):
-  - Each group has a heading like ``T1-B1  |  Ta-PDAc-ITO(1)  |  f``
-  - Inline SVG gallery (2 per row) with captions showing cell, material, sweep type, and sweep parameters
+  flex row (scrollable) — clickable cells link to per-cell plot details below.
+  Cells with measured data use **number range formatting** (e.g., ``#1-18`` instead of
+  ``1,2,3,...,18``) and show file count
+- **Per-cell ``<details>`` sections**: one collapsible ``<details>`` element per
+  (row, col) position. All start closed. Click a matrix cell to open its details.
+  Summary shows position, materials, and file count range (e.g.,
+  ``T1-B1 (4 materials, 34 files: #1-34)``)
+- **Plot galleries** (inside each ``<details>``, 2 per row): inline SVG figures
+  grouped by material with subtitles. Captions show ``#N  |  sweep_rate  |  direction``
 - **Material-specific color coding** for matrix cells
-- **Self-contained**: works with `file://` protocol — just open in a browser
+- **Self-contained**: works with ``file://`` protocol — just open in a browser
 
 ### Programmatic access
 
@@ -416,10 +472,16 @@ config = read_devices("protocol/my-proto/")
 targets = collect_iv_files(config, material="Ta-PDAc-ITO(1)")
 
 # Read CSV and generate SVG
-for t in targets:
+for i, t in enumerate(targets):
     voltage, current, info = read_iv_csv("path/to/file.csv")
     filename = build_plot_filename(t["row"], t["col"], t["material_key"], t["sweep_type"], t["order"])
-    generate_iv_svg(voltage, current, {"title": filename}, f"results/{filename}")
+    generate_iv_svg(voltage, current, {
+        "title": filename,
+        "sweep": t["file_entry"].sweep,
+        "sweep_type": t["sweep_type"],
+        "order": t["order"],
+        "file_index": i,  # cycles line style/color per file at same position
+    }, f"results/{filename}")
 
 # Generate dashboard
 generate_dashboard(config, Path("results/"), Path("results/dashboard.html"))
