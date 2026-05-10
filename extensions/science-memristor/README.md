@@ -47,7 +47,7 @@ When `Bi`/`BV` files are assigned to protocol steps, sweep direction and rate ar
 - **Column mapping**: `BV` → voltage, `Bi` → current, `Time` → time
 - **Reversal detection**: Uses **hysteresis-based** detection (0.1V threshold) — tracks running max/min of voltage, only triggers when voltage deviates from extremum by >0.1V. Sub-mV noise never creates false reversals.
 - **Zero-derivative handling**: Voltage hold at compliance limits (flat `dV=0` steps) are correctly detected as reversal boundaries
-- **First-cycle-only**: Clarius+ files may contain appended measurement cycles; plotting uses only the first forward+reverse cycle per file
+- **First-cycle-only**: Clarius+ files may contain appended measurement cycles; plotting uses only the first forward+reverse cycle per file by default. Use ``--multi-cycle`` to plot all cycles.
 - **Storage**: Per-file metadata written to protocol YAML or `devices.yaml`
 
 ### Clarius+ / Keysight B1500A multi-segment CSV support
@@ -108,26 +108,24 @@ Key features:
 | `TechniqueGroup` model | Dataclass grouping files by technique (IV, endurance, retention, switching) at a point |
 | `MatrixPoint` model | Dataclass for a (row, col) position holding multiple technique groups |
 | `DeviceConfig` model | Aggregate config with query methods (get all IV files, technique coverage, etc.) |
-| `memristor init` | Scaffold `devices.yaml` at protocol level with optional `--steps` mapping |
+| `memristor init --size 4x4` | Scaffold `devices.yaml` at protocol level with optional `--steps` mapping |
 | `memristor ls --matrix` | Matrix map with per-technique status (I/E/R/S icons). Supports `--material` filter and per-material grids |
 | `memristor ls --material "Ta-PDAc-ITO(1)"` | Filter matrix or point listing to a specific material+batch |
-| `memristor info` | Show all techniques + files for a specific matrix point |
-| `memristor add` | Add files with `--technique`, `--sweep-type`, `--sweep-order`. Auto-tags with material+batch from canonical filenames |
-| `memristor add --fzf` | Interactive fzf file picker — scans all step directories recursively. Auto-tags with material+batch |
-| `memristor add --pattern` | Batch regex assignment with preview and `--dry-run`. Auto-tags with material+batch |
+| `memristor add --fzf` | Interactive fzf file picker — scans all step directories recursively. Auto-infers technique and position from filenames. Auto-syncs sweep metadata |
+| `memristor add --fzf --matrix r0c0` | Override cell position when filename can't be parsed |
+| `memristor add --pattern` | Batch regex assignment (group 1=row, group 2=col) with `--dry-run` preview. Auto-syncs sweep metadata |
 | `memristor sync` | Auto-detect sweep metadata from IV files, resolves per-technique via `steps:` mapping |
-| `memristor validate` | Check file refs, position bounds, duplicate sweep_order, step dir existence |
-| `memristor rm` | Remove file entries, technique groups, or entire points |
-| `memristor stats` | Technique coverage, measured cells, total files summary, **per-material IV coverage breakdown** |
+| `memristor rm --matrix r0c0` | Remove an entire matrix point from the device config (requires `--confirm`) |
 | `memristor check --list` | Find unassigned files across all step directories recursively |
 | `memristor plot --all` | Batch-generate publication-style IV curve SVGs for all IV files. Stores plot filenames in `devices.yaml` |
 | `memristor plot --fzf` | Interactive fzf multi-select picker to choose which IV files to plot |
 | `memristor plot --material "Ta-PDAc-ITO(1)"` | Plot all IV files for a specific material+batch |
-| `memristor plot --row 0 --col 0` | Plot IV files at a specific cell position |
-| `memristor plot --overwrite` | Re-plot even if SVGs already exist |
-| `memristor dashboard` | Generate a self-contained HTML dashboard with per-material matrix grids and inline SVG plots |
-| `memristor dashboard --open` | Generate dashboard and open in browser |
-| `memristor dashboard --output custom.html` | Write dashboard to a custom path |
+ | `memristor plot --overwrite` | Re-plot even if SVGs already exist |
+ | `memristor plot --multi-cycle` | Plot all sweep cycles (default: first cycle only). For multi-cycle endurance files |
+ | `memristor plot --x "Voltage" --y "Current"` | Override detected X/Y column names |
+ | `memristor dashboard` | Generate self-contained HTML dashboard with per-cell click-to-view panels |
+ | `memristor dashboard -n my_dash.html` | Dashboard with custom output filename |
+ | `memristor dashboard --open` | Generate dashboard and open in browser |
 ### `devices.yaml` preview (protocol-level with `steps:` mapping)
 
 ```yaml
@@ -315,11 +313,11 @@ See [`PLAN.md`](PLAN.md) §4 for full data model specification.
 ## Plotting (handled by science-cli)
 
 ```bash
-s-cli plot data/deviceA_endurance.csv --theme publication-acs
-s-cli plot data/deviceA_switch.csv --theme publication-nature
+sci plot data/deviceA_endurance.csv --theme publication-acs
+sci plot data/deviceA_switch.csv --theme publication-nature
 
 # With Bi/BV columns — column detection handles "BV" → voltage, "Bi" → current
-s-cli plot data/r0c0_IV.txt --theme publication-acs
+sci plot data/r0c0_IV.txt --theme publication-acs
 ```
 
 science-cli selects the template, applies the theme, and outputs PDF. See `science-cli/README.md` for theme configuration and output options.
@@ -343,8 +341,8 @@ See `science-iv/README.md` for sweep detection details.
 ```
 1. Measure:  sourcemeter records time(s), voltage(V), current(A) → CSV
 2. Assign:   add -m data --fzf      (assign to protocol step)
-3. Analyze:  s-cli analyze data.csv  (extract switching stats, Weibull, KS)
-4. Plot:     s-cli plot data.csv --theme publication-acs   → PDF
+3. Analyze:  sci analyze data.csv  (extract switching stats, Weibull, KS)
+4. Plot:     sci plot data.csv --theme publication-acs   → PDF
 ```
 
 **Crossbar workflow**:
@@ -352,23 +350,21 @@ See `science-iv/README.md` for sweep detection details.
 ```
 # In the sci REPL or CLI:
 
-1. memristor init --rows 4 --cols 4 --label "ITO/PDA/Ta 4x4" \
-       --steps iv:4_iv,endurance:5_end,retention:6_ret,switching:7_sw
-   (creates protocol/<proto>/devices.yaml with steps: mapping)
+1. memristor init --size 4x4 --steps step-4,step-5
+   (creates protocol/<proto>/devices.yaml with steps mapped
+    from protocol YAML technique definitions)
 
-2. memristor add --fzf --filter ,iv,set
-   (recursive scan across all step dirs, fzf picker, auto-parses row/col)
+2. memristor add --fzf --filter 0605
+   (recursive scan across all step dirs, fzf picker, auto-parses position
+    and technique from filenames; sweep metadata auto-synced on assignment)
 
-   # Or batch via regex pattern:
-   memristor add --pattern 'D1_r(\d+)c(\d+)_IV_set\.txt' --technique iv --dry-run
+   # Or batch via regex:
+   memristor add --pattern r'(\d+)c(\d+)' --dry-run
 
-3. memristor sync              (auto-detect IV sweep metadata per file)
-4. memristor validate          (check file refs, step dirs, duplicates)
-5. memristor ls --matrix       (matrix map with I/E/R/S status icons)
-6. memristor check --list      (find unassigned files across all step dirs)
-7. memristor stats             (technique coverage: 10 IV, 8 endurance, ...)
-8. memristor plot --all         (generate IV curve SVGs → results/)
-9. memristor dashboard --open   (HTML viewer for plotted SVGs)
+3. memristor ls --matrix       (matrix map with I/E/R/S icons, R/C labels)
+4. memristor check --list      (find unassigned files in memristor step dirs)
+5. memristor plot --all         (generate IV curve SVGs → results/; auto-syncs if needed)
+6. memristor dashboard -n overview.html  (HTML viewer, click cells to view)
 ```
 
 ## IV Curve Plotting
@@ -385,8 +381,11 @@ memristor plot --material "Ta-PDAc-ITO(1)"
 # Interactive fzf picker
 memristor plot --fzf
 
-# Re-plot existing SVGs
-memristor plot --all --overwrite --dpi 300
+# Re-plot existing SVGs (DPI 600, uses science-cli theme)
+memristor plot --all --overwrite
+
+# Plot all sweep cycles (for multi-cycle endurance files)
+memristor plot --all --multi-cycle
 ```
 
 **Output**: SVGs saved to `protocol/<name>/<iv_step>/results/` with naming convention:
@@ -395,7 +394,10 @@ memristor plot --all --overwrite --dpi 300
 e.g., `iv_r0c0_Ta-PDAc-ITO(1)_f_01.svg`
 
 Each SVG includes:
-- IV curve with voltage (x-axis) vs current (y-axis)
+- IV curve with voltage (x-axis) vs current (y-axis), sorted by time
+- Color-coded sweep segments with legend (e.g., `#01 seg1 (fwd)`)
+- Bipolar sweeps split into forward/reverse segments automatically
+- Theme-aware styling via science-cli theme system (default: publication-acs)
 - Automatic log scale for current when span exceeds 2 decades
 - **ACS publication style**: sans-serif font (Arial/Helvetica), no grid lines,
   inward tick marks, all four axes visible, 0.8 pt lines
@@ -404,7 +406,11 @@ Each SVG includes:
   ``#000000`` solid, ``#444444`` dashed, ``#888888`` dotted, ``#BBBBBB`` dash-dot
 - **Sweep-aware plotting**: bipolar sweeps (``f`` type) split into forward
   (cycled color, solid) and reverse (``#888888``, dashed) segments;
-  unipolar sweeps drawn as a single line with cycled style
+  unipolar sweeps drawn as a single line with cycled style.
+  **By default, only the first sweep cycle (1 forward + 1 reverse) is plotted.**
+  Use ``--multi-cycle`` to include all cycles from multi-sweep measurement files.
+  Reversal detection uses hysteresis-based tracking (0.1V threshold) to
+  eliminate false reversals from sub-mV measurement noise.
 - **Title**: ``#01  |  0.33 V/s  |  +3.5V → -3.5V → +3.5V`` (file order, sweep rate, voltage path)
 - **Legend**: shows ``#01`` (or ``#01 fwd`` / ``#01 rev`` for bipolar sweeps), drawn without box frame; thin-axis spines on all four sides
 
@@ -447,7 +453,7 @@ memristor dashboard --output ~/Desktop/iv_dashboard.html
 - **Per-cell ``<details>`` sections**: one collapsible ``<details>`` element per
   (row, col) position. All start closed. Click a matrix cell to open its details.
   Summary shows position, materials, and file count range (e.g.,
-  ``T1-B1 (4 materials, 34 files: #1-34)``)
+  ``R1-C1 (4 materials, 34 files: #1-34)``)
 - **Plot galleries** (inside each ``<details>``, 2 per row): inline SVG figures
   grouped by material with subtitles. Captions show ``#N  |  sweep_rate  |  direction``
 - **Material-specific color coding** for matrix cells
@@ -489,7 +495,7 @@ generate_dashboard(config, Path("results/"), Path("results/dashboard.html"))
 
 ## Material & Batch Tracking
 
-Files following the canonical naming convention `DDMM_Material(Batch)_b#-t#_Technique_Type_##.csv` are auto-tagged with material+batch identifiers during `memristor add`. Tags are stored per `MatrixPoint` in `devices.yaml`:
+Files following the canonical naming convention `DDMM_Material(Batch)_r#c#_technique[_suffix][-index].csv` are auto-tagged with material+batch identifiers during `memristor add`. Tags are stored per `MatrixPoint` in `devices.yaml`:
 
 ```yaml
 points:

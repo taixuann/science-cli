@@ -39,6 +39,19 @@ def open_handler(args: list) -> None:
     pos, flags = _parse_flags(args)
     mode = flags.get("m") or flags.get("mode", "")
 
+    # --close flag: clear the active protocol (delegates to close logic)
+    if flags.get("close"):
+        from science_cli.core.session import load_session, clear_last_protocol
+        sess = load_session()
+        was_active = sess.get("last_protocol", "")
+        if not was_active:
+            console.print("[dim]No protocol is currently open.[/dim]")
+            return
+        clear_last_protocol()
+        rprint(f"[bold green]\u2713[/bold green] Closed protocol: [bold white]{was_active}[/bold white]")
+        rprint("[dim]Session context cleared. Working at project level.[/dim]")
+        return
+
     if mode != "protocol":
         console.print("[yellow]Usage: open -m protocol -n <name>[/yellow]")
         return

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "science-electrochem"
+version = "0.1.0"
+description = "Electrochemistry analysis plugin for science-cli — CV, CA, EIS"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+    "lmfit>=1.0",
+]
+
+[project.entry-points."science_cli.extensions"]
+science-electrochem = "science_electrochem:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]

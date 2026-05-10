@@ -498,9 +498,7 @@ class TestCLI:
     def test_init(self, step_dir):
         test_args = [
             "mem-device", "init",
-            "--rows", "2",
-            "--cols", "2",
-            "--label", "Test",
+            "--size", "2x2",
         ]
         with _patch_protocol_dir(step_dir), patch.object(sys, "argv", test_args):
             main()
@@ -509,9 +507,7 @@ class TestCLI:
     def test_init_idempotent(self, step_dir):
         test_args = [
             "mem-device", "init",
-            "--rows", "2",
-            "--cols", "2",
-            "--label", "Test",
+            "--size", "2x2",
         ]
         with _patch_protocol_dir(step_dir), patch.object(sys, "argv", test_args):
             main()
@@ -528,8 +524,7 @@ class TestCLI:
     def test_init_then_ls(self, step_dir):
         with _patch_protocol_dir(step_dir), patch.object(sys, "argv", [
             "mem-device", "init",
-            "--rows", "2", "--cols", "2",
-            "--label", "Test",
+            "--size", "2x2",
         ]):
             main()
         with patch.object(sys, "argv", [
@@ -537,31 +532,29 @@ class TestCLI:
         ]):
             main()
 
-    def test_add_and_info(self, step_dir):
+    def test_add_pattern(self, step_dir):
+        """Batch regex assignment via --pattern."""
         with _patch_protocol_dir(step_dir), patch.object(sys, "argv", [
             "mem-device", "init",
-            "--rows", "2", "--cols", "2",
-            "--label", "Test",
+            "--size", "2x2",
         ]):
             main()
+        # Create a test file with r0c0 position in the name
+        (step_dir / "0505_Test_r0c0_iv_set.txt").write_text("dummy")
         with patch.object(sys, "argv", [
             "mem-device", "add",
-            "--row", "0", "--col", "0",
-            "--technique", "iv",
-            "--file", "test.txt",
-            "--sweep-type", "SET",
-            "--sweep-order", "1",
+            "--pattern", r'r(\d+)c(\d+)',
             "--step-dir", str(step_dir),
         ]):
             main()
-        with patch.object(sys, "argv", [
-            "mem-device", "info",
-            "--row", "0", "--col", "0",
-            "--step-dir", str(step_dir),
-        ]):
-            main()  # Should not raise
+        # Verify the file was assigned to r0c0 with technique iv
+        loaded = read_devices(step_dir)
+        pt = loaded.get_point(0, 0)
+        assert pt is not None
+        assert pt.has_technique("iv")
 
     def test_validate_ok(self, step_dir):
+        """Validation of a valid config produces no issues."""
         (step_dir / "a.txt").write_text("dummy")
         config = DeviceConfig(
             device=DeviceGeometry(id="x", label="x", rows=2, cols=2),
@@ -569,41 +562,28 @@ class TestCLI:
                 "iv": TechniqueGroup(technique="iv", files=[FileEntry(file="a.txt")]),
             })],
         )
-        write_devices(step_dir, config)
-        with patch.object(sys, "argv", [
-            "mem-device", "validate",
-            "--step-dir", str(step_dir),
-        ]):
-            main()  # Should not raise
+        issues = validate(config, protocol_dir=step_dir)
+        assert len(issues) == 0
 
     def test_validate_fail(self, step_dir):
+        """Validation of an invalid config produces issues."""
         config = DeviceConfig(
             device=DeviceGeometry(id="", label="", rows=0, cols=0),
             points=[],
         )
-        write_devices(step_dir, config)
-        with patch.object(sys, "argv", [
-            "mem-device", "validate",
-            "--step-dir", str(step_dir),
-        ]):
-            with pytest.raises(SystemExit):
-                main()
+        issues = validate(config, protocol_dir=step_dir)
+        assert len(issues) > 0
 
-    def test_stats(self, step_dir):
-        config = DeviceConfig(
-            device=DeviceGeometry(id="x", label="x", rows=2, cols=2),
-            points=[MatrixPoint(row=0, col=0, techniques={
-                "iv": TechniqueGroup(technique="iv", files=[FileEntry(file="a.txt")]),
-            })],
-        )
-        write_devices(step_dir, config)
-        with patch.object(sys, "argv", [
-            "mem-device", "stats",
-            "--step-dir", str(step_dir),
-        ]):
-            main()  # Should not raise
+    def test_stats_removed(self, step_dir):
+        """stats subcommand was removed — verify it's no longer available."""
+        from science_memristor.device_cli import build_parser
+        p = build_parser()
+        actions = [a for a in p._actions if hasattr(a, 'choices') and a.choices]
+        for a in actions:
+            assert "stats" not in a.choices
 
-    def test_rm_file(self, step_dir):
+    def test_rm_point(self, step_dir):
+        """Remove an entire matrix point with --matrix --confirm."""
         config = DeviceConfig(
             device=DeviceGeometry(id="x", label="x", rows=2, cols=2),
             points=[MatrixPoint(row=0, col=0, techniques={
@@ -613,21 +593,19 @@ class TestCLI:
         write_devices(step_dir, config)
         with patch.object(sys, "argv", [
             "mem-device", "rm",
-            "--row", "0", "--col", "0",
-            "--technique", "iv",
-            "--file", "a.txt",
+            "--matrix", "r0c0",
+            "--confirm",
             "--step-dir", str(step_dir),
         ]):
             main()
         loaded = read_devices(step_dir)
         pt = loaded.get_point(0, 0)
-        assert pt is None or not pt.has_technique("iv")
+        assert pt is None
 
     def test_init_default_id(self, step_dir):
         with _patch_protocol_dir(step_dir), patch.object(sys, "argv", [
             "mem-device", "init",
-            "--rows", "4", "--cols", "4",
-            "--label", "Test",
+            "--size", "4x4",
         ]):
             main()
         loaded = read_devices(step_dir)
@@ -1066,7 +1044,9 @@ class TestGenerateIvSvg:
         assert out.exists()
         content = out.read_text()
         assert "<svg" in content
-        assert "Test Plot" in content
+        # Title is now built from sweep annotations: #00 | 0.10 V/s
+        assert "#00" in content
+        assert "0.10 V/s" in content
 
     def test_log_scale(self, temp_dir):
         import numpy as np

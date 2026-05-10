@@ -54,6 +54,10 @@ def save_session(session: dict):
 def set_last_project(name: str):
     sess = load_session()
     sess["last_project"] = name
+    # Clear protocol/step context when switching projects —
+    # the old project's protocol should not carry over to the new one.
+    sess["last_protocol"] = ""
+    sess["last_step"] = ""
     save_session(sess)
 
 
@@ -66,6 +70,18 @@ def set_last_protocol(name: str):
 def set_last_step(name: str):
     sess = load_session()
     sess["last_step"] = name
+    save_session(sess)
+
+
+def clear_last_protocol():
+    """Clear the active protocol and step from session state.
+
+    After calling this, the REPL prompt returns to project-level only,
+    and plot/analyze commands no longer auto-reference a protocol.
+    """
+    sess = load_session()
+    sess["last_protocol"] = ""
+    sess["last_step"] = ""
     save_session(sess)
 
 

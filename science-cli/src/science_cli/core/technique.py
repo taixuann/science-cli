@@ -1,8 +1,9 @@
-"""Technique detection from filenames."""
+"""Technique detection from filenames — merges hardcoded + extension patterns."""
 
 import re
 
-PATTERNS = {
+# Hardcoded fallback patterns — used when no extensions register patterns
+PATTERNS: dict[str, list[str]] = {
     "ec-cv": [r"_CV\.", r"\.cv$", r"cv_", r"cv-"],
     "ec-ca": [r"_CA\.", r"\.ca$", r"ca_", r"ca-"],
     "ec-eis": [r"\.mpt$", r"_EIS\.", r"\.eis$", r"_impedance", r"\.z"],
@@ -17,8 +18,27 @@ PATTERNS = {
 }
 
 
+def _all_patterns() -> dict[str, list[str]]:
+    """Merge extension-registered patterns on top of hardcoded fallbacks."""
+    patterns = dict(PATTERNS)
+    try:
+        from science_cli.extensions import get_registry
+        registry = get_registry()
+        for name, tdef in registry.techniques.items():
+            if name not in patterns:
+                patterns[name] = []
+            # Extension patterns take priority: insert before hardcoded
+            existing = patterns[name]
+            new = [p for p in tdef.patterns if p not in existing]
+            patterns[name] = new + existing
+    except ImportError:
+        pass
+    return patterns
+
+
 def detect_technique(filename: str) -> str:
-    for tech, patterns in PATTERNS.items():
+    """Detect technique from filename using merged hardcoded + extension patterns."""
+    for tech, patterns in _all_patterns().items():
         for p in patterns:
             if re.search(p, filename, re.IGNORECASE):
                 return tech
@@ -26,6 +46,7 @@ def detect_technique(filename: str) -> str:
 
 
 def technique_label(tech: str) -> str:
+    """Return a human-readable label for a technique key."""
     labels = {
         "ec-cv": "CV",
         "ec-ca": "CA",
@@ -39,4 +60,13 @@ def technique_label(tech: str) -> str:
         "mem-retention": "Retention",
         "mem-switching": "Switching",
     }
+    # Check extension registry for labels not in hardcoded set
+    if tech not in labels:
+        try:
+            from science_cli.extensions import get_registry
+            registry = get_registry()
+            if tech in registry.techniques:
+                return registry.techniques[tech].label
+        except ImportError:
+            pass
     return labels.get(tech, tech.upper())

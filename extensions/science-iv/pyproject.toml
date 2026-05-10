@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "science-iv"
+version = "0.1.0"
+description = "IV curve analysis plugin for science-cli — sweep, breakdown, leakage"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+    "lmfit>=1.0",
+]
+
+[project.entry-points."science_cli.extensions"]
+science-iv = "science_iv:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]

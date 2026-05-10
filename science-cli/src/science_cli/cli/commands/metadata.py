@@ -19,7 +19,7 @@ def metadata_handler(args: list) -> None:
     sub_args = args[1:]
 
     from science_cli.core.project import get_current_project_path
-    from science_cli.functions.metadata_utils import lookup_metadata
+    from science_cli.core.legacy import lookup_metadata
 
     if sub == "show":
         if not sub_args:
@@ -52,7 +52,7 @@ def metadata_handler(args: list) -> None:
             console.print("[red]VSCode not found.[/red]")
 
     elif sub == "undo":
-        from science_cli.functions.file_browser import undo_metadata
+        from science_cli.core.legacy import undo_metadata
         proj = get_current_project_path()
         if not proj:
             console.print("[yellow]No project open.[/yellow]")

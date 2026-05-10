@@ -55,7 +55,6 @@ def project_handler(args: list) -> None:
             return
         dirs = [
             project_path / "data" / "raw",
-            project_path / "data" / "processed",
             project_path / "protocol",
             project_path / "results",
         ]

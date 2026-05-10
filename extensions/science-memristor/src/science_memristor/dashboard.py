@@ -214,7 +214,7 @@ def _build_html(
         max_col=max_col,
     )
 
-    cell_details_html = _build_cell_details(
+    cell_data_json = _build_cell_data_json(
         cell_groups=cell_groups,
         min_row=min_row,
         max_row=max_row,
@@ -241,10 +241,13 @@ def _build_html(
 
 <main>
 {matrices_html}
-{cell_details_html}
+<div id="cell-panel">
+  <p class="no-data">Click a cell in the matrix above to view plots.</p>
+</div>
 </main>
 
 <script>
+const CELL_DATA = {cell_data_json};
 {_js_click_to_open()}
 </script>
 
@@ -312,8 +315,7 @@ def _build_matrix_table(
         cell_plots.setdefault((p["row"], p["col"]), []).append(p["order"])
 
     rows_html = ""
-    # Display rows from max (top) to min (bottom) — like T labels
-    for r in range(max_row, min_row - 1, -1):
+    for r in range(min_row, max_row + 1):
         cells = ""
         for c in range(min_col, max_col + 1):
             pos = (r, c)
@@ -329,24 +331,25 @@ def _build_matrix_table(
                     if n_files == 1
                     else f"#{range_text} ({n_files})"
                 )
+                cell_id = f"r{r}c{c}"
                 cells += (
                     f'<td class="cell measured" style="background-color: {color};"'
-                    f'><a href="#{anchor}" class="matrix-cell-link"'
-                    f' title="T{r+1}-B{c+1}: {n_files} file(s)">{label}</a></td>'
+                    f' onclick="showCell(\'{cell_id}\')" style="cursor:pointer"'
+                    f' title="R{r+1}-C{c+1}: {n_files} file(s)">{label}</td>'
                 )
             else:
                 cells += '<td class="cell empty"></td>'
-        t_label = f"T{r + 1}" if r >= 0 else ""
-        rows_html += f"<tr><th>{t_label}</th>{cells}</tr>\n"
+        r_label = f"R{r + 1}" if r >= 0 else ""
+        rows_html += f"<tr><th>{r_label}</th>{cells}</tr>\n"
 
-    b_labels = "".join(f"<th>B{c + 1}</th>" for c in range(min_col, max_col + 1))
+    c_labels = "".join(f"<th>C{c + 1}</th>" for c in range(min_col, max_col + 1))
 
     return f"""
 <div class="matrix-container">
 <h4>{mat_key}</h4>
 <table class="matrix">
   <thead>
-    <tr><th></th>{b_labels}</tr>
+    <tr><th></th>{c_labels}</tr>
   </thead>
   <tbody>
     {rows_html}
@@ -355,78 +358,43 @@ def _build_matrix_table(
 </div>"""
 
 
-def _build_cell_details(
+def _build_cell_data_json(
     cell_groups: dict[tuple[int, int], list[dict]],
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
+    min_row: int, max_row: int, min_col: int, max_col: int,
 ) -> str:
-    """Build one ``<details>`` element per (row, col) cell position.
-
-    Each ``<details>`` contains ALL plots at that position across all
-    materials. The ``id`` matches the matrix-cell anchor so native
-    link navigation + a small JS snippet opens it on click.
-
-    ``<summary>`` shows: ``T1-B1 (3 materials, 20 files: #1-#20)``
+    """Build a JSON dict of cell data for JS single-cell panel view.
+    
+    Returns embedded JSON string: ``{"r0c0": "<html>", ...}``
     """
-    if not cell_groups:
-        return '<p class="no-data">No plotted cells found.</p>'
-
-    sections = ""
+    import json
+    data = {}
     for row in range(min_row, max_row + 1):
         for col in range(min_col, max_col + 1):
             pos = (row, col)
             cell_plots = cell_groups.get(pos)
             if not cell_plots:
                 continue
-
-            # Gather metadata for summary
             materials_in_cell = sorted(set(p["material_key"] for p in cell_plots))
             orders = sorted(set(p["order"] for p in cell_plots))
-            n_files = len(orders)
             range_text = _format_number_ranges(orders)
-            n_materials = len(materials_in_cell)
-
-            t_label = row + 1
-            b_label = col + 1
+            n_files = len(orders)
             mat_summary = ", ".join(materials_in_cell)
+            r_label, c_label = row + 1, col + 1
+            key = f"r{row}c{col}"
 
-            # Build summary line
-            if n_materials == 1:
-                summary_line = (
-                    f"T{t_label}-B{b_label}  |  {mat_summary}"
-                    f"  ({n_files} files: #{range_text})"
-                )
-            else:
-                summary_line = (
-                    f"T{t_label}-B{b_label}  ({n_materials} materials, "
-                    f"{n_files} files: #{range_text})"
-                )
-
-            # Build plot gallery — grouped by material within the cell
             gallery_parts = ""
             for mat_key in materials_in_cell:
-                mat_plots = [
-                    p for p in cell_plots if p["material_key"] == mat_key
-                ]
-                # Sub-heading for material
-                gallery_parts += (
-                    f'<h5 class="cell-material-heading">{mat_key}</h5>'
-                )
+                mat_plots = [p for p in cell_plots if p["material_key"] == mat_key]
+                gallery_parts += f'<h5 class="cell-material-heading">{mat_key}</h5>'
                 gallery_parts += _build_plot_gallery(mat_plots)
 
-            sections += f"""
-<details class="cell-details" id="cell-r{row}c{col}">
-  <summary>
-    <span class="cell-summary-text">{summary_line}</span>
-  </summary>
-  <div class="cell-body">
-    {gallery_parts}
-  </div>
-</details>"""
-
-    return sections
+            summary_line = f"R{r_label}-C{c_label}  |  {mat_summary}  ({n_files} files: #{range_text})"
+            data[key] = f"""
+<div class="cell-panel">
+  <h3>{summary_line}</h3>
+  <div class="cell-body">{gallery_parts}</div>
+</div>"""
+    return json.dumps(data)
 
 
 def _build_plot_gallery(plots: list[dict]) -> str:
@@ -436,29 +404,31 @@ def _build_plot_gallery(plots: list[dict]) -> str:
         items += f"""
   <figure class="plot-figure">
     <img src="{p['plot_file']}" alt="{p['material_caption']}" loading="lazy">
-    <figcaption>{p['caption']}</figcaption>
+    <figcaption></figcaption>
   </figure>"""
     return f'<div class="plot-gallery">{items}</div>'
 
 
 def _js_click_to_open() -> str:
-    """Return inline JavaScript that opens ``<details>`` on matrix-cell click."""
+    """Return inline JavaScript for single-cell panel view."""
     return r"""
-/* ── Click-to-open: matrix cell links → <details> ── */
-(function() {
-  document.querySelectorAll('.matrix-cell-link').forEach(function(link) {
-    link.addEventListener('click', function(e) {
-      var id = this.getAttribute('href').substring(1);
-      var details = document.getElementById(id);
-      if (details) {
-        details.open = true;
-        setTimeout(function() {
-          details.scrollIntoView({behavior: 'smooth', block: 'start'});
-        }, 50);
-      }
-    });
-  });
-})();
+/* ── Single-cell panel: show one cell at a time ── */
+function showCell(id) {
+    const panel = document.getElementById('cell-panel');
+    if (CELL_DATA[id]) {
+        panel.innerHTML = CELL_DATA[id];
+    } else {
+        panel.innerHTML = '<p class="no-data">No plots for this cell.</p>';
+    }
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+/* Auto-show cell from URL hash */
+document.addEventListener("DOMContentLoaded", function () {
+    if (location.hash && location.hash.startsWith("#cell-")) {
+        const id = location.hash.slice(6); /* strip "#cell-" */
+        showCell(id);
+    }
+});
 """
 
 
@@ -511,42 +481,25 @@ header p  { color: #666; font-size: 0.9rem; }
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
-/* ── Per-cell <details> (Issue 2, 5) ────────── */
-.cell-details {
-  background: #fff;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  padding: 16px 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  border-left: 4px solid #aaa;
-}
-.cell-details summary {
-  cursor: pointer;
-  font-size: 1.05rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  user-select: none;
-  color: #333;
-}
-.cell-details summary::-webkit-details-marker { display: none; }
-.cell-details summary::before {
-  content: "▸";
-  display: inline-block;
-  width: 16px;
-  transition: transform 0.2s;
-  font-size: 0.8rem;
-  color: #888;
-}
-.cell-details[open] summary::before {
-  transform: rotate(90deg);
-}
-.cell-summary-text { flex: 1; }
-.cell-body { margin-top: 16px; }
+ /* ── Cell panel (single-cell view) ────────── */
+ .cell-panel {
+   background: #fff;
+   border-radius: 8px;
+   padding: 20px 24px;
+   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+   border-left: 4px solid #0072B2;
+   margin-top: 16px;
+ }
+ .cell-panel h3 {
+   font-size: 1.05rem;
+   font-weight: 600;
+   color: #333;
+   margin-bottom: 12px;
+ }
+ .cell-body { margin-top: 16px; }
 
-/* ── Material sub-headings inside cell details ── */
-.cell-material-heading {
+ /* ── Material sub-headings inside cell panel ── */
+ .cell-material-heading {
   font-size: 0.9rem;
   font-weight: 600;
   color: #555;

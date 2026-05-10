@@ -16,7 +16,10 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
+def read_iv_csv(
+    filepath: str | Path,
+    column_map: dict | None = None,
+) -> tuple[np.ndarray, np.ndarray, dict]:
     """Read voltage and current from an IV data CSV.
 
     Handles common column conventions:
@@ -30,6 +33,11 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
 
     Args:
         filepath: Path to the CSV file.
+        column_map: Optional dict mapping logical roles to exact column
+            header names. Keys: ``"voltage"``, ``"current"``, ``"time"``.
+            When a key is provided, the corresponding column is located
+            by exact header match. Unmapped keys fall back to keyword-based
+            auto-detection.
 
     Returns:
         (voltage, current, info) where ``info`` contains metadata
@@ -62,15 +70,32 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     current_col: Optional[int] = None
     time_col: Optional[int] = None
 
-    for i, cl in enumerate(header_lower):
-        if any(k in cl for k in ("voltage", "potential", "e (v)", "v)", "bv", "bias voltage")):
-            if voltage_col is None:
+    # ── Exact column matching (when column_map is provided) ──
+    if column_map:
+        for i, h in enumerate(header):
+            h_stripped = h.strip()
+            if column_map.get("voltage") and h_stripped == column_map["voltage"]:
                 voltage_col = i
-        elif any(k in cl for k in ("current", "i (a)", "i/a", "i)", "we(1).current", "bi", "bias current")):
-            if current_col is None:
+            if column_map.get("current") and h_stripped == column_map["current"]:
                 current_col = i
-        elif any(k in cl for k in ("time", "corrected time", "t/s")):
-            if time_col is None:
+            if column_map.get("time") and h_stripped == column_map["time"]:
+                time_col = i
+        # If voltage and current were both found via exact match,
+        # skip keyword auto-detection; otherwise fall through.
+        if voltage_col is not None and current_col is not None:
+            pass  # Both found — skip keyword loop below
+        else:
+            # Fall through to keyword auto-detection for unmapped columns
+            pass
+
+    # ── Keyword-based auto-detection (fallback for unmapped columns) ──
+    if voltage_col is None or current_col is None or time_col is None:
+        for i, cl in enumerate(header_lower):
+            if voltage_col is None and any(k in cl for k in ("voltage", "potential", "e (v)", "v)", "bv", "bias voltage")):
+                voltage_col = i
+            elif current_col is None and any(k in cl for k in ("current", "i (a)", "i/a", "i)", "we(1).current", "bi", "bias current")):
+                current_col = i
+            elif time_col is None and any(k in cl for k in ("time", "corrected time", "t/s")):
                 time_col = i
 
     # Positional fallback for BI/BV convention (Time, BI, BV → cols 0,1,2)
@@ -159,6 +184,79 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         "time": time_arr,
     }
     return voltage, current, info
+
+
+def detect_csv_columns(filepath: str | Path) -> dict[str, str | None]:
+    """Detect time, voltage, and current column names from a CSV header.
+
+    Uses the same keyword-based auto-detection logic as ``read_iv_csv()``
+    but only reads the header row — does not parse data. This is useful
+    for showing a column preview before batch processing.
+
+    Args:
+        filepath: Path to the CSV file.
+
+    Returns:
+        Dict with keys ``"time"``, ``"voltage"``, ``"current"``.
+        Values are the detected header names, or ``None`` if the
+        column could not be identified.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+    """
+    import csv
+
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    with open(path, newline="") as f:
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            raise ValueError(f"Empty file: {path}")
+
+    header_lower = [h.strip().lower() for h in header]
+    expected_cols = len(header)
+
+    voltage_name: str | None = None
+    current_name: str | None = None
+    time_name: str | None = None
+
+    for i, cl in enumerate(header_lower):
+        if voltage_name is None and any(
+            k in cl for k in ("voltage", "potential", "e (v)", "v)", "bv", "bias voltage")
+        ):
+            voltage_name = header[i].strip()
+        elif current_name is None and any(
+            k in cl for k in ("current", "i (a)", "i/a", "i)", "we(1).current", "bi", "bias current")
+        ):
+            current_name = header[i].strip()
+        elif time_name is None and any(
+            k in cl for k in ("time", "corrected time", "t/s")
+        ):
+            time_name = header[i].strip()
+
+    # Positional fallback for BI/BV convention
+    if voltage_name is None and current_name is None and expected_cols == 3:
+        if any(k in header_lower[1] for k in ("bi", "current", "i")):
+            current_name = header[1].strip()
+        if any(k in header_lower[2] for k in ("bv", "voltage", "v")):
+            voltage_name = header[2].strip()
+        if "time" in header_lower[0]:
+            time_name = header[0].strip()
+    if voltage_name is None and current_name is None and expected_cols >= 2:
+        if "time" in header_lower[0]:
+            current_name = header[1].strip() if expected_cols > 1 else None
+            voltage_name = header[2].strip() if expected_cols > 2 else None
+            time_name = header[0].strip()
+
+    return {
+        "time": time_name,
+        "voltage": voltage_name,
+        "current": current_name,
+    }
 
 
 def _parse_clarius_metadata(rows: list[list[str]]) -> dict:
@@ -623,17 +721,10 @@ def _plot_simple_sweep(
     order: int,
     file_index: int = 0,
 ) -> None:
-    """Plot a single-direction (uc/sp/sn) IV sweep with cycled line style."""
-    color, style = _get_line_style(file_index)
-    label = f"#{order:02d}"
-    if use_log:
-        ax.semilogy(voltage, np.abs(current), color=color, linestyle=style,
-                     linewidth=0.8, label=label)
-        ax.set_ylabel("|Current| (A)", fontsize=10)
-    else:
-        ax.plot(voltage, current, color=color, linestyle=style,
-                linewidth=0.8, label=label)
-        ax.set_ylabel("Current (A)", fontsize=10)
+    """Plot a single-direction IV sweep with blue line, no legend."""
+    color = "#0072B2"
+    ax.plot(voltage, current, color=color, linewidth=1.5)
+    ax.set_ylabel("Current (A)", fontsize=10)
 
 
 def _plot_bipolar_sweep(
@@ -643,61 +734,32 @@ def _plot_bipolar_sweep(
     use_log: bool,
     order: int,
     file_index: int = 0,
+    multi_cycle: bool = False,
 ) -> None:
-    """Plot a full bipolar (``f``) sweep with forward/reverse distinction.
+    """Plot a bipolar sweep with color-coded segments and legend.
 
-    Splits data at voltage reversal points. Forward segments use the
-    file's cycled color; reverse segments use a muted gray with
-    dashed line. Falls back to simple sweep if segmentation yields
-    only one chunk.
+    Each sweep segment (forward/reverse half) gets a distinct color.
+    A legend maps segment index to sweep direction for readability.
     """
-    segments = _split_at_reversals(voltage)[:2]
-
+    segments = _split_at_reversals(voltage)
     if len(segments) <= 1:
         _plot_simple_sweep(ax, voltage, current, use_log, order, file_index)
         return
 
-    color, _ = _get_line_style(file_index)
-    rev_color = "#888888"
-    plot_current = np.abs(current) if use_log else current
-
+    seg_colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7",
+                  "#F0E442", "#56B4E9", "#E69F00", "#000000"]
     for seg_idx, (start, end) in enumerate(segments):
         v_seg = voltage[start:end]
-        i_seg = plot_current[start:end]
+        i_seg = current[start:end]
         if len(v_seg) < 2:
             continue
+        color = seg_colors[seg_idx % len(seg_colors)]
+        direction = "fwd" if seg_idx % 2 == 0 else "rev"
+        ax.plot(v_seg, i_seg, color=color, linewidth=1.5,
+                label=f"#{order:02d} seg{seg_idx + 1} ({direction})")
 
-        is_even = seg_idx % 2 == 0  # forward on even segments
-
-        if is_even:
-            # Forward: solid, file's cycled color
-            if use_log:
-                ax.semilogy(
-                    v_seg, i_seg, color=color, linestyle="-", linewidth=0.8,
-                    label=f"#{order:02d} fwd" if seg_idx == 0 else None,
-                )
-            else:
-                ax.plot(
-                    v_seg, i_seg, color=color, linestyle="-", linewidth=0.8,
-                    label=f"#{order:02d} fwd" if seg_idx == 0 else None,
-                )
-        else:
-            # Reverse: dashed gray
-            if use_log:
-                ax.semilogy(
-                    v_seg, i_seg, color=rev_color, linestyle="--", linewidth=0.8,
-                    label=f"#{order:02d} rev" if seg_idx == 1 else None,
-                )
-            else:
-                ax.plot(
-                    v_seg, i_seg, color=rev_color, linestyle="--", linewidth=0.8,
-                    label=f"#{order:02d} rev" if seg_idx == 1 else None,
-                )
-
-    if use_log:
-        ax.set_ylabel("|Current| (A)", fontsize=10)
-    else:
-        ax.set_ylabel("Current (A)", fontsize=10)
+    ax.set_ylabel("Current (A)", fontsize=10)
+    ax.legend(frameon=False, fontsize=7, loc="best")
 
 
 def generate_iv_svg(
@@ -705,7 +767,9 @@ def generate_iv_svg(
     current: np.ndarray,
     metadata: dict,
     output_path: str | Path,
-    dpi: int = 150,
+    dpi: int = 600,
+    multi_cycle: bool = False,
+    column_map: dict | None = None,
 ):
     """Generate an ACS publication-style IV curve SVG.
 
@@ -723,6 +787,10 @@ def generate_iv_svg(
     When no ``sweep`` metadata is available, derives sweep annotations
     directly from the voltage/time data (direction path, sweep rate).
 
+    By default only the first sweep cycle is plotted (1 forward + 1 reverse).
+    Set ``multi_cycle=True`` to include all detected cycles from
+    multi-cycle measurement files (visible via ``--multi-cycle`` CLI flag).
+
     Args:
         voltage: Voltage data array (V).
         current: Current data array (A).
@@ -736,6 +804,11 @@ def generate_iv_svg(
             - row (int), col (int): Matrix position.
         output_path: Path to save the SVG.
         dpi: Resolution for SVG rendering.
+        multi_cycle: If True, plot all sweep cycles (default: first cycle only).
+        column_map: Optional dict mapping logical roles to column headers.
+            If provided, the axis labels use the mapped column names
+            (e.g., ``{"voltage": "BV", "current": "BI"}`` produces
+            xlabel="BV", ylabel="BI" or "|BI|" for log scale).
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -747,8 +820,16 @@ def generate_iv_svg(
     order = metadata.get("order", 0)
     file_index = metadata.get("file_index", 0)
 
-    # ── Bug 3: Auto-detect bipolar from voltage reversals ──
-    segments = _split_at_reversals(voltage)[:2]
+    # ── Sort by Time to ensure correct sweep ordering ──
+    time_arr = metadata.get("time")
+    if time_arr is not None and len(time_arr) == len(voltage):
+        sort_idx = np.argsort(time_arr)
+        voltage = voltage[sort_idx]
+        current = current[sort_idx]
+        time_arr = time_arr[sort_idx]
+
+    # ── Auto-detect bipolar from voltage reversals ──
+    segments = _split_at_reversals(voltage)
     auto_bipolar = len(segments) > 1
     if auto_bipolar:
         sweep_type = "f"
@@ -778,32 +859,49 @@ def generate_iv_svg(
 
     use_log = _should_use_log_scale(current)
 
-    # ── ACS rcParams (local scope — does not pollute global) ──
-    acs_rc = {
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-        "mathtext.fontset": "dejavusans",
-        "axes.linewidth": 1.0,
-        "xtick.major.width": 0.8,
-        "ytick.major.width": 0.8,
-        "xtick.major.size": 4,
-        "ytick.major.size": 4,
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-        "legend.frameon": False,
-    }
+    # ── Use science-cli theme system ──
+    try:
+        from science_cli.theme import theme_to_rcparams
+        from science_cli.core.session import get_active_theme
+        theme_name = get_active_theme()
+        theme_rc = theme_to_rcparams(theme_name)
+    except ImportError:
+        theme_rc = {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+            "axes.linewidth": 1.0, "xtick.direction": "in", "ytick.direction": "in",
+        }
 
-    with plt.rc_context(acs_rc):
-        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
+    with plt.rc_context(theme_rc):
+        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=600)
 
         # ── Plot based on sweep type ──
         if sweep_type == "f":
-            _plot_bipolar_sweep(ax, voltage, current, use_log, order, file_index)
+            _plot_bipolar_sweep(ax, voltage, current, use_log, order, file_index,
+                                multi_cycle=multi_cycle)
         else:
             _plot_simple_sweep(ax, voltage, current, use_log, order, file_index)
 
-        ax.set_xlabel("Voltage (V)", fontsize=10)
-        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.set_xlabel(
+            column_map.get("voltage") if column_map else "Voltage (V)",
+            fontsize=10,
+        )
+        # Override ylabel if column_map provides a current label
+        if column_map and column_map.get("current"):
+            ylabel = column_map["current"]
+            if use_log:
+                ax.set_ylabel(f"|{ylabel}|", fontsize=10)
+            else:
+                ax.set_ylabel(ylabel, fontsize=10)
+        # ── Build short title (without direction path) ──
+        annotations = _extract_sweep_annotations(sweep) if sweep else {}
+        short_parts = [f"#{order:02d}"]
+        rate = annotations.get("sweep_rate")
+        if rate:
+            short_parts.append(rate)
+        short_title = "  |  ".join(short_parts)
+        ax.set_title(short_title, fontsize=11, fontweight="bold")
+
         ax.tick_params(labelsize=8, direction="in", which="both")
 
         # ── ACS: no grid, all four spines visible ──
@@ -812,19 +910,7 @@ def generate_iv_svg(
             spine.set_visible(True)
             spine.set_linewidth(0.8)
 
-        # ── Legend: no box, small font ──
-        handles, labels = ax.get_legend_handles_labels()
-        if handles:
-            ax.legend(
-                handles, labels,
-                frameon=False,
-                fontsize=8,
-                loc="upper left",
-            )
-            for handle in ax.get_legend().legend_handles:
-                handle.set_linewidth(0.8)
-
-        fig.tight_layout()
+        fig.tight_layout(rect=[0, 0.08, 1, 0.94])
         fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
         plt.close(fig)
 
@@ -839,17 +925,20 @@ def collect_iv_files(
     material: str = "",
     row: int | None = None,
     col: int | None = None,
+    column_map: dict | None = None,
 ) -> list[dict]:
     """Collect IV file entries from a DeviceConfig for plotting.
 
     Each returned dict has: point (MatrixPoint), file_entry (FileEntry),
-    material_key, order, sweep_type, row, col.
+    material_key, order, sweep_type, row, col, column_map.
 
     Args:
         config: DeviceConfig instance.
         material: Optional material+batch filter.
         row: Optional row filter.
         col: Optional col filter.
+        column_map: Optional dict mapping logical roles to column headers.
+            Stored in each target dict for downstream use.
 
     Returns:
         List of plot target dicts.
@@ -899,6 +988,7 @@ def collect_iv_files(
             "sweep_type": fe.sweep_type or "uc",
             "row": pt.row,
             "col": pt.col,
+            "column_map": column_map,
         })
 
     # Sort by row, col, material, order

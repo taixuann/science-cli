@@ -1,4 +1,9 @@
-"""analyze command handler — analysis only (no plotting)."""
+"""analyze command handler — analysis only (no plotting).
+
+Uses the ExtensionRegistry for analyzer dispatch and ColumnMap for
+column identification. No direct imports from extension packages at
+module level — all extension-specific types are imported lazily.
+"""
 
 from pathlib import Path
 import yaml
@@ -84,6 +89,40 @@ def _get_results_dir(filepath: str) -> Path:
     return out
 
 
+def _resolve_columns(df: "pd.DataFrame", technique: str) -> tuple:
+    """Resolve x, y columns and labels using the registry ColumnMap.
+
+    Returns: (xcol, ycol, xlabel, ylabel, extras_dict)
+    """
+    import numpy as np
+
+    xcol, ycol = "", ""
+    xlabel, ylabel = "", ""
+    extras: dict = {}
+
+    # 1. Try extension registry ColumnMap
+    if technique:
+        try:
+            from science_cli.extensions import get_registry
+            registry = get_registry()
+            cm = registry.column_maps.get(technique)
+            if cm is not None:
+                xcol, ycol, xlabel, ylabel, extras = cm.resolve(list(df.columns))
+        except ImportError:
+            pass
+
+    # 2. Fallback: first two numeric columns
+    if not xcol or not ycol:
+        numeric = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if c not in ("Index", "index")
+        ]
+        if len(numeric) >= 2:
+            xcol, ycol = numeric[0], numeric[1]
+
+    return xcol, ycol, xlabel or xcol, ylabel or ycol, extras
+
+
 def analyze_handler(args: list) -> None:
     if not args or args[0] in ("--help", "-h"):
         show_command_help("analyze")
@@ -112,149 +151,264 @@ def _analyze_direct(files: list, rest_args: list) -> None:
 
     tech = _detect_technique(Path(filepath).name)
 
-    if tech == "cv":
-        _analyze_cv(filepath, flags)
-    elif tech == "ca":
-        _analyze_ca(filepath, flags)
-    elif tech == "eis":
-        _analyze_eis(filepath, flags)
-    else:
-        console.print(f"[yellow]Unknown technique: {tech}. Trying CV analysis as default.[/yellow]")
-        _analyze_cv(filepath, flags)
+    # Get analyzer from registry
+    analyzer = None
+    try:
+        from science_cli.extensions import discover_extensions
+        registry = discover_extensions()
+        analyzer = registry.analyzers.get(tech)
+    except ImportError:
+        pass
 
-    # Sweep metadata: detect and store in protocol YAML
-    from science_cli.core.sweep_metadata import extract_sweep_from_file, update_protocol_with_sweep
-    from science_cli.core.session import load_session
-    from science_cli.core.project import get_current_project_path
-    from science_cli.core.paths import ProjectPaths
-    sess = load_session()
-    pname = sess.get("last_protocol", "")
-    proj = get_current_project_path()
-    if pname and proj:
-        paths = ProjectPaths(proj)
-        yaml_path = paths.protocol_yaml(pname)
-        if yaml_path.exists():
-            fname = Path(filepath).name
-            with open(yaml_path) as f:
-                proto = yaml.safe_load(f) or {}
-
-            for s in proto.get("steps", []):
-                step_files = s.get("files", [])
-                norm = [e["file"] if isinstance(e, dict) else e for e in step_files]
-                if fname in norm:
-                    segs = extract_sweep_from_file(filepath)
-                    if segs:
-                        update_protocol_with_sweep(yaml_path, s["name"], fname, segs)
-                        ndirs = ", ".join(sg["direction"] for sg in segs)
-                        console.print(f"  [dim]sweep: {len(segs)} seg [{ndirs}] @ {segs[0]['sweep_rate_v_s']} V/s[/dim]")
-                    break
-
-
-def _analyze_cv(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
-    import numpy as np
-    from science_electrochem.cv import peak_analysis, calculate_charge
-    from science_electrochem.models import CVData
-
-    df, info = load_data_file(filepath)
-    cols = info.get("columns", [])
-    if len(cols) < 2:
-        console.print("[red]Need at least 2 columns.[/red]")
+    if analyzer is None:
+        console.print(f"[yellow]No analyzer registered for technique: {tech}[/yellow]")
+        console.print("[dim]Try: sci techniques  to see available techniques.[/dim]")
         return
 
-    p, c = df[cols[0]].values, df[cols[1]].values
-    m = ~(np.isnan(p) | np.isnan(c))
-    cv_data = CVData(potential=p[m], current=c[m], scan_rate=0.0)
+    # Dispatch to per-technique handler (handles model construction + analysis + display)
+    if tech.startswith("ec-"):
+        _analyze_electrochem(filepath, flags, tech, analyzer)
+    elif tech.startswith("iv-"):
+        _analyze_iv(filepath, flags, tech, analyzer)
+    elif tech.startswith("mem-"):
+        _analyze_memristor(filepath, flags, tech, analyzer)
+    else:
+        _analyze_generic(filepath, flags, tech, analyzer)
 
-    peaks = peak_analysis(cv_data)
-    console.print(f"\n[bold]CV Analysis: {Path(filepath).name}[/bold]")
+    # Sweep metadata: detect and store in protocol YAML
+    _save_sweep_metadata(filepath)
+
+
+# ── Per-technique-family handlers ──────────────────────────────────────
+
+
+def _analyze_electrochem(
+    filepath: str, flags: dict, tech: str, analyzer
+) -> None:
+    """Analyze electrochem data (CV, CA, EIS) via registry analyzer."""
+    from science_cli.core.data_loader import load_data_file
+    import numpy as np
+
+    df, info = load_data_file(filepath)
+    xcol, ycol, xlabel, ylabel, extras = _resolve_columns(df, tech)
+
+    if not xcol or not ycol:
+        console.print("[red]Could not determine columns for this technique.[/red]")
+        return
+
+    x = np.asarray(df[xcol].values, dtype=float)
+    y = np.asarray(df[ycol].values, dtype=float)
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x, y = x[mask], y[mask]
+
+    console.print(f"\n[bold]{tech.upper()} Analysis: {Path(filepath).name}[/bold]")
+
+    # Construct domain model and run analysis (lazy imports of extension types)
+    if tech == "ec-cv":
+        from science_electrochem.models import CVData
+        data = CVData(potential=x, current=y, scan_rate=0.0)
+        result = analyzer(data, {})
+        _display_cv_results(result, flags)
+        param_summary = {"peaks": len(result.get("peaks", {}).get("anodic_peaks", [])),
+                         "charge": flags.get("charge", False)}
+        _save_analysis_manifest(filepath, "CV", param_summary)
+
+    elif tech == "ec-ca":
+        from science_electrochem.models import CAData
+        data = CAData(time=x, current=y)
+        result = analyzer(data, {"fit": flags.get("fit", True), "steady_state": True})
+        _display_ca_results(result)
+        _save_analysis_manifest(filepath, "CA", {"fit": flags.get("fit", False)})
+
+    elif tech == "ec-eis":
+        from science_electrochem.models import EISData
+        # EIS needs frequency + complex impedance
+        z_col = extras.get("z_imag", "")
+        f_col = extras.get("frequency", "")
+        z_real = x
+        z_imag = np.zeros_like(x)
+        if z_col and z_col in df.columns:
+            z_imag = np.asarray(df[z_col].values, dtype=float)
+        freq = np.arange(len(x), dtype=float)
+        if f_col and f_col in df.columns:
+            freq = np.asarray(df[f_col].values, dtype=float)
+        mask = ~(np.isnan(z_real) | np.isnan(z_imag) | np.isnan(freq))
+        z = z_real[mask] + 1j * z_imag[mask]
+        data = EISData(frequency=freq[mask], impedance=z)
+        circuit = flags.get("circuit", "RRC")
+        options = {"circuit_model": circuit, "kk": flags.get("kk", False)}
+        result = analyzer(data, options)
+        _display_eis_results(result, circuit, flags)
+        _save_analysis_manifest(
+            filepath, "EIS", {"circuit": circuit, "kk": flags.get("kk", False)}
+        )
+
+
+def _analyze_iv(
+    filepath: str, flags: dict, tech: str, analyzer
+) -> None:
+    """Analyze IV data (sweep, breakdown, leakage) via registry analyzer."""
+    from science_cli.core.data_loader import load_data_file
+    import numpy as np
+
+    df, info = load_data_file(filepath)
+    xcol, ycol, xlabel, ylabel, _extras = _resolve_columns(df, tech)
+
+    if not xcol or not ycol:
+        console.print("[red]Could not determine columns for IV analysis.[/red]")
+        return
+
+    x = np.asarray(df[xcol].values, dtype=float)
+    y = np.asarray(df[ycol].values, dtype=float)
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x, y = x[mask], y[mask]
+
+    console.print(f"\n[bold]{tech.upper()} Analysis: {Path(filepath).name}[/bold]")
+
+    try:
+        result = analyzer(x, y)
+    except Exception as e:
+        console.print(f"[red]Analysis failed: {e}[/red]")
+        return
+
+    if not isinstance(result, dict):
+        return
+
+    if "resistance" in result and result["resistance"] is not None:
+        console.print(f"  Resistance: {result['resistance']:.2e} Ω  (R²={result.get('r_squared', 0):.4f})")
+    if "breakdown_voltage" in result and result["breakdown_voltage"] is not None:
+        console.print(f"  V_bd: {result['breakdown_voltage']:.4f} V  @ {result['breakdown_current']:.2e} A")
+    if "on_off_ratio" in result and result["on_off_ratio"] is not None:
+        console.print(f"  On/Off ratio: {result['on_off_ratio']:.2f}")
+
+    _save_analysis_manifest(filepath, tech.upper(), {
+        k: v for k, v in result.items()
+        if isinstance(v, (int, float, str, bool))
+    })
+
+
+def _analyze_memristor(
+    filepath: str, flags: dict, tech: str, analyzer
+) -> None:
+    """Analyze memristor data (endurance, retention, switching) via registry."""
+    from science_cli.core.data_loader import load_data_file
+
+    df, info = load_data_file(filepath)
+    console.print(f"\n[bold]{tech.upper()} Analysis: {Path(filepath).name}[/bold]")
+
+    try:
+        result = analyzer(df)
+    except Exception as e:
+        console.print(f"[red]Analysis failed: {e}[/red]")
+        return
+
+    if isinstance(result, dict):
+        for k, v in result.items():
+            if isinstance(v, (int, float, str)):
+                console.print(f"  {k}: {v}")
+            elif isinstance(v, (list, dict)):
+                console.print(f"  {k}: {v!r}")
+
+    _save_analysis_manifest(filepath, tech.upper(),
+                            {"analyzer": tech} if not isinstance(result, dict) else {})
+
+
+def _analyze_generic(
+    filepath: str, flags: dict, tech: str, analyzer
+) -> None:
+    """Generic analysis for unknown technique families."""
+    from science_cli.core.data_loader import load_data_file
+    import numpy as np
+
+    df, info = load_data_file(filepath)
+    xcol, ycol, xlabel, ylabel, _extras = _resolve_columns(df, tech)
+
+    console.print(f"\n[bold]{tech.upper()} Analysis: {Path(filepath).name}[/bold]")
+
+    if xcol and ycol:
+        x = np.asarray(df[xcol].values, dtype=float)
+        y = np.asarray(df[ycol].values, dtype=float)
+        mask = ~(np.isnan(x) | np.isnan(y))
+        try:
+            result = analyzer(x[mask], y[mask])
+        except Exception:
+            try:
+                result = analyzer(df)
+            except Exception as e:
+                console.print(f"[red]Analysis failed: {e}[/red]")
+                return
+        if isinstance(result, dict):
+            for k, v in result.items():
+                if isinstance(v, (int, float, str)):
+                    console.print(f"  {k}: {v}")
+
+    _save_analysis_manifest(filepath, tech.upper(), {})
+
+
+# ── Result display helpers ─────────────────────────────────────────────
+
+
+def _display_cv_results(result: dict, flags: dict) -> None:
+    """Display CV peak analysis results."""
+    peaks = result.get("peaks", {})
+    if not peaks:
+        console.print("  [dim]No peaks detected.[/dim]")
+        return
+
     console.print(f"  Anodic peaks: {peaks.get('n_anodic', 0)}")
     for pk in peaks.get("anodic_peaks", []):
-        console.print(f"    E_pa={pk.get('potential',0):.4f}V  I_pa={pk.get('current',0):.4e}A")
+        console.print(f"    E_pa={pk.get('potential', 0):.4f}V  I_pa={pk.get('current', 0):.4e}A")
     console.print(f"  Cathodic peaks: {peaks.get('n_cathodic', 0)}")
     for pk in peaks.get("cathodic_peaks", []):
-        console.print(f"    E_pc={pk.get('potential',0):.4f}V  I_pc={pk.get('current',0):.4e}A")
+        console.print(f"    E_pc={pk.get('potential', 0):.4f}V  I_pc={pk.get('current', 0):.4e}A")
     if "average_peak_separation" in peaks:
         console.print(f"  ΔE_p = {peaks['average_peak_separation']:.4f}V")
 
-    if flags.get("charge"):
-        charge = calculate_charge(cv_data)
-        console.print(f"  Charge: {charge.get('total_charge',0):.4e}C")
-        console.print(f"  Anodic: {charge.get('anodic_charge',0):.4e}C  Cathodic: {charge.get('cathodic_charge',0):.4e}C")
+    if flags.get("charge") and "charge" in result:
+        charge = result["charge"]
+        console.print(f"  Charge: {charge.get('total_charge', 0):.4e}C")
+        console.print(f"  Anodic: {charge.get('anodic_charge', 0):.4e}C  "
+                      f"Cathodic: {charge.get('cathodic_charge', 0):.4e}C")
 
-    _save_analysis_manifest(filepath, "CV", {"peaks": len(peaks.get("anodic_peaks", [])), "charge": flags.get("charge", False)})
 
-
-def _analyze_ca(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
-    import numpy as np
-
-    df, info = load_data_file(filepath)
-    cols = info.get("columns", [])
-    if len(cols) < 2:
-        console.print("[red]Need at least 2 columns.[/red]")
-        return
-    t, i = df[cols[0]].values, df[cols[1]].values
-    m = ~(np.isnan(t) | np.isnan(i))
-
-    console.print(f"\n[bold]CA Analysis: {Path(filepath).name}[/bold]")
-
-    from science_electrochem.models import CAData
-    from science_electrochem.ca import analyze_ca as _analyze_ca_func
-    ca_data = CAData(time=t[m], current=i[m])
-    ca_result = _analyze_ca_func(ca_data, {"fit": flags.get("fit", True), "steady_state": True})
-    if "cottrell" in ca_result:
-        cr = ca_result["cottrell"]
+def _display_ca_results(result: dict) -> None:
+    """Display CA (Cottrell + steady-state) results."""
+    if "cottrell" in result:
+        cr = result["cottrell"]
         if "error" not in cr:
-            console.print(f"  Cottrell slope: {cr.get('slope',0):.4e} A·√s  R²={cr.get('r_squared',0):.4f}")
+            console.print(f"  Cottrell slope: {cr.get('slope', 0):.4e} A·√s  R²={cr.get('r_squared', 0):.4f}")
         else:
             console.print(f"  [red]Cottrell fit failed: {cr['error']}[/red]")
-    if "steady_state" in ca_result:
-        ss = ca_result["steady_state"]
-        console.print(f"  Steady state: {ss.get('steady_state_current',0):.4e}A")
-
-    _save_analysis_manifest(filepath, "CA", {"fit": flags.get("fit", False)})
+    if "steady_state" in result:
+        ss = result["steady_state"]
+        console.print(f"  Steady state: {ss.get('steady_state_current', 0):.4e}A")
 
 
-def _analyze_eis(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
-    import numpy as np
-
-    df, info = load_data_file(filepath)
-    cols = info.get("columns", [])
-    if len(cols) < 3:
-        console.print("[red]Need freq, Z', Z'' columns.[/red]")
-        return
-    freq = df[cols[0]].values
-    z = df[cols[1]].values + 1j * df[cols[2]].values
-    m = ~(np.isnan(freq) | np.isnan(z.real) | np.isnan(z.imag))
-
-    from science_electrochem.eis import circuit_fit, kramers_kronig
-    from science_electrochem.models import EISData
-
-    eis_data = EISData(frequency=freq[m], impedance=z[m])
-
-    console.print(f"\n[bold]EIS Analysis: {Path(filepath).name}[/bold]")
-
-    if flags.get("kk"):
-        kk = kramers_kronig(eis_data)
+def _display_eis_results(result: dict, circuit: str, flags: dict) -> None:
+    """Display EIS (circuit fit + KK) results."""
+    if flags.get("kk") and "kk" in result:
+        kk = result["kk"]
         status = "✓ passed" if kk.get("passes") else "✗ failed"
-        console.print(f"  KK test: {status}  (score={kk.get('consistency_score',0):.3f})")
+        console.print(f"  KK test: {status}  (score={kk.get('consistency_score', 0):.3f})")
 
-    circuit = flags.get("circuit", "RRC")
-    fit = circuit_fit(eis_data, circuit)
-    console.print(f"  Circuit fit: {circuit}")
+    fit = result.get("circuit_fit", {})
+    if not fit:
+        return
+
+    console.print(f"  Circuit fit: {fit.get('circuit', circuit)}")
     if "error" in fit:
         console.print(f"  [red]Fit failed: {fit['error']}[/red]")
     else:
         for n, v in zip(fit.get("parameter_names", []), fit.get("fitted_params", [])):
             console.print(f"    {n}: {v:.4e}")
-        console.print(f"    R²: {fit.get('r_squared',0):.4f}")
+        console.print(f"    R²: {fit.get('r_squared', 0):.4f}")
 
-    _save_analysis_manifest(filepath, "EIS", {"circuit": circuit, "kk": flags.get("kk", False)})
+
+# ── Utilities ──────────────────────────────────────────────────────────
 
 
 def _save_analysis_manifest(filepath: str, technique: str, results: dict) -> None:
+    """Emit analysis manifest for reproducibility."""
     out_dir = _get_results_dir(filepath)
     from science_cli.core.manifest import emit_manifest
     from science_cli.core.project import get_current_project_path
@@ -268,3 +422,40 @@ def _save_analysis_manifest(filepath: str, technique: str, results: dict) -> Non
         project=get_current_project_path().name if get_current_project_path() else "",
     )
     console.print(f"\n[dim]Results saved to {out_dir}/manifest.json[/dim]")
+
+
+def _save_sweep_metadata(filepath: str) -> None:
+    """Extract and save sweep metadata to protocol YAML."""
+    from science_cli.core.sweep_metadata import extract_sweep_from_file, update_protocol_with_sweep
+    from science_cli.core.session import load_session
+    from science_cli.core.project import get_current_project_path
+    from science_cli.core.paths import ProjectPaths
+    sess = load_session()
+    pname = sess.get("last_protocol", "")
+    proj = get_current_project_path()
+    if not (pname and proj):
+        return
+
+    paths = ProjectPaths(proj)
+    yaml_path = paths.protocol_yaml(pname)
+    if not yaml_path.exists():
+        return
+
+    fname = Path(filepath).name
+    with open(yaml_path) as f:
+        proto = yaml.safe_load(f) or {}
+
+    for s in proto.get("steps", []):
+        step_files = s.get("files", [])
+        norm = [e["file"] if isinstance(e, dict) else e for e in step_files]
+        if fname not in norm:
+            continue
+        segs = extract_sweep_from_file(filepath)
+        if segs:
+            update_protocol_with_sweep(yaml_path, s["name"], fname, segs)
+            ndirs = ", ".join(sg["direction"] for sg in segs)
+            console.print(
+                f"  [dim]sweep: {len(segs)} seg [{ndirs}] "
+                f"@ {segs[0]['sweep_rate_v_s']} V/s[/dim]"
+            )
+        break

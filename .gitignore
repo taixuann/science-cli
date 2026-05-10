@@ -1,10 +1,12 @@
-# Ignore everything except science-cli and extensions/science-memristor
+# Ignore everything except science-cli and extensions
 /*
 !/.gitignore
 !/science-cli
 !/extensions
 /extensions/*
 !/extensions/science-memristor
+!/extensions/science-iv
+!/extensions/science-electrochem
 
 # Python
 __pycache__/

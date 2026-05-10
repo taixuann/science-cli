@@ -68,7 +68,7 @@ def data_handler(args: list) -> None:
         from science_cli.core.project import get_current_project_path
         proj = get_current_project_path()
         if proj:
-            from science_cli.functions.file_browser import batch_assign_wizard
+            from science_cli.core.legacy import batch_assign_wizard
             batch_assign_wizard(proj)
         else:
             console.print("[yellow]No project open.[/yellow]")

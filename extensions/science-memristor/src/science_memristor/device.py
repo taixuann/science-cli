@@ -296,28 +296,28 @@ _MATERIAL_BATCH_RE = re.compile(
     r'^\d{4}_'                        # DDMM date prefix
     r'([A-Za-z0-9\-]+?)'              # Material name (lazy)
     r'(?:\((\d+)\))?'                 # Optional batch number in parens
-    r'_b\d+-t\d+_'                    # b#-t# position markers
+    r'_r\d+c\d+_'                     # r#c# position markers
 )
 
 
 def extract_material_batch(filename: str) -> tuple[str, str] | None:
     """Extract (material_name, batch_number) from a canonical memristor filename.
 
-    Parses the ``DDMM_MaterialName(Batch)_b#-t#_...`` naming convention.
+    Parses the ``DDMM_MaterialName(Batch)_r#c#_...`` naming convention.
 
     Args:
-        filename: e.g. ``"0505_Ta-PDA-ITO(1)_b1-t1_IV-DC_uc_01.csv"``
+        filename: e.g. ``"0505_Ta-PDA-ITO(1)_r0c0_iv_set.csv"``
 
     Returns:
         ``("Ta-PDA-ITO", "1")`` or ``None`` if not parseable.
         If no batch number is present, returns ``("MaterialName", "")``.
 
     Examples:
-        >>> extract_material_batch("0505_Ta-PDA-ITO(1)_b1-t1_IV-DC_uc_01.csv")
+        >>> extract_material_batch("0505_Ta-PDA-ITO(1)_r0c0_iv_set.csv")
         ('Ta-PDA-ITO', '1')
-        >>> extract_material_batch("0605_Ta-PDAc-ITO(2)_b1-t1_IV-DC_f_01.csv")
+        >>> extract_material_batch("0605_Ta-PDAc-ITO(2)_r1c2_iv_reset.csv")
         ('Ta-PDAc-ITO', '2')
-        >>> extract_material_batch("0505_Ta-PDA-ITO_b1-t1_IV-DC_uc_01.csv")
+        >>> extract_material_batch("0505_Ta-PDA-ITO_r0c0_iv.csv")
         ('Ta-PDA-ITO', '')
     """
     m = _MATERIAL_BATCH_RE.match(filename)
@@ -705,8 +705,8 @@ def generate_device_grid(
     """Generate ASCII grid showing technique coverage per cell.
 
     Conventions:
-      T=top electrode (1-indexed, T1 at bottom, increases upward)
-      B=bottom electrode (1-indexed, B1 left, increases right)
+      R=row (1-indexed, R1 at top, increases downward)
+      C=column (1-indexed, C1 left, increases right)
 
     Args:
         occupied: If provided, only these positions are shown as occupied.
@@ -739,15 +739,16 @@ def generate_device_grid(
     if title:
         lines.append(title)
         lines.append("")
-    for i in reversed(range(rows)):
+
+    header = "     " + "  ".join(f"C{j + 1}".ljust(5) for j in range(cols))
+    lines.append(header)
+
+    for i in range(rows):
         row_parts: list[str] = []
         for j in range(cols):
             cell = grid.get((i, j), "----")
             row_parts.append(cell.ljust(5))
-        lines.append(f"T{i + 1}   " + "  ".join(row_parts))
-
-    bottom = "     " + "  ".join(f"B{j + 1}".ljust(5) for j in range(cols))
-    lines.append(bottom)
+        lines.append(f"R{i + 1}   " + "  ".join(row_parts))
 
     lines.append("")
     if technique:
@@ -760,7 +761,7 @@ def generate_device_grid(
             "Legend: I=IV, E=Endurance, R=Retention, "
             "S=Switching, -=not measured"
         )
-    lines.append("T=top electrode row, B=bottom electrode col, 1-indexed")
+    lines.append("R=row, C=column, 1-indexed")
     return "\n".join(lines)
 
 
@@ -771,16 +772,16 @@ def generate_rich_grid(
     title: str = "Device Matrix",
 ):
     """Generate a Rich Table showing technique coverage per cell with colors.
-
     Conventions:
-      T=top electrode (1-indexed, T1 at bottom, increases upward)
-      B=bottom electrode (1-indexed, B1 left, increases right)
+      R=row (1-indexed, R1 at top, increases downward)
+      C=column (1-indexed, C1 left, increases right)
 
     Args:
         occupied: If provided, only these positions are shown as occupied.
         technique: If provided, only check this technique (e.g., ``"iv"``).
         title: Custom table title.
     """
+
     from rich.table import Table
 
     rows, cols = config.device.rows, config.device.cols
@@ -817,8 +818,11 @@ def generate_rich_grid(
     for j in range(cols):
         table.add_column("", justify="center", width=6)
 
-    for i in reversed(range(rows)):
-        cells = [f"T{i + 1}"]
+    header = [""] + [f"C{j + 1}" for j in range(cols)]
+    table.add_row(*header, style="bold")
+
+    for i in range(rows):
+        cells = [f"R{i + 1}"]
         for j in range(cols):
             letters = grid.get((i, j), "----")
             styled = ""
@@ -828,20 +832,21 @@ def generate_rich_grid(
             cells.append(styled)
         table.add_row(*cells)
 
-    footer = ["B" + str(j + 1) for j in range(cols)]
-    table.add_row("", *footer, style="bold")
-
     return table
 
 
 # ── Orphan detection ────────────────────────────────
 
 
-def find_orphaned_files(protocol_dir: Path) -> list[str]:
+def find_orphaned_files(protocol_dir: Path, step_filter: list[str] | None = None) -> list[str]:
     """Find data files in protocol directory not tracked in devices.yaml.
 
     Scans all subdirectories recursively. Returns sorted list of
     relative paths from protocol_dir.
+
+    Args:
+        step_filter: Optional list of step directory names. Only files
+            inside these directories are considered.
     """
     config = read_devices(protocol_dir)
     assigned = set(config.file_map.keys()) if config else set()
@@ -853,6 +858,8 @@ def find_orphaned_files(protocol_dir: Path) -> list[str]:
         if f.name in YAML_EXCLUDE or f.parent.name == "results":
             continue
         if f.suffix not in DATA_SUFFIXES:
+            continue
+        if step_filter is not None and f.parent.name not in step_filter:
             continue
         rel = f.relative_to(protocol_dir)
         if f.name not in assigned:

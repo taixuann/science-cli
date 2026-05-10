@@ -23,11 +23,11 @@ ticks:
   major_width: 0.5
 font:
   family: sans-serif
-  size: 7
-  axes_labelsize: 8
-  axes_titlesize: 9
-  tick_labelsize: 7
-  legend_size: 6
+  size: 8
+  axes_labelsize: 9
+  axes_titlesize: 10
+  tick_labelsize: 8
+  legend_size: 7
 legend:
   frameon: false
   fancybox: false

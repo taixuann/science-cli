@@ -14,7 +14,7 @@ console = Console()
 
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
-    "GROUP 2: PROTOCOL NAVIGATION": ["open"],
+    "GROUP 2: PROTOCOL NAVIGATION": ["open", "close"],
     "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config"],
     "GROUP 4: EXTENSIONS": ["extensions", "memristor"],
     "ADDITIONAL": ["project", "techniques", "help", "version", "clear", "history"],
@@ -26,6 +26,7 @@ COMMAND_DESCRIPTIONS = {
     "edit":    "Edit protocol/metadata",
     "ls":      "List protocols/steps/files",
     "open":    "Open protocol (sets session context)",
+    "close":   "Close protocol (clears session context)",
     "project": "Manage projects",
     "plot":    "Plot data — interactive or direct",
     "analyze": "Analyze data — peaks, fit, circuit",
@@ -134,15 +135,28 @@ COMMAND_HELP: Dict[str, dict] = {
         ],
     },
     "open": {
-        "usage": "open -m protocol -n <name>",
-        "desc": "Open protocol-specific view (Group 2). Sets session context — subsequent plot/analyze commands auto-reference this protocol's files.",
+        "usage": "open -m protocol -n <name> [--close]",
+        "desc": "Open protocol-specific view (Group 2). Sets session context — subsequent plot/analyze commands auto-reference this protocol's files. Use --close to clear the active protocol instead.",
         "subcommands": {
-            "open -m protocol -n <name>": {"desc": "Open protocol and set session", "usage": "open -m protocol -n doping"},
+            "open -m protocol -n <name>":   {"desc": "Open protocol and set session", "usage": "open -m protocol -n doping"},
+            "open -m protocol --close":     {"desc": "Clear the active protocol state", "usage": "open -m protocol --close"},
         },
         "examples": [
             "open -m protocol -n doping",
+            "open -m protocol --close",
             "# After: plot --fzf auto-uses protocol files",
             "# After: analyze -f file --peaks uses protocol context",
+        ],
+    },
+    "close": {
+        "usage": "close -m protocol",
+        "desc": "Close the active protocol (Group 2). Clears session context — subsequent commands work at project level.",
+        "subcommands": {
+            "close -m protocol": {"desc": "Clear active protocol and return to project level", "usage": "close -m protocol"},
+        },
+        "examples": [
+            "close -m protocol",
+            "# Alias: open -m protocol --close",
         ],
     },
     "project": {
@@ -351,7 +365,7 @@ def show_command_help(cmd: str) -> None:
             console.print(f"    [{accent}]{ex}[/{accent}]")
         console.print()
 
-    console.print(f"  [{dim}]Use `s-cli {cmd} --help` for more details.[/{dim}]")
+    console.print(f"  [{dim}]Use `sci {cmd} --help` for more details.[/{dim}]")
     console.print()
 
 

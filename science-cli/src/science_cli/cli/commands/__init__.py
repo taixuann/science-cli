@@ -6,14 +6,15 @@ from science_cli.cli.commands.analyze import analyze_handler
 from science_cli.cli.commands.general import general_handler
 
 from science_cli.cli.commands.add import add_handler
-from science_cli.cli.commands.ls_cmd import ls_handler
-from science_cli.cli.commands.open_cmd import open_handler
-from science_cli.cli.commands.delete_cmd import delete_handler
-from science_cli.cli.commands.edit_cmd import edit_handler
+from science_cli.cli.commands.ls import ls_handler
+from science_cli.cli.commands.open import open_handler
+from science_cli.cli.commands.close import close_handler
+from science_cli.cli.commands.delete import delete_handler
+from science_cli.cli.commands.edit import edit_handler
 from science_cli.cli.commands.config import config_handler
 from science_cli.cli.commands.techniques import techniques_handler
 from science_cli.cli.commands.results import results_handler
-from science_cli.cli.commands.memristor_cmd import memristor_handler
+from science_cli.cli.commands.memristor import memristor_handler
 from science_cli.cli.commands.extensions import extensions_handler
 
 COMMAND_TREE = {
@@ -22,6 +23,7 @@ COMMAND_TREE = {
     "edit":    {"handler": edit_handler, "desc": "Edit protocol/metadata (group 1)"},
     "ls":      {"handler": ls_handler,   "desc": "List protocols/steps/files (group 1)"},
     "open":    {"handler": open_handler, "desc": "Open protocol sets session context (group 2)"},
+    "close":   {"handler": close_handler, "desc": "Close protocol clears session context (group 2)"},
     "project": {"handler": project_handler, "desc": "Manage projects"},
     "plot":    {"handler": plot_handler, "desc": "Plot data — interactive or direct (group 3)"},
     "analyze": {"handler": analyze_handler, "desc": "Analyze data — peaks, fit, circuit (group 3)"},

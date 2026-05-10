@@ -6,7 +6,7 @@ console = Console()
 
 def parse_handler(args: list) -> None:
     """Handle `parse` command."""
-    from science_cli.functions.name_parser import parse_filename, filename_parser_wizard
+    from science_cli.core.legacy import parse_filename, filename_parser_wizard
     if args:
         result = parse_filename(args[0])
         if result:

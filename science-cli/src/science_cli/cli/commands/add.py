@@ -313,6 +313,10 @@ def _add_data(args: list) -> None:
                 continue
             steps_to_assign[filename] = step_choice
 
+    if not steps_to_assign:
+        rprint("[yellow]No files assigned.[/yellow]")
+        return
+
     for filename, step_choice in steps_to_assign.items():
         step_dir = paths.step_dir(proto_name, step_choice)
         step_dir.mkdir(parents=True, exist_ok=True)
@@ -339,7 +343,8 @@ def _add_data(args: list) -> None:
             if isinstance(e, str): out.append(e)
             elif isinstance(e, dict) and "file" in e: out.append(e["file"])
         return out
-    for fname in selected:
+    assigned_fnames = list(steps_to_assign.keys())
+    for fname in assigned_fnames:
         step_name = technique = ""
         for s in protocol.get("steps", []):
             if fname in _norm_fnames(s.get("files", [])):
@@ -359,5 +364,5 @@ def _add_data(args: list) -> None:
         yaml.dump(protocol, f, default_flow_style=False, sort_keys=False)
 
     rprint(f"[bold green]\u2713[/bold green] Files assigned to protocol '{proto_name}'")
-    for fname in selected:
+    for fname in assigned_fnames:
         rprint(f"  [dim]\u2022 {fname}[/dim]")
