@@ -8,7 +8,7 @@ console = Console()
 
 def extensions_handler(args: list) -> None:
     """List all available extensions and their commands."""
-    from science_cli.cli.commands import COMMAND_TREE, ALL_COMMANDS
+    from science_cli.cli.commands import COMMAND_TREE
 
     known_core = {
         "add", "delete", "edit", "ls", "open", "project",

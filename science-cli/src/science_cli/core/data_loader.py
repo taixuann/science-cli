@@ -1,15 +1,44 @@
-"""Data loading — reads experimental data files into pandas DataFrames."""
+"""Data loading — reads experimental data files into pandas DataFrames.
+
+Supports device-aware loading via the config system:
+    - When 'technique' and 'device' params are given, uses the device config
+      for delimiter, decimal, header_lines, encoding, and column name mapping.
+    - Falls back to auto-detection when no device config is available.
+"""
 
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
 
-def load_data_file(filepath: str) -> tuple[pd.DataFrame, dict]:
+def load_data_file(
+    filepath: str,
+    technique: str = "",
+    device: str = "",
+) -> tuple[pd.DataFrame, dict]:
+    """Load a data file into a DataFrame.
+
+    Args:
+        filepath: Path to the data file.
+        technique: Technique key (e.g. 'ec-eis', 'iv-sweep').
+                   When provided with device, uses device config for loading.
+        device: Device name (e.g. 'biologic-mpt', 'keithley-2400').
+                When provided with technique, uses device config for loading.
+
+    Returns:
+        (DataFrame, metadata_dict) where metadata_dict includes at minimum
+        'format', 'columns', 'path', and optionally 'device', 'technique'.
+    """
     path = Path(filepath)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {filepath}")
 
+    # Try device-aware loading if technique + device provided
+    device_cfg = _resolve_device_config(technique, device)
+    if device_cfg:
+        return _load_with_device_config(path, device_cfg, technique, device)
+
+    # Fall back to extension-based auto-detection
     ext = path.suffix.lower()
 
     if ext == ".mpt":
@@ -24,7 +53,98 @@ def load_data_file(filepath: str) -> tuple[pd.DataFrame, dict]:
         return _load_txt(path)
 
 
+def _resolve_device_config(technique: str, device: str) -> dict | None:
+    """Look up device loading config from the config system."""
+    if not technique or not device:
+        return None
+    try:
+        from science_cli.core.config import get_device_config
+        from science_cli.core.project import get_current_project_path
+        proj = get_current_project_path()
+        project_root = proj if proj else None
+        return get_device_config(technique, device, project_root)
+    except ImportError:
+        return None
+
+
+def _load_with_device_config(
+    path: Path,
+    device_cfg: dict,
+    technique: str,
+    device: str,
+) -> tuple[pd.DataFrame, dict]:
+    """Load a file using explicit device configuration.
+
+    Uses device_cfg for: delimiter, decimal sep, header_lines, encoding,
+    and column name remapping.
+    """
+    delimiter = device_cfg.get("delimiter")
+    decimal = device_cfg.get("decimal", ".")
+    header_lines = device_cfg.get("header_lines", 0)
+    encoding = device_cfg.get("encoding", "utf-8")
+    columns = device_cfg.get("columns", {})
+
+    # Auto-detect delimiter if not specified
+    if delimiter is None:
+        with open(path, encoding=encoding, errors="replace") as f:
+            first_line = f.readline().strip()
+        delimiter = (
+            "\t" if "\t" in first_line
+            else ";" if ";" in first_line
+            else "," if "," in first_line
+            else None
+        )
+
+    if delimiter:
+        df = pd.read_csv(
+            path,
+            sep=delimiter,
+            decimal=decimal,
+            skiprows=header_lines,
+            encoding=encoding,
+            engine="python",
+        )
+    else:
+        df = pd.read_csv(
+            path,
+            sep=r"\s+",
+            decimal=decimal,
+            skiprows=header_lines,
+            encoding=encoding,
+            engine="python",
+        )
+
+    df.columns = [c.strip().strip('"') for c in df.columns]
+
+    # Remap columns if device config provides a column mapping
+    if columns:
+        # columns maps role→actual_column_name (e.g. voltage→"SourceV")
+        # We create a reverse map to rename actual columns to role names
+        rename_map: dict[str, str] = {}
+        for role, actual_name in columns.items():
+            if actual_name in df.columns:
+                # Don't rename if it would overwrite another column
+                if actual_name not in rename_map.values():
+                    rename_map[actual_name] = role
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+    # Ensure numeric coercion
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df, {
+        "format": path.suffix.lstrip("."),
+        "columns": list(df.columns),
+        "path": str(path),
+        "device": device,
+        "technique": technique,
+    }
+
+
 def _load_mpt(path: Path) -> tuple[pd.DataFrame, dict]:
+    """Legacy MPT loader — biologics BioLogic .mpt files."""
     with open(path) as f:
         lines = f.readlines()
     header_end = 0

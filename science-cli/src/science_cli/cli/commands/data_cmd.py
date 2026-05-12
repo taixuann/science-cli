@@ -68,8 +68,8 @@ def data_handler(args: list) -> None:
         from science_cli.core.project import get_current_project_path
         proj = get_current_project_path()
         if proj:
-            from science_cli.functions.file_browser import batch_assign_wizard
-            batch_assign_wizard(proj)
+            # Placeholder: batch assignment wizard not yet implemented
+            console.print("[yellow]Batch assign wizard not yet implemented.[/yellow]")
         else:
             console.print("[yellow]No project open.[/yellow]")
 

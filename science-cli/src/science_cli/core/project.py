@@ -5,7 +5,15 @@ from science_cli.core.session import load_session
 
 
 def _get_projects_root() -> Path:
-    return Path.home() / "workspace" / "projects" / "active_projects"
+    """Return the configured projects root directory.
+
+    Checks the config system first; falls back to hardcoded path.
+    """
+    try:
+        from science_cli.core.config import get_projects_root
+        return get_projects_root()
+    except (ImportError, Exception):
+        return Path.home() / "workspace" / "projects" / "active_projects"
 
 
 def get_current_project_path() -> Path | None:

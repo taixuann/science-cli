@@ -3,7 +3,6 @@
 from science_cli.cli.commands.project import project_handler
 from science_cli.cli.commands.plot import plot_handler
 from science_cli.cli.commands.analyze import analyze_handler
-from science_cli.cli.commands.general import general_handler
 
 from science_cli.cli.commands.add import add_handler
 from science_cli.cli.commands.ls_cmd import ls_handler
@@ -31,12 +30,3 @@ COMMAND_TREE = {
     "extensions":  {"handler": extensions_handler, "desc": "List installed extension tools and their commands (Group 4)"},
     "memristor":  {"handler": memristor_handler, "desc": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check)"},
 }
-
-GENERAL_COMMANDS = {
-    "help":    {"handler": lambda a: None, "desc": "Show this help"},
-    "version": {"handler": lambda a: None, "desc": "Show version"},
-    "clear":   {"handler": lambda a: None, "desc": "Clear screen"},
-    "history": {"handler": lambda a: None, "desc": "Show command history"},
-}
-
-ALL_COMMANDS = {**COMMAND_TREE, **GENERAL_COMMANDS}

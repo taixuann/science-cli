@@ -9,6 +9,16 @@ from science_cli.cli.help import show_command_help
 console = Console()
 
 
+def _lookup_metadata(proj_dir, filename: str) -> dict:
+    """Placeholder: returns empty metadata dict."""
+    return {}
+
+
+def _undo_metadata(proj_dir) -> None:
+    """Placeholder: no-op."""
+    pass
+
+
 def metadata_handler(args: list) -> None:
     """Handle `metadata` command and subcommands."""
     if not args or args[0] in ("--help", "-h"):
@@ -19,7 +29,6 @@ def metadata_handler(args: list) -> None:
     sub_args = args[1:]
 
     from science_cli.core.project import get_current_project_path
-    from science_cli.functions.metadata_utils import lookup_metadata
 
     if sub == "show":
         if not sub_args:
@@ -29,7 +38,7 @@ def metadata_handler(args: list) -> None:
         if not proj:
             console.print("[yellow]No project open.[/yellow]")
             return
-        meta = lookup_metadata(proj, sub_args[0])
+        meta = _lookup_metadata(proj, sub_args[0])
         if meta:
             for k, v in meta.items():
                 console.print(f"  {k}: [bold]{v}[/bold]")
@@ -52,12 +61,11 @@ def metadata_handler(args: list) -> None:
             console.print("[red]VSCode not found.[/red]")
 
     elif sub == "undo":
-        from science_cli.functions.file_browser import undo_metadata
         proj = get_current_project_path()
         if not proj:
             console.print("[yellow]No project open.[/yellow]")
             return
-        undo_metadata(proj)
+        _undo_metadata(proj)
 
     else:
         console.print(f"[yellow]Unknown metadata subcommand: {sub}[/yellow]")

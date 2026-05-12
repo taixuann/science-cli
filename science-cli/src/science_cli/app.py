@@ -13,7 +13,7 @@ from science_cli.core.session import load_session, add_history, get_history
 from science_cli.core.project import get_current_project_path
 from science_cli.theme import apply_theme
 from science_cli.cli.help import show_top_help
-from science_cli.cli.commands import COMMAND_TREE, GENERAL_COMMANDS
+from science_cli.cli.commands import COMMAND_TREE
 
 console = Console()
 
@@ -116,10 +116,10 @@ def _run_repl():
                 start = max(0, len(history) - 30)
                 for i, h in enumerate(history[start:], start + 1):
                     console.print(f"  [dim]{i:3d}.[/dim] {h}")
+        elif cmd == "version":
+            console.print(f"sci version {__version__}")
         elif cmd in COMMAND_TREE:
             COMMAND_TREE[cmd]["handler"](cmd_args)
-        elif cmd in GENERAL_COMMANDS:
-            GENERAL_COMMANDS[cmd]["handler"](cmd_args)
         else:
             console.print(f"[yellow]Unknown: {cmd}[/yellow]")
 
