@@ -5,15 +5,16 @@
 Every session follows this loop. **Do not skip steps.**
 
 ### Phase 0: Orient (Before Any Work)
-1. Read `README.md` — understand the project from the user's perspective
-2. Read `src/science_cli/core/README.md` — understand core modules
-3. Read `src/science_cli/plot/README.md` — understand plot architecture
-4. Read `src/science_cli/theme/README.md` — understand theme system
-5. Read `documentation/plans/` — check if there's an active PLAN for this topic
+1. Run `codegraph stats` — verify index is current, note file/symbol counts
+2. Read `README.md` — understand the project from the user's perspective
+3. Read `src/science_cli/core/README.md` — understand core modules
+4. Read `src/science_cli/plot/README.md` — understand plot architecture
+5. Read `src/science_cli/theme/README.md` — understand theme system
+6. Read `documentation/plans/` — check if there's an active PLAN for this topic
    - If a PLAN exists: read it to know what's being worked on, what changed, what's next
    - If no PLAN exists: you'll create one in Phase 1
 
-**Why**: This replaces re-reading the entire codebase. READMEs tell you the current state. PLANs tell you what's in progress.
+**Why**: CodeGraph stats tell you the index health. READMEs tell you the current state. PLANs tell you what's in progress. This replaces re-reading the entire codebase.
 
 ### Phase 1: Plan (Before Any Code Changes)
 When the user asks for a change, **always create or update a PLAN first**:
@@ -62,7 +63,11 @@ When the user asks for a change, **always create or update a PLAN first**:
 
 ### Phase 2: Implement
 - Follow the PLAN exactly
-- Use CodeGraph (`.codegraph/`) for exploration — prefer `codegraph search` over reading files
+- **Use CodeGraph for ALL exploration** — see "CodeGraph Integration" section below
+  - `codegraph search "symbol"` to find definitions
+  - `codegraph context "how does X work"` to understand features
+  - `codegraph context "impact of changing X"` before editing
+- Only read files when CodeGraph doesn't have the answer (YAML files, new files)
 - Never break existing functionality
 - Follow existing code style (PEP 8, type hints, f-strings, pathlib)
 
@@ -260,10 +265,12 @@ Same device name can appear under multiple techniques with different column mapp
 
 ### Always:
 - Follow PEP 8, type hints, f-strings, pathlib
+- Run `codegraph stats` in Phase 0 to verify index health
+- Use CodeGraph for exploration BEFORE reading files
 - Read all READMEs before starting work (Phase 0)
 - Create a PLAN before any code changes (Phase 1)
 - Update README.md, AGENTS.md, and module READMEs as the LAST step (Phase 4)
-- Run `codegraph sync` after structural changes
+- Run `codegraph sync` after structural changes (Phase 4)
 
 ---
 
@@ -323,7 +330,130 @@ from science_cli.core.config import (
 
 ---
 
-## CodeGraph Usage
+## CodeGraph Integration (Use This First)
+
+CodeGraph (`.codegraph/`) is a pre-indexed knowledge graph of this codebase.
+**Always use CodeGraph before reading files** — it returns source code sections directly
+and traces relationships across the entire project.
+
+### When to Use CodeGraph vs Reading Files
+
+| Task | Use | Why |
+|------|-----|-----|
+| "Where is function X defined?" | `codegraph search "X"` | Instant, no file scanning |
+| "What calls function X?" | `codegraph context "what calls X"` | Traces full call chain |
+| "How does feature Y work?" | `codegraph context "how does Y work"` | Returns entry points + related symbols + source |
+| "What will break if I change X?" | `codegraph context "impact of changing X"` | Shows callers, callees, dependents |
+| "What imports module Z?" | `codegraph search "import Z"` | Finds all import sites |
+| Read a specific file I already know | `read <file>` | You know the path, just need content |
+| Explore unknown area | CodeGraph FIRST, then read | Graph tells you which files matter |
+
+### CodeGraph Commands by Workflow Phase
+
+#### Phase 0: Orient
+```bash
+# Get the big picture
+codegraph context "architecture of science-cli"
+
+# Find all entry points
+codegraph search "run_cli"
+codegraph search "handler" --kind function
+
+# See what modules exist
+codegraph stats
+```
+
+#### Phase 1: Plan
+```bash
+# Understand what exists before proposing changes
+codegraph search "detect_technique"          # Find current technique detection
+codegraph context "how are commands registered"  # Understand COMMAND_TREE
+codegraph search "ColumnMap"                 # See extension system
+
+# Trace relationships before planning changes
+codegraph context "what uses data_loader"    # See all consumers
+codegraph context "what imports technique"   # See technique dependents
+```
+
+#### Phase 2: Implement
+```bash
+# Find where to add new code
+codegraph search "COMMAND_TREE"              # See command registration pattern
+codegraph context "how to add a new command" # Returns registration flow
+
+# Before editing, check impact
+codegraph context "impact of changing plot.py"  # See what depends on plot
+
+# Verify your changes don't break imports
+codegraph search "<new_function_name>"       # Confirm it's findable
+```
+
+#### Phase 3: Test
+```bash
+# Verify symbols are indexed
+codegraph search "<new_function>"
+codegraph search "<new_class>"
+
+# Check file is indexed
+codegraph stats  # Should show increased file count
+```
+
+#### Phase 4: Update Docs
+```bash
+# MUST run after any structural change
+codegraph sync
+
+# Verify index is current
+codegraph stats
+```
+
+### CodeGraph Query Patterns
+
+**Find all callers of a function:**
+```bash
+codegraph context "what calls detect_technique"
+```
+
+**Find all files that import a module:**
+```bash
+codegraph search "from science_cli.core.config"
+codegraph search "import science_cli.plot"
+```
+
+**Understand a feature end-to-end:**
+```bash
+codegraph context "how does the plot command work from CLI to output"
+codegraph context "how does technique detection work end to end"
+codegraph context "how does the config system load and merge configs"
+```
+
+**Find where to add new code:**
+```bash
+codegraph search "COMMAND_TREE"              # Command registration
+codegraph search "BUILTIN_THEMES"            # Theme registration
+codegraph search "ExtensionRegistry"         # Extension registration
+```
+
+### CodeGraph Limitations
+
+- **YAML files are NOT indexed** — themes, templates, configs require file reads
+- **New files need `codegraph sync`** — run after creating new modules
+- **Generated files excluded** — `theme-previews/`, `__pycache__/` not indexed
+- **External packages not indexed** — only `src/science_cli/` is indexed
+
+### CodeGraph Config
+
+Located at `.codegraph/config.json`. Key settings:
+- `include`: File patterns to index (`.py` included)
+- `exclude`: Patterns to skip (`theme-previews/**`, `__pycache__/**`, etc.)
+- `extractDocstrings: true` — docstrings are indexed for search
+- `trackCallSites: true` — call relationships are tracked
+
+**To add exclusions:** Edit `.codegraph/config.json` → `exclude` array → run `codegraph sync`
+
+---
+
+## CodeGraph Usage Quick Reference
 
 ```bash
 codegraph sync                        # Update index after structural changes
