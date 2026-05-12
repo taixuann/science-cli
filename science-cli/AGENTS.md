@@ -429,31 +429,33 @@ from science_cli.core.config import (
 | AGENTS.md workflow | cleanup/architecture-guardrails | 5-phase workflow, cross-PLAN tracking, CodeGraph integration |
 | documentation/ structure | cleanup/architecture-guardrails | plans/ and instructions/ directories created |
 | Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
+| PLAN files created | cleanup/architecture-guardrails | 4 PLANs created with cross-PLAN relationships |
 
-### Active Gaps (Need PLANs)
+### Active Gaps (Need Execution)
+
+**PLANs are created but not yet executed. Each gap below has a corresponding PLAN.**
 
 #### Command & Session Gaps
 
-| Gap | Impact | Priority | Related |
-|-----|--------|----------|---------|
-| **Command restructuring** | `project` command still exists, `close` missing, `open`/`ls`/`add` don't support `-m project` | HIGH | Blocks: config expansion, extension interface |
-| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | HIGH | Blocked by: command restructuring |
-| **Version bump to 2.0.0** | Still at 7.0.0 despite major restructuring | LOW | Affected by: all other gaps |
+| Gap | Impact | Priority | PLAN | Status |
+|-----|--------|----------|------|--------|
+| **Command restructuring** | `project` command still exists, `close` missing, `open`/`ls`/`add` don't support `-m project` | HIGH | PLAN-1 | PLAN created, not executed |
+| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | HIGH | PLAN-1 | PLAN created, not executed |
 
 #### Config Gaps
 
-| Gap | Impact | Priority | Related |
-|-----|--------|----------|---------|
-| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | Blocked by: command restructuring |
-| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | Blocked by: technique-specific configs |
+| Gap | Impact | Priority | PLAN | Status |
+|-----|--------|----------|------|--------|
+| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | PLAN-2 | PLAN created, not executed |
+| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | PLAN-2 | PLAN created, not executed |
 
 #### Extension Gaps
 
-| Gap | Impact | Priority | Related |
-|-----|--------|----------|---------|
-| **`ext <name> <subcommand>` interface** | No unified extension command interface | MEDIUM | Blocked by: command restructuring |
-| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | Independent |
-| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | Future: merge into core |
+| Gap | Impact | Priority | PLAN | Status |
+|-----|--------|----------|------|--------|
+| **`ext <name> <subcommand>` interface** | No unified extension command interface | MEDIUM | PLAN-3 | PLAN created, not executed |
+| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | — | Needs separate PLAN |
+| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | — | Future work |
 
 #### Project Health Gaps
 
@@ -470,14 +472,14 @@ from science_cli.core.config import (
 | **No TUI README** | `tui/` module undocumented | LOW | Need `src/science_cli/tui/README.md` |
 | **No migration guide** | Users upgrading from v1 don't know what changed | MEDIUM | Need `MIGRATION.md` for version upgrades |
 
-### Pending PLANs (Need Creation)
+### Pending PLANs
 
 | PLAN | Classification | Status | Blocks | Blocked By |
 |------|----------------|--------|--------|------------|
-| PLAN-1: Command Restructuring | command-restructure | Not created | PLAN-2, PLAN-3 | — |
-| PLAN-2: Config Expansion | config | Not created | — | PLAN-1 |
-| PLAN-3: Extension Interface | extension | Not created | — | PLAN-1 |
-| PLAN-4: Version Bump to 2.0.0 | cleanup | Not created | — | PLAN-1, PLAN-2, PLAN-3 |
+| PLAN-1: Command Restructuring | command-restructure | **Created** | PLAN-2, PLAN-3 | — |
+| PLAN-2: Config Expansion | config | **Created** | — | PLAN-1 |
+| PLAN-3: Extension Interface | extension | **Created** | — | PLAN-1 |
+| PLAN-4: Version Bump to 2.0.0 | cleanup | **Created** | — | PLAN-1, PLAN-2, PLAN-3 |
 
 **Execution order**: PLAN-1 → PLAN-2 + PLAN-3 (parallel) → PLAN-4
 
