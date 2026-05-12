@@ -1,17 +1,127 @@
 # AGENTS.md — science-cli Developer Reference
 
+## Session Workflow (Read This First)
+
+Every session follows this loop. **Do not skip steps.**
+
+### Phase 0: Orient (Before Any Work)
+1. Read `README.md` — understand the project from the user's perspective
+2. Read `src/science_cli/core/README.md` — understand core modules
+3. Read `src/science_cli/plot/README.md` — understand plot architecture
+4. Read `src/science_cli/theme/README.md` — understand theme system
+5. Read `documentation/plans/` — check if there's an active PLAN for this topic
+   - If a PLAN exists: read it to know what's being worked on, what changed, what's next
+   - If no PLAN exists: you'll create one in Phase 1
+
+**Why**: This replaces re-reading the entire codebase. READMEs tell you the current state. PLANs tell you what's in progress.
+
+### Phase 1: Plan (Before Any Code Changes)
+When the user asks for a change, **always create or update a PLAN first**:
+
+1. Create `documentation/plans/PLAN-<short-topic>.md` using the template below
+2. Fill in: Objective, Context, Specification, Files to Modify, Dependencies, Test Strategy
+3. Present the PLAN to the user for approval
+4. Do NOT write code until the user approves
+
+**PLAN Template:**
+```markdown
+# PLAN: <short-title>
+
+## Status
+- **Created**: YYYY-MM-DD
+- **Status**: draft | in-progress | completed | superseded
+- **Branch**: <branch-name>
+
+## Objective
+<1-2 sentences>
+
+## Context
+<What exists? What problem? Link related plans.>
+
+## Specification
+<Detailed spec>
+
+## Files to Modify
+| File | Action | Reason |
+|------|--------|--------|
+
+## Dependencies
+<What must exist first?>
+
+## Test Strategy
+<How to verify>
+
+## Progress
+- [ ] PLAN created
+- [ ] User approved
+- [ ] IMPLEMENT done
+- [ ] TEST passed
+- [ ] DOCS updated
+- [ ] COMMIT done
+```
+
+### Phase 2: Implement
+- Follow the PLAN exactly
+- Use CodeGraph (`.codegraph/`) for exploration — prefer `codegraph search` over reading files
+- Never break existing functionality
+- Follow existing code style (PEP 8, type hints, f-strings, pathlib)
+
+### Phase 3: Test
+- Run existing tests
+- Verify no regressions
+- Add new tests if needed
+
+### Phase 4: Update Documentation (ALWAYS — Never Skip)
+**This is the last step before commit. Every time.**
+
+1. Update `README.md` — reflect new features, changed behavior, new commands
+2. Update `AGENTS.md` (this file) — update directory map, guardrails, patterns if structure changed
+3. Update relevant module `README.md` — if new module created or module behavior changed
+   - `src/science_cli/core/README.md`
+   - `src/science_cli/plot/README.md`
+   - `src/science_cli/theme/README.md`
+4. Update the PLAN file — mark progress, note what changed, mark completed
+5. Run `codegraph sync` — keep the index current
+
+### Phase 5: Commit
+- Commit with descriptive message
+- Push branch if requested
+
+---
+
+## Documentation Structure
+
+```
+documentation/
+├── plans/              ← One PLAN.md per topic/feature
+│   └── (active plans live here, completed plans stay for reference)
+└── instructions/       ← Reusable guides, workflows (future)
+```
+
+**Rules:**
+- Each PLAN is self-contained — no need to read other files to understand it
+- Multiple PLANs can exist simultaneously for different topics
+- A PLAN is `superseded` when a newer plan replaces it
+- Completed PLANs stay — they serve as history and context
+
+---
+
 ## Directory Map
 
 ```
 science-cli/
-├── AGENTS.md                          ← This file
+├── AGENTS.md                          ← This file (agent workflow + reference)
 ├── README.md                          ← User-facing documentation
+├── documentation/                     ← Plans and instructions
+│   ├── plans/                         ← PLAN.md files (one per topic)
+│   └── instructions/                  ← Reusable guides
 ├── pyproject.toml                     ← Build config, dependencies, entry points
-├── bin/                               ← Shell helper scripts
-├── scripts/                           ← Dev/utility scripts (e.g. theme previews)
+├── bin/sci                            ← Shell entry point
+├── scripts/                           ← Dev/utility scripts
 ├── theme-previews/                    ← Generated theme preview PDFs
 ├── test_changes.py                    ← Smoke tests
-├── .codegraph/                        ← CodeGraph index (see below)
+├── test_guardrails.py                 ← Architecture guardrail tests
+├── .codegraph/                        ← CodeGraph index
 └── src/science_cli/
     ├── __init__.py                    ← __version__
     ├── app.py                         ← CLI entry point (run_cli + REPL)
@@ -27,7 +137,7 @@ science-cli/
     │   │   ├── delete_cmd.py          ← delete handler
     │   │   ├── edit_cmd.py            ← edit handler
     │   │   ├── eis.py                 ← EIS fitting helpers
-    │   │   ├── extensions.py          ← extensions list handler
+    │   │   ├── extensions_cmd.py      ← extensions list handler
     │   │   ├── fit.py                 ← fit handler
     │   │   ├── ls_cmd.py              ← ls handler
     │   │   ├── memristor_cmd.py       ← memristor handler
@@ -70,74 +180,32 @@ science-cli/
     │   ├── themes/                    ← Global style themes (*.yaml)
     │   └── templates/                 ← Per-technique defaults (*.yaml)
     │
-    ├── tui/                           ← Textual TUI (if present)
+    ├── tui/                           ← Textual TUI
     └── extensions.py                  ← ExtensionRegistry + entry-point discovery
 ```
+
+---
 
 ## Where to Add New Features
 
 ### Adding a New CLI Command
-
 1. Create `src/science_cli/cli/commands/<name>_cmd.py`
 2. Define a `<name>_handler(args)` function
 3. Import it in `src/science_cli/cli/commands/__init__.py`
 4. Add it to `COMMAND_TREE` dict in `__init__.py`
 
-**Pattern:**
-```python
-# cli/commands/my_cmd.py
-from rich.console import Console
-console = Console()
-
-def my_handler(args: list) -> None:
-    if not args or args[0] in ("--help", "-h"):
-        console.print("[yellow]Usage: sci my <sub> [options][/yellow]")
-        return
-    # handle subcommands
-```
-
 ### Adding a New Plot Type
-
 1. Create `src/science_cli/plot/<technique>.py`
 2. Define a `plot_<technique>(fig, ax, df, flags)` function
-3. Import and dispatch from `src/science_cli/plot/base.py` or the `plot` command handler
-
-**Pattern:**
-```python
-# plot/new_tech.py
-def plot_new_tech(fig, ax, df, flags, xcol="", ycol=""):
-    """Plot description."""
-    x = df[xcol] if xcol in df.columns else df.iloc[:, 0]
-    y = df[ycol] if ycol in df.columns else df.iloc[:, 1]
-    ax.plot(x, y, **flags.get("line_kw", {}))
-```
+3. Import from `plot/base.py` (canonical), NOT from `plot/__init__.py`
 
 ### Adding a New Theme
-
 1. Create `src/science_cli/theme/themes/<name>.yaml`
-2. Follow the schema: `figure`, `axes`, `font`, `colors`, `savefig` sections
-3. The theme is auto-discovered by `list_themes()` in `registry.py`
-
-**Pattern:**
-```yaml
-figure:
-  facecolor: white
-  figsize: [3.46, 2.75]
-  dpi: 300
-axes:
-  edgecolor: black
-font:
-  family: sans-serif
-  size: 7
-colors:
-  prop_cycle:
-    - "#0072B2"
-```
+2. Follow schema: `figure`, `axes`, `font`, `colors`, `savefig` sections
+3. Auto-discovered by `list_themes()` in `registry.py`
 
 ### Adding a New Technique (in Config)
-
 Add to `~/.config/science-cli/config.yaml` or `<project>/sci-config.yaml`:
-
 ```yaml
 techniques:
   my-technique:
@@ -152,16 +220,12 @@ techniques:
         columns:
           time: "Timestamp"
           value: "Reading"
-
 defaults:
   my-technique: my-device
 ```
 
 ### Adding a New Device Config
-
-Devices live under their parent technique. A device config specifies how to load
-files produced by that instrument:
-
+Devices live under their parent technique:
 ```yaml
 techniques:
   ec-eis:
@@ -176,33 +240,36 @@ techniques:
           z_real: "Z'/Ohm"
           z_imag: "-Z''/Ohm"
 ```
+Same device name can appear under multiple techniques with different column mappings.
 
-The same device name can appear under multiple techniques (e.g., `biologic-mpt`
-under both `ec-eis` and `ec-cv` with different column mappings).
+---
 
 ## What NOT to Do (Guardrails)
 
 ### Never:
-- **Add hardcoded device-specific logic to data_loader.py** — use the config system instead
+- **Add hardcoded device-specific logic to data_loader.py** — use the config system
 - **Add new hardcoded technique patterns directly to technique.py** — add via config or extensions
 - **Create new top-level modules in science_cli/** — use core/, cli/, plot/, theme/
-- **Modify config.py (legacy) to add new features** — use core/config.py (the new system)
+- **Modify config.py (legacy) for new features** — use core/config.py
 - **Remove hardcoded defaults from technique.py or data_loader.py** — they are fallbacks
-- **Add commands without registering them in COMMAND_TREE** — they won't be accessible
-- **Hardcode file paths** — use `pathlib` and config-based resolution
+- **Add commands without registering in COMMAND_TREE** — they won't be accessible
+- **Hardcode file paths** — use pathlib and config-based resolution
 - **Import from cli/commands in core/ modules** — core must not depend on CLI
-- **Commit theme-previews/** — generated files, excluded from version control
+- **Commit theme-previews/** — generated files
+- **Skip the documentation update step** — Phase 4 is mandatory
 
 ### Always:
-- Follow PEP 8, use type hints, f-strings, pathlib
-- Tests go in `test_changes.py` or project root
-- Documentation goes in README.md (user-facing) or AGENTS.md (dev-facing)
-- Run `codegraph sync` after adding new modules
+- Follow PEP 8, type hints, f-strings, pathlib
+- Read all READMEs before starting work (Phase 0)
+- Create a PLAN before any code changes (Phase 1)
+- Update README.md, AGENTS.md, and module READMEs as the LAST step (Phase 4)
+- Run `codegraph sync` after structural changes
+
+---
 
 ## Extension System Overview
 
 Extensions are Python packages that register with `ExtensionRegistry`:
-
 ```python
 from science_cli.extensions import ColumnMap, ExtensionRegistry, TechniqueDef
 
@@ -214,13 +281,13 @@ def register(registry: ExtensionRegistry):
     )
     registry.column_maps["mem-switching"] = ColumnMap(
         x="Voltage (V)", y="Current (A)",
-        x_label="Voltage (V)", y_label="Current (A)",
     )
 ```
 
 Extensions are discovered via Python entry points (`science_cli.extensions` group)
-and via the config file system. The config system adds techniques as "config extensions"
-with lower priority than Python extensions.
+and via the config file system. Config techniques have lower priority than Python extensions.
+
+---
 
 ## Config System Architecture
 
@@ -245,7 +312,7 @@ Merged config (get_merged_config())
 **Typed accessors:**
 ```python
 from science_cli.core.config import (
-    get_device_config,      # → dict or None
+    get_device_config,       # → dict or None
     get_technique_patterns,  # → list[str]
     get_default_device,      # → str
     get_projects_root,       # → Path
@@ -254,17 +321,16 @@ from science_cli.core.config import (
 )
 ```
 
+---
+
 ## CodeGraph Usage
 
 ```bash
-# Sync index after structural changes
-codegraph sync
-
-# Search
-codegraph search "detect_technique" --language python
-
-# Stats
-codegraph stats
+codegraph sync                        # Update index after structural changes
+codegraph search "detect_technique"   # Find symbols by name
+codegraph context "how does plot work" # Build context for a task
+codegraph stats                       # Index health and statistics
 ```
 
 The `.codegraph/config.json` exclude list keeps generated/binary files out of the index.
+**Always use CodeGraph before reading files** — it returns source code sections directly.
