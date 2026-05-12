@@ -86,7 +86,10 @@ When the user asks for a change, **always create or update a PLAN first**:
    - `src/science_cli/plot/README.md`
    - `src/science_cli/theme/README.md`
 4. Update the PLAN file — mark progress, note what changed, mark completed
-5. Run `codegraph sync` — keep the index current
+5. **Check for cross-PLAN impacts** — if this change affects another PLAN:
+   - Update that PLAN with a `Cross-PLAN Update` section
+   - Tell the user which PLANs were affected
+6. Run `codegraph sync` — keep the index current
 
 ### Phase 5: Commit
 - Commit with descriptive message
@@ -108,6 +111,82 @@ documentation/
 - Multiple PLANs can exist simultaneously for different topics
 - A PLAN is `superseded` when a newer plan replaces it
 - Completed PLANs stay — they serve as history and context
+
+### Cross-PLAN Tracking (Critical)
+
+**When one PLAN affects another, you MUST update both.**
+
+1. **Declare relationships**: Every PLAN must list `Related Plans` and explain the relationship
+   - `blocks` — this PLAN must complete before the other can start
+   - `blocked-by` — this PLAN depends on another completing first
+   - `affects` — this PLAN changes something the other PLAN also touches
+   - `related` — shares context but no direct dependency
+
+2. **Update impacted PLANs**: When implementing PLAN-A and you discover it changes something PLAN-B also touches:
+   - Update PLAN-A: note the change in `Specification` and `Progress`
+   - Update PLAN-B: add a `Cross-PLAN Update` section noting what changed and what needs adjustment
+   - Tell the user: "PLAN-A affects PLAN-B — I've updated both. Review PLAN-B before proceeding."
+
+3. **Split large changes**: If a single change touches multiple domains (commands + config + extensions), split into linked PLANs rather than one mega-PLAN. Each PLAN should be independently completable.
+
+4. **Execution order**: Respect `blocks`/`blocked-by` relationships. Complete blocking PLANs first.
+
+**Example PLAN relationships:**
+```
+PLAN-command-restructure
+  └─ blocks → PLAN-extension-interface (commands must exist before extensions can use them)
+  └─ affects → PLAN-config-expansion (both touch session state)
+
+PLAN-config-expansion
+  └─ blocked-by → PLAN-command-restructure
+  └─ affects → PLAN-version-bump (config changes justify version bump)
+```
+
+### PLAN Template (with Cross-PLAN Support)
+```markdown
+# PLAN: <short-title>
+
+## Classification
+<command-restructure | config | extension | docs | refactor | cleanup | feature>
+
+## Related Plans
+- [[PLAN-other-topic]] — blocks/affects/blocked-by/related — <why>
+
+## Status
+- **Created**: YYYY-MM-DD
+- **Status**: draft | in-progress | completed | superseded
+- **Branch**: <branch-name>
+
+## Objective
+<1-2 sentences>
+
+## Context
+<What exists? What problem? Link related plans.>
+
+## Specification
+<Detailed spec>
+
+## Files to Modify
+| File | Action | Reason |
+|------|--------|--------|
+
+## Dependencies
+<What must exist first? Link to blocking PLANs.>
+
+## Cross-PLAN Impact
+<What other PLANs does this affect? What needs updating?>
+
+## Test Strategy
+<How to verify>
+
+## Progress
+- [ ] PLAN created
+- [ ] User approved
+- [ ] IMPLEMENT done
+- [ ] TEST passed
+- [ ] DOCS updated
+- [ ] COMMIT done
+```
 
 ---
 
@@ -269,8 +348,11 @@ Same device name can appear under multiple techniques with different column mapp
 - Use CodeGraph for exploration BEFORE reading files
 - Read all READMEs before starting work (Phase 0)
 - Create a PLAN before any code changes (Phase 1)
+- **Check for cross-PLAN impacts** — if your change affects another PLAN, update both
+- **Declare relationships** — every PLAN must list Related Plans with blocks/affects/blocked-by
 - Update README.md, AGENTS.md, and module READMEs as the LAST step (Phase 4)
 - Run `codegraph sync` after structural changes (Phase 4)
+- **Check Gaps section** — before creating a new PLAN, check if it's already listed as a gap
 
 ---
 
@@ -327,6 +409,50 @@ from science_cli.core.config import (
     get_merged_config,       # → dict (raw)
 )
 ```
+
+---
+
+## Gaps and Missing Things
+
+**Known gaps in the codebase and workflow. Track these — they need future PLANs.**
+
+### Codebase Gaps
+
+| Gap | Impact | Priority | Notes |
+|-----|--------|----------|-------|
+| **No test suite** | No automated regression testing | HIGH | Only `test_changes.py` (ad-hoc) and `test_guardrails.py` (16 tests). Need pytest structure with `tests/` directory, fixtures, parametrized tests |
+| **No CI/CD** | No automated testing on push | MEDIUM | Need GitHub Actions workflow: lint → test → build |
+| **No CHANGELOG** | Users can't track changes between versions | MEDIUM | Need `CHANGELOG.md` following Keep a Changelog format |
+| **No LICENSE** | Cannot be used as open-source | HIGH | Need to choose license (MIT? Apache 2.0?) |
+| **No type checking** | Type hints exist but not enforced | LOW | Need `mypy` or `pyright` config + `py.typed` marker |
+| **No linting config** | Inconsistent code style possible | LOW | Need `ruff.toml` or `.flake8` |
+| **No lock file** | Reproducible installs not guaranteed | MEDIUM | Need `requirements.txt` or `poetry.lock` |
+| **No CONTRIBUTING guide** | New contributors don't know how to help | LOW | Need `CONTRIBUTING.md` |
+| **No TUI README** | `tui/` module undocumented | LOW | Need `src/science_cli/tui/README.md` |
+| **Extension docs missing** | science-* extensions not documented here | MEDIUM | Need to document extension interface, how to write extensions |
+| **No migration guide** | Users upgrading from v1 don't know what changed | MEDIUM | Need `MIGRATION.md` for version upgrades |
+
+### Workflow Gaps
+
+| Gap | Impact | Notes |
+|-----|--------|-------|
+| **PLANs directory is empty** | No active plans to track work | Need to create PLANs for pending features (see below) |
+| **3-level state memory not implemented** | Session only tracks project + protocol, not step | Need `core/session.py` update for step-level state |
+| **Config system incomplete** | Technique-specific configs not yet implemented | PLAN-2 covers this — needs creation |
+| **Extension interface incomplete** | `ext <name> <subcommand>` not yet implemented | PLAN-3 covers this — needs creation |
+| **No version bump** | Still at 7.0.0 despite major restructuring | PLAN-4 covers this — needs creation |
+| **Command restructuring not done** | `project` command still exists, `close` missing | PLAN-1 covers this — needs creation |
+
+### Pending PLANs (Need Creation)
+
+| PLAN | Classification | Status |
+|------|----------------|--------|
+| PLAN-1: Command Restructuring | command-restructure | Not created |
+| PLAN-2: Config Expansion | config | Not created |
+| PLAN-3: Extension Interface | extension | Not created |
+| PLAN-4: Version Bump to 2.0.0 | cleanup | Not created |
+
+**When creating a new PLAN, check if it relates to any of these pending items.**
 
 ---
 
