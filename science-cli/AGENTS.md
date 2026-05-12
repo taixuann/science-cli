@@ -414,43 +414,72 @@ from science_cli.core.config import (
 
 ## Gaps and Missing Things
 
-**Known gaps in the codebase and workflow. Track these — they need future PLANs.**
+**Known gaps in the codebase and workflow. This section is updated after every session.**
+**Do NOT execute gaps automatically — each gap needs a PLAN and user approval.**
 
-### Codebase Gaps
+### Completed (No Longer Gaps)
+
+| Item | Completed In | Notes |
+|------|-------------|-------|
+| CodeGraph integration | cleanup/architecture-guardrails | `.codegraph/` initialized, AGENTS.md has full integration guide |
+| 3-tier config system | cleanup/architecture-guardrails | `core/config.py` — hardcoded ← global ← project |
+| Device-aware data loading | cleanup/architecture-guardrails | `core/data_loader.py` accepts `device=` and `technique=` params |
+| Dead code cleanup | cleanup/architecture-guardrails | Removed image.py, general.py, functions/ directory |
+| Module READMEs | cleanup/architecture-guardrails | core/README.md, plot/README.md, theme/README.md |
+| AGENTS.md workflow | cleanup/architecture-guardrails | 5-phase workflow, cross-PLAN tracking, CodeGraph integration |
+| documentation/ structure | cleanup/architecture-guardrails | plans/ and instructions/ directories created |
+| Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
+
+### Active Gaps (Need PLANs)
+
+#### Command & Session Gaps
+
+| Gap | Impact | Priority | Related |
+|-----|--------|----------|---------|
+| **Command restructuring** | `project` command still exists, `close` missing, `open`/`ls`/`add` don't support `-m project` | HIGH | Blocks: config expansion, extension interface |
+| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | HIGH | Blocked by: command restructuring |
+| **Version bump to 2.0.0** | Still at 7.0.0 despite major restructuring | LOW | Affected by: all other gaps |
+
+#### Config Gaps
+
+| Gap | Impact | Priority | Related |
+|-----|--------|----------|---------|
+| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | Blocked by: command restructuring |
+| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | Blocked by: technique-specific configs |
+
+#### Extension Gaps
+
+| Gap | Impact | Priority | Related |
+|-----|--------|----------|---------|
+| **`ext <name> <subcommand>` interface** | No unified extension command interface | MEDIUM | Blocked by: command restructuring |
+| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | Independent |
+| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | Future: merge into core |
+
+#### Project Health Gaps
 
 | Gap | Impact | Priority | Notes |
 |-----|--------|----------|-------|
-| **No test suite** | No automated regression testing | HIGH | Only `test_changes.py` (ad-hoc) and `test_guardrails.py` (16 tests). Need pytest structure with `tests/` directory, fixtures, parametrized tests |
+| **No test suite** | No automated regression testing beyond 16 guardrail tests | HIGH | Need pytest structure with `tests/` directory, fixtures, parametrized tests |
 | **No CI/CD** | No automated testing on push | MEDIUM | Need GitHub Actions workflow: lint → test → build |
 | **No CHANGELOG** | Users can't track changes between versions | MEDIUM | Need `CHANGELOG.md` following Keep a Changelog format |
 | **No LICENSE** | Cannot be used as open-source | HIGH | Need to choose license (MIT? Apache 2.0?) |
+| **No lock file** | Reproducible installs not guaranteed | MEDIUM | Need `requirements.txt` or `poetry.lock` |
 | **No type checking** | Type hints exist but not enforced | LOW | Need `mypy` or `pyright` config + `py.typed` marker |
 | **No linting config** | Inconsistent code style possible | LOW | Need `ruff.toml` or `.flake8` |
-| **No lock file** | Reproducible installs not guaranteed | MEDIUM | Need `requirements.txt` or `poetry.lock` |
 | **No CONTRIBUTING guide** | New contributors don't know how to help | LOW | Need `CONTRIBUTING.md` |
 | **No TUI README** | `tui/` module undocumented | LOW | Need `src/science_cli/tui/README.md` |
-| **Extension docs missing** | science-* extensions not documented here | MEDIUM | Need to document extension interface, how to write extensions |
 | **No migration guide** | Users upgrading from v1 don't know what changed | MEDIUM | Need `MIGRATION.md` for version upgrades |
-
-### Workflow Gaps
-
-| Gap | Impact | Notes |
-|-----|--------|-------|
-| **PLANs directory is empty** | No active plans to track work | Need to create PLANs for pending features (see below) |
-| **3-level state memory not implemented** | Session only tracks project + protocol, not step | Need `core/session.py` update for step-level state |
-| **Config system incomplete** | Technique-specific configs not yet implemented | PLAN-2 covers this — needs creation |
-| **Extension interface incomplete** | `ext <name> <subcommand>` not yet implemented | PLAN-3 covers this — needs creation |
-| **No version bump** | Still at 7.0.0 despite major restructuring | PLAN-4 covers this — needs creation |
-| **Command restructuring not done** | `project` command still exists, `close` missing | PLAN-1 covers this — needs creation |
 
 ### Pending PLANs (Need Creation)
 
-| PLAN | Classification | Status |
-|------|----------------|--------|
-| PLAN-1: Command Restructuring | command-restructure | Not created |
-| PLAN-2: Config Expansion | config | Not created |
-| PLAN-3: Extension Interface | extension | Not created |
-| PLAN-4: Version Bump to 2.0.0 | cleanup | Not created |
+| PLAN | Classification | Status | Blocks | Blocked By |
+|------|----------------|--------|--------|------------|
+| PLAN-1: Command Restructuring | command-restructure | Not created | PLAN-2, PLAN-3 | — |
+| PLAN-2: Config Expansion | config | Not created | — | PLAN-1 |
+| PLAN-3: Extension Interface | extension | Not created | — | PLAN-1 |
+| PLAN-4: Version Bump to 2.0.0 | cleanup | Not created | — | PLAN-1, PLAN-2, PLAN-3 |
+
+**Execution order**: PLAN-1 → PLAN-2 + PLAN-3 (parallel) → PLAN-4
 
 **When creating a new PLAN, check if it relates to any of these pending items.**
 
