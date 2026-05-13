@@ -60,10 +60,12 @@ def config_handler(args: list) -> None:
             console.print("[yellow]Usage: config set technique <name> <device>[/yellow]")
 
     elif sub == "edit":
-        if sub_args:
-            _cmd_edit_technique(sub_args[0])
+        force = "--force" in sub_args
+        tech_args = [a for a in sub_args if a != "--force"]
+        if tech_args:
+            _cmd_edit_technique(tech_args[0], force=force)
         else:
-            console.print("[yellow]Usage: config edit <technique>[/yellow]")
+            console.print("[yellow]Usage: config edit <technique> [--force][/yellow]")
 
     elif sub == "list":
         if not sub_args:
@@ -228,10 +230,11 @@ def _cmd_set_technique(args: list) -> None:
     console.print(f"[green]✓[/green] Default device for '{technique}' set to '{device}'")
 
 
-def _cmd_edit_technique(technique: str) -> None:
-    """Open technique config in $EDITOR (or vim/nano as fallback).
+def _cmd_edit_technique(technique: str, force: bool = False) -> None:
+    """Open technique config in $EDITOR (or nvim as fallback).
 
     Creates the file first if it doesn't exist.
+    Use --force to overwrite an existing file with the template.
     """
     from science_cli.core.config import _technique_configs_dir
 
@@ -239,7 +242,9 @@ def _cmd_edit_technique(technique: str) -> None:
     tech_dir.mkdir(parents=True, exist_ok=True)
     path = tech_dir / f"{technique}.yaml"
 
-    if not path.exists():
+    if not path.exists() or force:
+        if force and path.exists():
+            console.print(f"[dim]Regenerating {path}...[/dim]")
         # Create a minimal config template
         default_content = f"""# ============================================================
 # TECHNIQUE CONFIG: {technique}
