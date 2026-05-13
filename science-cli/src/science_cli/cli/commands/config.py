@@ -241,18 +241,109 @@ def _cmd_edit_technique(technique: str) -> None:
 
     if not path.exists():
         # Create a minimal config template
-        default_content = f"""# {technique} technique configuration
-# Created by `sci config edit {technique}`
-# See ~/.config/science-cli/config.yaml for full reference.
-
-# Filename patterns for auto-detection
+        default_content = f"""# ============================================================
+# TECHNIQUE CONFIG: {technique}
+# ============================================================
+# This file tells science-cli HOW to detect and LOAD data files
+# for the '{technique}' technique.
+#
+# QUICK START:
+#   1. Define filename patterns so science-cli can auto-detect
+#      which technique a file belongs to
+#   2. Define one or more devices with their column mappings,
+#      delimiters, and encoding so data loads correctly
+#   3. Optionally set a default_device for this technique
+#
+# LAYERED CONFIG: If you also have ~/.config/science-cli/config.yaml
+# or a per-project sci-config.yaml, those values OVERRIDE these.
+# Hardcoded defaults are the lowest priority fallback.
+#
+# ============================================================
+# 1. FILENAME PATTERNS
+# ============================================================
+# science-cli matches filenames against these patterns (regex)
+# to auto-detect the technique. List as many as needed.
+#
+# Examples:
+#   - "*{technique}*"        matches any file containing the technique name
+#   - "_IV_"                 matches files with _IV_ in the name
+#   - r"\\\\.lvm$"           matches .lvm extension (LabVIEW Measurement)
+#   - r"_sweep"              matches files containing _sweep
+#
 patterns:
   - "*{technique}*"
 
-# Default device for this technique
-# default_device: my-device
+# ============================================================
+# 2. DEFAULT DEVICE (optional)
+# ============================================================
+# When loading a file for this technique, science-cli uses this
+# device's column mapping by default. You can still override
+# per-file via the CLI.
+#
+# Uncomment and set to one of the devices defined below:
+# default_device: keithley-2400
 
-# Device-specific loading parameters
+# ============================================================
+# 3. DEVICE DEFINITIONS
+# ============================================================
+# Each device has its own loading rules. This is where you tell
+# science-cli about your measurement equipment.
+#
+# Fields:
+#   delimiter     - Column separator: "\\t" (tab), "," (comma),
+#                   ";" (semicolon), " " (space)
+#   decimal       - Decimal separator: "." or ","
+#   header_lines  - Number of lines to skip before column headers
+#   encoding      - File encoding: "utf-8", "latin-1", "cp1252"
+#   columns:
+#     voltage     - Column name for voltage (or key matching pattern)
+#     current     - Column name for current
+#     time        - Column name for time (optional)
+#     frequency   - Column name for frequency (EIS)
+#     z_real      - Column name for real impedance (EIS)
+#     z_imag      - Column name for imaginary impedance (EIS)
+#     potential   - Column name for potential (CV/CA)
+#
+# Column names are matched case-insensitively against CSV headers.
+# Use "Untitled" for LabVIEW Measurement (.lvm) column headers.
+#
+# --- Example: Keithley 2400 (LabVIEW .lvm format) ---
+# devices:
+#   keithley-2400:
+#     delimiter: "\\t"
+#     decimal: "."
+#     header_lines: 23
+#     encoding: "utf-8"
+#     columns:
+#       voltage: "Untitled"
+#       current: "Untitled 1"
+#       time: "Untitled 2"
+#
+# --- Example: Keysight B1500A Clarius+ (CSV) ---
+#   keithley-clarius:
+#     delimiter: ","
+#     decimal: "."
+#     header_lines: 8
+#     encoding: "utf-8"
+#     columns:
+#       voltage: "BV"
+#       current: "BI"
+#
+# --- Example: Biologic .mpt (EIS) ---
+#   biologic-mpt:
+#     delimiter: "\\t"
+#     decimal: ","
+#     header_lines: 1
+#     encoding: "latin-1"
+#     columns:
+#       frequency: "freq"
+#       z_real: "Re(Z)"
+#       z_imag: "-Im(Z)"
+#
+# ============================================================
+# 4. UNCOMMENT AND CUSTOMIZE BELOW
+# ============================================================
+#
 # devices:
 #   my-device:
 #     delimiter: "\\t"
@@ -262,12 +353,13 @@ patterns:
 #     columns:
 #       voltage: "V"
 #       current: "I"
+#       time: "Time"
 """
         with open(path, "w") as f:
             f.write(default_content)
 
     # Open in editor
-    editor = os.environ.get("EDITOR", "vim")
+    editor = os.environ.get("EDITOR", "nvim")
     try:
         subprocess.run([editor, str(path)], check=True)
         console.print(f"[green]✓[/green] Edited: {path}")
