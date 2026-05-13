@@ -240,6 +240,46 @@ paths = get_project_paths()  # returns ProjectPaths or None if no project open
 
 **Legacy support**: `protocol_yaml()` checks the new nested location (`protocol/<name>/<name>.yaml`) first, then falls back to the old flat location (`protocol/<name>.yaml`). New protocols are always created in the nested format. Existing protocols at the old location continue working — migration is opt-in.
 
+## Textual TUI
+
+The TUI (terminal user interface) replaces the old `prompt_toolkit` REPL. It's built on Textual and launches automatically when you run `sci` with no arguments.
+
+### Launch
+
+```bash
+sci                # Launches the TUI
+sci <cmd> <args>   # Direct CLI mode (bypasses TUI)
+```
+
+### TUI Features
+
+| Feature | Description |
+|---------|-------------|
+| **Command prompt** | Type commands at the `>` prompt. Supports all CLI commands plus built-ins. |
+| **Command echo** | Each command shows `> <cmd>` with a right-aligned timestamp on the same line. |
+| **Slash commands** | `/help`, `/clear`, `/history`, `/version` — TUI-specific built-ins. |
+| **Command history** | Up/down arrows navigate the last 50 commands. Persisted to `~/.config/science-cli/repl_history`. |
+| **Grouped help** | `/help` lists commands organized by group (1–4) instead of a flat list. |
+| **fzf suspend** | Commands with `--fzf` flags auto-suspend the TUI to run `fzf` in the real terminal. |
+| **Status bar** | Shows active theme, context (`project/protocol/step`), and session uptime. |
+| **Scroll indicator** | `▲ earlier output ▲` appears when scrolled up. Use PgUp/PgDown to scroll. |
+| **Copy text** | Hold Shift while selecting, then Cmd+C (macOS) / Ctrl+Shift+C (Linux). |
+
+### Output Format
+
+```
+> /help                                                    14:48:45
+
+Group 1
+Command   │  Description
+──────────┼──────────────────────────────────────────────
+add       │ Add protocol/metadata/data/project
+delete    │ Delete protocol/metadata
+...
+```
+
+Each command shows a `> <command>` echo with the timestamp right-aligned on the same line, followed by the command output.
+
 ## Generate Theme Previews
 
 ```bash

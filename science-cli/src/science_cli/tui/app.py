@@ -10,6 +10,7 @@ legacy prompt_toolkit REPL.
 """
 
 import io
+import re
 import sys
 import inspect
 import shlex
@@ -20,7 +21,7 @@ from rich.console import Console as RichConsole
 from rich.text import Text as RichText
 
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, Container, Horizontal
+from textual.containers import Horizontal
 from textual.widgets import Static, Input
 
 from science_cli import __version__
@@ -192,23 +193,21 @@ class SCIApp(App):
     SCIApp {
         background: $background;
     }
-    Container {
-        padding: 0;
-        margin: 0;
-    }
     StatusBar {
+        height: 1;
         color: #888888;
     }
     #sep-input-top, #sep-input-bottom {
-        color: #55AA55;
         height: 1;
-        padding: 0;
-        margin: 0;
+        color: #55AA55;
     }
     #input-prompt {
         color: #55ee77;
         width: 2;
         content-align: right middle;
+    }
+    Horizontal {
+        height: 1;
     }
     """
     )
@@ -224,18 +223,16 @@ class SCIApp(App):
 
     def compose(self) -> ComposeResult:
         """Build the TUI layout — banner, header, output, input."""
-        yield Container(
-            SCIBanner(),
-            TuiHeader(),
-            OutputPanel(),
-            StatusBar(self),
-            Static(id="sep-input-top"),
-            Horizontal(
-                Static("\u276f ", id="input-prompt"),
-                CommandInput(),
-            ),
-            Static(id="sep-input-bottom"),
+        yield SCIBanner()
+        yield TuiHeader()
+        yield OutputPanel()
+        yield StatusBar(self)
+        yield Static(id="sep-input-top")
+        yield Horizontal(
+            Static("\u276f ", id="input-prompt"),
+            CommandInput(),
         )
+        yield Static(id="sep-input-bottom")
 
     def on_mount(self) -> None:
         """Post-mount initialization — focus the input bar and load context."""
@@ -344,6 +341,7 @@ class SCIApp(App):
                     output.write_error(f"Error running '{cmd_name}': {exc}")
                     return
 
+                output.write_command_header(line)
                 if captured.strip():
                     output.write(RichText.from_ansi(captured))
 
@@ -372,6 +370,7 @@ class SCIApp(App):
             # Scroll to bottom after new output.
             output.scroll_end(animate=False)
         else:
+            output.write_command_header(cmd_name)
             output.write_error(f"Unknown command: {cmd_name}")
             output.write("[dim]Type /help to see available commands.[/dim]")
 
@@ -389,8 +388,10 @@ class SCIApp(App):
         elif cmd_name == "/history":
             self._slash_history(output)
         elif cmd_name == "/version":
-            output.write(f"[bold #8BAA89]sci[/] version [bold]{__version__}[/]")
+            output.write_command_header("/version")
+            output.write(f"[bold #55ee77]sci[/] version [bold]{__version__}[/]")
         else:
+            output.write_command_header(cmd_name)
             output.write_error(f"Unknown slash command: {cmd_name}")
             output.write("[dim]Available: /help, /clear, /history, /version[/dim]")
 
@@ -407,41 +408,45 @@ class SCIApp(App):
         if cmd_name == "help":
             self._slash_help(output)
         elif cmd_name == "version":
-            output.add_separator("version")
-            output.write(f"[bold #8BAA89]sci[/] version [bold]{__version__}[/]")
+            output.write_command_header("version")
+            output.write(f"[bold #55ee77]sci[/] version [bold]{__version__}[/]")
         elif cmd_name == "history":
             self._slash_history(output)
         elif cmd_name in ("clear", "cls"):
             output.clear_output()
 
     def _slash_help(self, output: OutputPanel) -> None:
-        """Display the help screen showing available commands and slash commands.
+        output.write_command_header("/help")
 
-        Lists all registered COMMAND_TREE commands with their descriptions,
-        plus the slash commands available in the TUI.
-
-        Args:
-            output: The OutputPanel to write help text to.
-        """
-        output.add_separator("/help")
-
-        output.write("[bold #8BAA89]SCI Commands[/]\n")
-        output.write("[dim]Command  │  Description[/dim]")
-        output.write("[dim #4A7A4A]──────────┼──────────────────────────────────────────────[/]")
+        groups: dict[str, list[tuple[str, str]]] = {}
+        ungrouped: list[tuple[str, str]] = []
 
         for cmd_name, info in sorted(COMMAND_TREE.items()):
             desc = info.get("desc", "")
-            output.write(f"[bold]{cmd_name:<10}[/bold]│ {desc}")
+            m = re.search(r"\([Gg]roup\s+(\d+)\)", desc)
+            if m:
+                g = m.group(1)
+                groups.setdefault(g, []).append((cmd_name, desc))
+            else:
+                ungrouped.append((cmd_name, desc))
 
-        output.write("")
-        output.write("[bold #8BAA89]Slash Commands[/]\n")
-        output.write("[dim]Command     │  Description[/dim]")
-        output.write("[dim #4A7A4A]─────────────┼──────────────────────────────────────────────[/]")
+        for g in sorted(groups.keys()):
+            output.write(f"[bold #55ee77]Group {g}[/]")
+            output.write("[dim]Command   │  Description[/dim]")
+            output.write("[dim #4A7A4A]──────────┼──────────────────────────────────────────────[/]")
+            for cmd_name, desc in groups[g]:
+                clean_desc = re.sub(r"\s*\([Gg]roup\s+\d+\)", "", desc)
+                output.write(f"[bold]{cmd_name:<10}[/bold]│ {clean_desc}")
+            output.write("")
 
-        for slash_cmd, desc in sorted(SLASH_COMMANDS.items()):
-            output.write(f"[bold]{slash_cmd:<13}[/bold]│ {desc}")
+        if ungrouped:
+            output.write("[bold #55ee77]Other[/]")
+            output.write("[dim]Command   │  Description[/dim]")
+            output.write("[dim #4A7A4A]──────────┼──────────────────────────────────────────────[/]")
+            for cmd_name, desc in ungrouped:
+                output.write(f"[bold]{cmd_name:<10}[/bold]│ {desc}")
+            output.write("")
 
-        output.write("")
         output.write("[dim]Type a command name followed by --help for command-specific help.[/dim]")
 
     def _slash_history(self, output: OutputPanel) -> None:
@@ -454,7 +459,7 @@ class SCIApp(App):
         Args:
             output: The OutputPanel to write history to.
         """
-        output.add_separator("/history")
+        output.write_command_header("/history")
         hist = get_history()
         if not hist:
             output.write("[dim]No commands in history.[/dim]")

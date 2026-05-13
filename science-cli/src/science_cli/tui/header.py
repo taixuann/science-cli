@@ -84,16 +84,13 @@ class TuiHeader(Static):
         proto = self.context_protocol
 
         if proj and proto:
-            context = f"(sci {proj}/{proto}) v{__version__}"
+            context = f"(sci {proj}/{proto})"
         elif proj:
-            context = f"(sci {proj}) v{__version__}"
+            context = f"(sci {proj})"
         elif proto:
-            context = f"(sci */{proto}) v{__version__}"
+            context = f"(sci */{proto})"
         else:
-            context = f"(sci) v{__version__}"
-
-        # Workflow reminder on the right
-        workflow = "1.project 2.protocol 3.data 4.plot"
+            context = "(sci)"
 
         # Build multi-color Rich Text for left column
         # (sci project/protocol) with amber project and cyan protocol
@@ -103,26 +100,26 @@ class TuiHeader(Static):
             left_text.append(proj, "bold #d4a853")  # amber project
             left_text.append("/", "dim")
             left_text.append(proto, "bold #5ea8b5")  # cyan protocol
-            left_text.append(f") v{__version__}", "dim")
+            left_text.append(")", "dim")
         elif proj:
             left_text = RichText()
             left_text.append("(sci ", "bold")
             left_text.append(proj, "bold #d4a853")
-            left_text.append(f") v{__version__}", "dim")
+            left_text.append(")", "dim")
         elif proto:
             left_text = RichText()
             left_text.append("(sci */", "bold")
             left_text.append(proto, "bold #5ea8b5")
-            left_text.append(f") v{__version__}", "dim")
+            left_text.append(")", "dim")
         else:
-            left_text = RichText(f"(sci) v{__version__}", "dim")
+            left_text = RichText("(sci)", "dim")
 
         left = self.query_one("#header-left", Static)
         right = self.query_one("#header-right", Static)
 
         if left and right:
             left.update(left_text)
-            right.update(workflow)
+            right.update("")
 
     def set_context(self, project: str = "", protocol: str = "") -> None:
         """Update the header context programmatically.

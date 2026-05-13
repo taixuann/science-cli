@@ -8,6 +8,9 @@ from datetime import datetime
 
 from textual.widgets import RichLog
 
+from rich.table import Table
+from rich.text import Text as RichText
+
 from science_cli import __version__
 
 
@@ -28,22 +31,21 @@ class OutputPanel(RichLog):
         output.write_command_output("ls", "Protocol A\n  step-1\n  step-2\\n")
     """
 
+    def __init__(self, *, markup: bool = True, **kwargs):
+        super().__init__(markup=markup, **kwargs)
+
     DEFAULT_CSS: str = """
     OutputPanel {
         height: 1fr;
         width: 100%;
-        border: solid #55AA55;
         background: transparent;
         color: #cccccc;
         padding: 0 1;
         overflow-y: scroll;
-        scrollbar-size-vertical: 1;
+        scrollbar-size-vertical: 0;
         scrollbar-size-horizontal: 0;
         scrollbar-color: #55AA55;
         scrollbar-background: transparent;
-    }
-    OutputPanel:focus {
-        border: solid #55ee77;
     }
     """
 
@@ -56,39 +58,20 @@ class OutputPanel(RichLog):
         )
         self.write(f"[dim]Tip: use [bold]--fzf[/] for interactive file selection[/dim]\n")
 
-    def add_separator(self, command: str = "") -> None:
-        """Add a timestamped separator line before command output.
-
-        The separator format is: ``--- HH:MM:SS [command] ---``
-        This visually separates each command's output in the scrollable log.
-
-        Args:
-            command: The command string to display in the separator.
-                     If empty, only the timestamp is shown.
-        """
+    def write_command_header(self, command: str) -> None:
         ts = datetime.now().strftime("%H:%M:%S")
-        if command:
-            separator = f"[dim #55AA55]--- {ts} [dim #666666]{command}[/] ---[/]"
-        else:
-            separator = f"[dim #55AA55]--- {ts} ---[/]"
-        self.write(separator)
+        table = Table.grid(padding=0)
+        table.add_column(no_wrap=True)
+        table.add_column(no_wrap=True, justify="right", ratio=1)
+        table.add_row(
+            RichText(f"> {command}", style="bold #55ee77"),
+            RichText(f"  {ts}", style="dim #55AA55"),
+        )
+        self.write(table)
 
     def write_command_output(self, command: str, output: str) -> None:
-        """Write a complete command result to the panel.
-
-        Adds a timestamped separator followed by the command output.
-        If the output is empty, writes a dim "(no output)" message.
-        Auto-scrolls to the bottom after writing.
-
-        Args:
-            command: The command that was executed (e.g., "ls -m protocol").
-            output: The captured output string from the command handler.
-        """
-        self.add_separator(command)
-
+        self.write_command_header(command)
         if output and output.strip():
-            # Split output into lines and write each one.
-            # RichLog handles Rich markup in the output text.
             for line in output.rstrip("\n").split("\n"):
                 if line.strip():
                     self.write(line)
@@ -96,7 +79,6 @@ class OutputPanel(RichLog):
                     self.write("")
         else:
             self.write("[dim](no output)[/dim]")
-
         self.write("")
 
     def write_error(self, message: str) -> None:
