@@ -140,3 +140,6 @@ Write dashboard.html to output_path
 - Auto-resize on `<details>` toggle to fix Plotly layout in hidden containers
 - Backward-compatible signature: `generate_dashboard(config, results_dir, output_path) -> Path`
 - Preserved helpers: `_format_number_ranges()`, `_get_material_color()`, sweep annotations from `plotting.py`
+
+## Cross-PLAN Update (2026-05-13)
+- **Superseded by Sprint 3**: The cross-protocol dashboard (`dashboard --all`) extends the per-protocol dashboard from this PLAN. The original `generate_dashboard()` API remains unchanged and continues to work for per-protocol use. New `collect_cross_protocol_data()` and `generate_cross_protocol_dashboard()` added to `dashboard.py`. See [[PLAN-enhanced-dashboard]] for details.

@@ -457,6 +457,8 @@ from science_cli.core.config import (
 | Dead code cleanup | cleanup/architecture-guardrails | Removed image.py, general.py, functions/ directory |
 | Module READMEs | cleanup/architecture-guardrails | core/README.md, plot/README.md, theme/README.md |
 | AGENTS.md workflow | cleanup/architecture-guardrails | 5-phase workflow, cross-PLAN tracking, CodeGraph integration |
+| Sprint 2: Help menu restructure | Sprint 2 | 4-group commands, TechniquesBox TUI banner, --filter removed |
+| Sprint 3: Cross-Protocol Dashboard | Sprint 3 | `dashboard --all`, stacked heatmaps, material filter, analysis_data.json cache |
 | documentation/ structure | cleanup/architecture-guardrails | plans/ and instructions/ directories created |
 | Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
 | PLAN files created | cleanup/architecture-guardrails | 4 PLANs created with cross-PLAN relationships |
@@ -469,8 +471,7 @@ from science_cli.core.config import (
 
 | Gap | Impact | Priority | PLAN | Status |
 |-----|--------|----------|------|--------|
-| **Command restructuring** | `project` command still exists, `close` missing, `open`/`ls`/`add` don't support `-m project` | HIGH | PLAN-1 | PLAN created, not executed |
-| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | HIGH | PLAN-1 | PLAN created, not executed |
+| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | MEDIUM | PLAN-1 | Partially resolved — close/status implemented, step tracking pending |
 
 #### Config Gaps
 
@@ -483,7 +484,6 @@ from science_cli.core.config import (
 
 | Gap | Impact | Priority | PLAN | Status |
 |-----|--------|----------|------|--------|
-| **`ext <name> <subcommand>` interface** | No unified extension command interface | MEDIUM | PLAN-3 | PLAN created, not executed |
 | **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | — | Needs separate PLAN |
 | **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | — | Future work |
 
@@ -506,10 +506,11 @@ from science_cli.core.config import (
 
 | PLAN | Classification | Status | Blocks | Blocked By |
 |------|----------------|--------|--------|------------|
-| PLAN-1: Command Restructuring | command-restructure | **Created** | PLAN-2, PLAN-3 | — |
+| PLAN-1: Command Restructuring | command-restructure | **Superseded** — Sprint 2 implemented most changes | PLAN-2, PLAN-3 | — |
 | PLAN-2: Config Expansion | config | **Created** | — | PLAN-1 |
-| PLAN-3: Extension Interface | extension | **Created** | — | PLAN-1 |
+| PLAN-3: Extension Interface | extension | **Superseded** — `ext` command implemented | — | PLAN-1 |
 | PLAN-4: Version Bump to 2.0.0 | cleanup | **Created** | — | PLAN-1, PLAN-2, PLAN-3 |
+| PLAN-enhanced-dashboard: Sprint 3 | feature | **Completed** | — | — |
 
 **Execution order**: PLAN-1 → PLAN-2 + PLAN-3 (parallel) → PLAN-4
 

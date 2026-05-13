@@ -232,6 +232,22 @@ protocol/
 
 **Resolution order**: When both the protocol YAML and an extension YAML exist, the CLI resolves files and metadata from the extension YAML first, falling back to the protocol YAML. This avoids duplication while allowing extensions to add structured metadata that doesn't belong in the general-purpose protocol file.
 
+### Cross-Protocol Dashboard
+
+Generate a project-level dashboard that aggregates IV data from ALL protocols:
+
+```bash
+memristor dashboard --all [--open] [--force]
+```
+
+- Scans all `<project>/protocol/*/devices.yaml` files
+- Caches analysis results in `project/results/analysis_data.json` (incremental via mtime tracking)
+- Per-protocol stacked heatmaps with protocol selector dropdown
+- Material filter, toggleable Vset/Vreset markers on IV overlay
+- KPI cards with cross-protocol aggregate statistics (median Vset, Vreset, yield, ON/OFF ratio)
+- Same dark-themed Plotly interactive dashboard as per-protocol mode
+- `--force` flag forces full re-analysis, ignoring cache
+
 ### Central Path Config (`paths.py`)
 
 All directory structure logic lives in `science_cli/core/paths.py`. `ProjectPaths` is the single source of truth for:

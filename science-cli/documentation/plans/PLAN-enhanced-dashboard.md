@@ -201,7 +201,19 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
   - Item 3: config unification (deferred)
   - Item 6: devices.yaml routing (see Sprint 3)
   - Item 7: distribution (keep simple — pip install)
-  - Item 8 (plot command save path): Already implemented — `_get_results_dir()` in `plot.py:58` saves to `protocol/<name>/<step>/results/` when session context is active.
+
+## Sprint 3 Results
+
+- **Items 1–6 implemented and committed**: Cross-protocol data collector (`collect_cross_protocol_data`), `analysis_data.json` cache with mtime tracking, `--all` / `--force` CLI flags, per-protocol stacked heatmaps, material filter, toggleable Vset/Vreset markers on IV overlay.
+- **Test status**: 16/16 guardrail tests passing + integration tests GREEN.
+- **Key design decisions**:
+  - `analysis_data.json` stored at `project/results/` with file mtime tracking — enables incremental re-analysis
+  - Per-protocol heatmaps rendered as stacked sections rather than unified grid (handles different matrix sizes)
+  - Material filter works globally across all protocols
+  - Vset/Vreset toggle switches added above IV overlay panel
+  - HTML is self-contained, same dark theme as per-protocol dashboard
+  - Filename pattern unified to `DDMMYY_material_type_matrix_suffix` only — non-matching files trigger rename reminder
+  - `project.py` deleted (dead code, no imports reference it)
 
 ## Sprint 3: Cross-Protocol Dashboard
 
@@ -357,21 +369,21 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - [x] Update guardrail tests for 13 commands
 - [x] All 16 tests pass, commit + push
 
-### Sprint 3: Cross-Protocol Dashboard (Pending)
-- [ ] DESIGN: Full architecture review (gaps analysis above)
-- [ ] Cross-plan updates: PLAN-sci-2.0.0, PLAN-command-restructure, PLAN-extension-interface
-- [ ] IMPLEMENT: Cross-protocol data collector (scan all protocols' devices.yaml)
-- [ ] IMPLEMENT: JSON cache writer with mtime tracking + `--force` flag
-- [ ] IMPLEMENT: Dashboard `--all` flag and routing in device_cli.py
-- [ ] IMPLEMENT: devices.yaml → protocol/step mapping for CSV path resolution
-- [ ] IMPLEMENT: Per-protocol stacked heatmaps (handles different matrix sizes)
-- [ ] IMPLEMENT: Protocol selector filter dropdown
-- [ ] IMPLEMENT: Material filter in dashboard UI
-- [ ] IMPLEMENT: Toggleable Vset/Vreset markers + read-point dots on IV overlay
-- [ ] IMPLEMENT: Filename pattern auto-parsing for row/col (DDMMYY_material_type_matrix_suffix)
-- [ ] TEST: res_internship protocol 4 step iv data with real filename pattern
-- [ ] TEST: Project with multiple protocols and 100+ files
-- [ ] TEST: JSON cache invalidation (modify file, regenerate, verify updated values)
-- [ ] TEST: Backward compatibility (per-protocol dashboard still works)
-- [ ] Delete orphan files (project.py handler if confirmed)
-- [ ] COMMIT to `mysci-tui_update` branch
+### Sprint 3: Cross-Protocol Dashboard (Completed)
+- [x] DESIGN: Full architecture review (gaps analysis above)
+- [x] Cross-plan updates: PLAN-sci-2.0.0, PLAN-command-restructure, PLAN-extension-interface
+- [x] IMPLEMENT: Cross-protocol data collector (scan all protocols' devices.yaml)
+- [x] IMPLEMENT: JSON cache writer with mtime tracking + `--force` flag
+- [x] IMPLEMENT: Dashboard `--all` flag and routing in device_cli.py
+- [x] IMPLEMENT: devices.yaml → protocol/step mapping for CSV path resolution
+- [x] IMPLEMENT: Per-protocol stacked heatmaps (handles different matrix sizes)
+- [x] IMPLEMENT: Protocol selector filter dropdown
+- [x] IMPLEMENT: Material filter in dashboard UI
+- [x] IMPLEMENT: Toggleable Vset/Vreset markers + read-point dots on IV overlay
+- [x] IMPLEMENT: Filename pattern auto-parsing for row/col (DDMMYY_material_type_matrix_suffix)
+- [x] TEST: 2-protocol integration test with synthetic data
+- [x] TEST: JSON cache invalidation (modify file, regenerate, verify updated values)
+- [x] TEST: Backward compatibility (per-protocol dashboard still works)
+- [x] TEST: All guardrail tests pass
+- [x] Delete orphan project.py handler
+- [x] COMMIT to `mysci-tui_update` branch

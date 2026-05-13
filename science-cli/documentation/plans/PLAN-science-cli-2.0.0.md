@@ -418,3 +418,7 @@ GROUP 4: EXTENSIONS & TECHNIQUES
 ADDITIONAL
   help, version, clear, history
 ```
+
+## Cross-PLAN Update (2026-05-13)
+- **Sprint 2 Complete**: Help menu restructured (4 groups), `project`/`extensions`/`memristor` top-level commands removed, `ext` command implemented. PLAN-command-restructure and PLAN-extension-interface marked superseded.
+- **Sprint 3 Complete**: Cross-protocol dashboard implemented (`dashboard --all`, stacked heatmaps, material filter, `analysis_data.json` cache). See [[PLAN-enhanced-dashboard]] for details.
