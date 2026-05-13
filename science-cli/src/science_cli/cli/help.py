@@ -283,7 +283,7 @@ COMMAND_HELP: Dict[str, dict] = {
             "config list techniques":                   {"desc": "List all configured techniques", "usage": "config list techniques"},
             "config list devices <technique>":           {"desc": "List devices for a technique", "usage": "config list devices iv-sweep"},
             "config set technique <name> <device>":      {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
-            "config edit <technique>":                   {"desc": "Open technique config in $EDITOR", "usage": "config edit iv-sweep"},
+            "config edit <technique>":                   {"desc": "Open technique config in $EDITOR (--force to regenerate template)", "usage": "config edit iv-sweep [--force]"},
         },
         "examples": [
             "config theme list",
