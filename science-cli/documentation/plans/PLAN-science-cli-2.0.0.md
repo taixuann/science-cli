@@ -125,14 +125,16 @@ src/science_cli/
 │   └── plotting.py          # IV SVG generation, CSV parsing
 ```
 
-### 3.2 Rebuild science-iv from .pyc (best effort)
-Since source is deleted, attempt to decompile `.pyc` files:
-- Use `uncompyle6` or `decompyle3` to recover source
-- If decompilation fails, rebuild from:
-  - Import statements in science-memristor (`science_iv.analyze.extract_resistance`)
-  - Existing test files
-  - Protocol YAML examples
-  - README documentation
+### 3.2 Rebuild science-iv from .pyc — ✅ COMPLETE
+Recovered via `dis.dis()` bytecode analysis (uncompyle6 3.9.3 doesn't support Python 3.11 bytecode).
+
+**Recovered into `src/science_cli/iv/`:**
+- `models.py`: `IVData` dataclass (voltage, current, filename, metadata) with `resistance`, `compliance`, `on_off_ratio` properties
+- `analyze.py`: 10 functions — `extract_resistance`, `extract_scan_rate`, `extract_breakdown_voltage`, `fit_iv_curve`, `_fit_ohmic`, `_fit_schottky`, `_fit_sclc`, `_fit_pool_frenkel`, `extract_on_off_ratio`, `detect_sweep_segments`
+- `__init__.py`: Extension registration (3 techniques: iv-sweep, iv-breakdown, iv-leakage) with analyzers, plot presets, column maps
+
+All imports updated from `science_iv` to `science_cli.iv` namespace.
+All function signatures and return values verified against bytecode.
 
 ### 3.3 Rebuild science-electrochem from .pyc (best effort)
 Same approach as science-iv. Key techniques: CV, CA, EIS.
@@ -318,7 +320,7 @@ protocol/<name>/<step>/
 | `src/science_cli/memristor/switching.py` | Switching analysis |
 | `src/science_cli/memristor/models.py` | Data models |
 | `src/science_cli/memristor/plotting.py` | IV plotting |
-| `src/science_cli/iv/` | (recovered from .pyc) |
+| `src/science_cli/iv/` | ✅ Recovered from .pyc — 3 files (models, analyze, __init__) |
 | `src/science_cli/electrochem/` | (recovered from .pyc) |
 | `CHANGELOG.md` | 2.0.0 breaking changes |
 
@@ -358,7 +360,9 @@ protocol/<name>/<step>/
 - [ ] User approved
 - [ ] Phase 1: Version bump + branch setup
 - [ ] Phase 2: Rebuild TUI
-- [ ] Phase 3: Integrate extensions into core
+- [x] Phase 3b: Recover science-iv from .pyc — IV analysis module ✅
+- [ ] Phase 3a: Merge science-memristor into core
+- [ ] Phase 3c: Rebuild science-electrochem from .pyc
 - [ ] Phase 4: Plotly dashboard
 - [ ] Phase 5: Command restructuring
 - [ ] Phase 6: Parquet support
