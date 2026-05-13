@@ -119,7 +119,7 @@ The dashboard auto-extracts switching parameters:
 │   └── <protocol_name>/
 │       ├── devices.yaml             # Matrix map (rows, cols, sweep metadata)
 │       ├── <step>/
-│       │   ├── *.csv / *.lvm        # Data files (symlinked from data/raw/)
+│       │   ├── *.csv / *.txt        # Data files (symlinked from data/raw/)
 │       │   └── results/             # Generated plots + per-protocol dashboard
 │       └── ...
 └── results/
@@ -131,7 +131,7 @@ The dashboard auto-extracts switching parameters:
 | Format | Extension | Source |
 |--------|-----------|--------|
 | CSV | `.csv` | Any (comma/tab separated) |
-| LabVIEW Measurement | `.lvm` | Keithley 2400 |
+| Text | `.txt` | Any (tab separated) |
 | Keysight Clarius+ | `.csv` (B1500A) | Keysight |
 | Biologic | `.mpt` | Biologic |
 
@@ -173,7 +173,7 @@ science-cli/                       ← Core CLI + plotting + themes
 │   │   ├── switching.py           ← Vset/Vreset extraction
 │   │   ├── endurance.py           ← Endurance analysis
 │   │   ├── retention.py           ← Retention analysis
-│   │   └── plotting.py            ← CSV/LVM reader, SVG generation
+│   │   └── plotting.py            ← CSV/TXT reader, SVG generation
 │   ├── electrochem/               ← CV, CA, EIS analysis
 │   ├── iv/                        ← IV analysis models
 │   ├── theme/                     ← 7 themes + per-technique templates

@@ -1,4 +1,4 @@
-# Test Report: Enhanced Dashboard + LVM Reader + Vset/Vreset Extraction
+# Test Report: Enhanced Dashboard + Tabular Reader + Vset/Vreset Extraction
 
 **Date:** 2026-05-13
 **Branch:** mysci-tui_update
@@ -9,7 +9,7 @@
 
 | File | Lines | Changes |
 |------|-------|---------|
-| `src/science_cli/memristor/plotting.py` | +157 | LVM format reader (`read_lvm_csv`) |
+| `src/science_cli/memristor/plotting.py` | +157 | Tabular format reader (`read_iv_csv`) |
 | `src/science_cli/memristor/switching.py` | +416 | Vset/Vreset extraction, ON/OFF ratio, abrupt+gradual detection |
 | `src/science_cli/core/config.py` | +24 | Keithley 2400 device preset |
 | `src/science_cli/memristor/dashboard.py` | +1643 | Full dark-themed interactive Plotly dashboard |
@@ -28,7 +28,7 @@ All 16 architecture guardrail tests pass:
 - `test_dashboard_generates_valid_html` — output is valid HTML
 - `test_dashboard_contains_plotlyjs` — Plotly.js CDN included
 - `test_cli_subcommands_available` — memristor init/ls/add/plot/dashboard registered
-- `test_lvm_reader_parses_correctly` — `.lvm` files produce correct DataFrame
+- `test_lvm_reader_parses_correctly` — tab-separated files produce correct DataFrame
 - `test_vset_detection_hits_expected_range` — derivative max at expected V
 - `test_on_off_ratio_basic` — ratio > 1 for set, > 0 for inverted reset
 - Plus 6 additional structural tests
@@ -41,9 +41,9 @@ from science_cli.memristor.plotting import read_lvm_csv  # OK
 from science_cli.memristor.switching import SwitchingAnalyzer  # OK
 ```
 
-### 3. LVM Reader
+### 3. Tabular Reader
 
-**Test data:** `science-cli/test-data/lvm/Keithley2400_sample.lvm`
+**Test data:** `science-cli/test-data/lvm/Keithley2400_sample.csv/.txt`
 
 | Check | Status |
 |-------|--------|
@@ -96,7 +96,7 @@ When analyzing an `iv_reset_*.csv` file, the ON/OFF ratio appears inverted (0.01
 | Area | Verdict |
 |------|---------|
 | Architecture compliance | PASS |
-| LVM reader | PASS |
+| tabular reader | PASS |
 | Vset/Vreset extraction | PASS |
 | Dashboard rendering | PASS |
 | ON/OFF ratio (set) | PASS |

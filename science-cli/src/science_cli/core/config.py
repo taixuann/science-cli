@@ -51,7 +51,7 @@ _DEFAULT_TECHNIQUE_PATTERNS: dict[str, list[str]] = {
     "ec-eis": [r"\.mpt$", r"_EIS\.", r"\.eis$", r"_impedance", r"\.z"],
     "ec-lsv": [r"_LSV\.", r"\.lsv$"],
     "ec-swv": [r"_SWV\.", r"\.swv$"],
-    "iv-sweep": [r"_IV\.", r"\.iv$", r"iv_", r"iv-", r"_sweep", r"sweep_", r"\.lvm$"],
+    "iv-sweep": [r"_IV\.", r"\.iv$", r"iv_", r"iv-", r"_sweep", r"sweep_"],
     "iv-breakdown": [r"_bd\.", r"breakdown_", r"_Vbd", r"bd_"],
     "iv-leakage": [r"_leak", r"leakage_", r"leak_"],
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],

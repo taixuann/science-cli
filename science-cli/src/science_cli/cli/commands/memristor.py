@@ -1,10 +1,8 @@
-"""memristor command handler — crossbar device management from the sci REPL."""
-
-import sys
+"""memristor command handler — crossbar device management from the sci CLI."""
 
 
 def memristor_handler(args: list) -> None:
-    """Handle 'memristor <subcommand>' from the sci REPL/CLI."""
+    """Handle 'memristor <subcommand>' from the sci CLI."""
     try:
         from science_cli.memristor.device_cli import build_parser
 

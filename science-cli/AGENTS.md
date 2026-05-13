@@ -249,7 +249,7 @@ science-cli/
 │   │   ├── results.py             ← results handler
 │   │   ├── close.py               ← close handler
 │   │   ├── status.py              ← status handler
-│   │   ├── ext.py                 ← extension handler
+│   │   ├── memristor.py           ← memristor handler
 │   │   └── techniques.py          ← techniques handler
     │   └── help.py                    ← Help text rendering
     │
@@ -285,7 +285,7 @@ science-cli/
     ├── tui/                           ← Textual TUI
     │
     ├── memristor/                     ← Memristor characterization
-    │   ├── __init__.py                ← Extension registration
+    │   ├── __init__.py                ← Public API + built-in data
     │   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
     │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard)
     │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard **
@@ -293,9 +293,7 @@ science-cli/
     │   ├── endurance.py               ← Endurance analysis
     │   ├── retention.py               ← Retention analysis
     │   ├── switching.py               ← Switching analysis
-    │   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
-    │
-    └── extensions.py                  ← ExtensionRegistry + entry-point discovery
+    │       └── models.py                  ← SwitchingData, EnduranceData, RetentionData
 ```
 
 ---
@@ -362,7 +360,7 @@ Same device name can appear under multiple techniques with different column mapp
 
 ### Never:
 - **Add hardcoded device-specific logic to data_loader.py** — use the config system
-- **Add new hardcoded technique patterns directly to technique.py** — add via config or extensions
+- **Add new hardcoded technique patterns directly to technique.py** — add via config or the BUILTIN_TECHNIQUES dict
 - **Create new top-level modules in science_cli/** — use core/, cli/, plot/, theme/
 - **Modify config.py (legacy) for new features** — use core/config.py
 - **Remove hardcoded defaults from technique.py or data_loader.py** — they are fallbacks
@@ -386,28 +384,6 @@ Same device name can appear under multiple techniques with different column mapp
 
 ---
 
-## Extension System Overview
-
-Extensions are Python packages that register with `ExtensionRegistry`:
-```python
-from science_cli.extensions import ColumnMap, ExtensionRegistry, TechniqueDef
-
-def register(registry: ExtensionRegistry):
-    registry.name = "science-memristor"
-    registry.techniques["mem-switching"] = TechniqueDef(
-        name="mem-switching", label="Switching",
-        patterns=["_switch", ".sw"],
-    )
-    registry.column_maps["mem-switching"] = ColumnMap(
-        x="Voltage (V)", y="Current (A)",
-    )
-```
-
-Extensions are discovered via Python entry points (`science_cli.extensions` group)
-and via the config file system. Config techniques have lower priority than Python extensions.
-
----
-
 ## Config System Architecture
 
 ```
@@ -422,7 +398,6 @@ Merged config (get_merged_config())
 
 **Key modules:**
 - `core/config.py` — loading, merging, caching, typed accessors
-- `extensions.py` — registers config techniques in ExtensionRegistry
 - `core/technique.py` — consults config for filename patterns
 - `core/data_loader.py` — consults config for device loading params
 - `core/project.py` — consults config for projects_root
@@ -484,8 +459,8 @@ from science_cli.core.config import (
 
 | Gap | Impact | Priority | PLAN | Status |
 |-----|--------|----------|------|--------|
-| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | — | Needs separate PLAN |
-| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | — | Future work |
+| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | — | **COMPLETED** — extensions integrated as built-in in refactor/2.1.0 |
+| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | — | **COMPLETED** — extensions integrated as built-in in refactor/2.1.0 |
 
 #### Project Health Gaps
 

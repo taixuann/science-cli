@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cross-Protocol Dashboard**: `ext memristor dashboard --all` aggregates IV data from ALL protocols with per-protocol stacked heatmaps, material filter, toggleable Vset/Vreset markers
 - **Analysis Cache**: `analysis_data.json` with mtime tracking for incremental re-analysis
 - **Extension Integration**: science-memristor merged into core (`src/science_cli/memristor/`), science-iv recovered from .pyc (`src/science_cli/iv/`), science-electrochem recovered from .pyc (`src/science_cli/electrochem/`)
-- **LVM Format Reader**: Support for Keithley 2400 LabVIEW Measurement (.lvm) tab-separated format
+- **CSV/TXT Format Support**: Reader for Keithley 2400 tab-separated format and Clarius+ CSV
 - **Vset/Vreset Extraction**: Derivative-based IV parameter extraction with abrupt and gradual switching detection
 - **ON/OFF Ratio Computation**: Per-sweep resistance ratio with configurable V_read
 - **File Management**: `close -m project|protocol|step` with auto-save, `open -m step <id>` for step-level context

@@ -51,12 +51,12 @@ def test_no_general_in_app_import():
 
 
 def test_commmand_tree_has_13():
-    """Verify COMMAND_TREE has 13 registered commands (project/extensions/memristor removed)."""
+    """Verify COMMAND_TREE has 13 registered commands."""
     from science_cli.cli.commands import COMMAND_TREE
     keys = sorted(COMMAND_TREE.keys())
-    expected = ['add', 'analyze', 'close', 'config', 'delete', 'edit', 'ext',
-                'ls', 'open', 'plot', 'results', 'status', 'techniques']
-    assert keys == expected, f"Expected 13 commands, got {len(keys)}: {keys}"
+    expected = ['add', 'analyze', 'close', 'config', 'delete', 'edit', 'ls',
+                'memristor', 'open', 'plot', 'results', 'status', 'techniques']
+    assert keys == expected, f"Expected {expected}, got {keys}"
     print(f"  [PASS] COMMAND_TREE has {len(keys)} commands")
 
 
@@ -209,16 +209,16 @@ def test_project_uses_config():
     print(f"  [PASS] _get_projects_root returns Path: {root}")
 
 
-# ── Test 6: Extensions discovery ──────────────────────────────────────
+# ── Test 6: Built-in techniques ──────────────────────────────────────
 
-def test_extensions_discovery():
-    """Verify discover_extensions works and returns ExtensionRegistry."""
-    from science_cli.extensions import discover_extensions, ExtensionRegistry
-    reg = discover_extensions()
-    assert isinstance(reg, ExtensionRegistry), \
-        f"Should return ExtensionRegistry, got {type(reg)}"
-    # May be empty if no extensions installed, but should not crash
-    print(f"  [PASS] discover_extensions returns ExtensionRegistry ({len(reg.techniques)} techniques)")
+def test_builtin_techniques():
+    """Verify built-in techniques are available without extension system."""
+    from science_cli.core.technique import BUILTIN_TECHNIQUES
+    assert len(BUILTIN_TECHNIQUES) >= 10, f"Expected >=10 techniques, got {len(BUILTIN_TECHNIQUES)}"
+    # Verify key techniques exist
+    for key in ("iv-sweep", "ec-cv", "ec-eis", "mem-endurance", "mem-switching"):
+        assert key in BUILTIN_TECHNIQUES, f"Missing technique: {key}"
+    print(f"  [PASS] Built-in techniques: {len(BUILTIN_TECHNIQUES)} techniques")
 
 
 # ── Test 7: AST validity ──────────────────────────────────────────────
@@ -231,7 +231,7 @@ def test_all_modified_files_compile():
     files = [
         root / "science_cli/cli/commands/__init__.py",
         root / "science_cli/cli/commands/config.py",
-        root / "science_cli/cli/commands/extensions.py",
+        root / "science_cli/cli/commands/memristor.py",
         root / "science_cli/cli/commands/parse.py",
         root / "science_cli/cli/commands/metadata.py",
         root / "science_cli/cli/commands/data_cmd.py",
@@ -240,7 +240,6 @@ def test_all_modified_files_compile():
         root / "science_cli/core/technique.py",
         root / "science_cli/core/data_loader.py",
         root / "science_cli/core/project.py",
-        root / "science_cli/extensions.py",
     ]
     for f in files:
         try:
@@ -279,7 +278,7 @@ if __name__ == "__main__":
         ("Cleanup: functions/ deleted", test_functions_dir_deleted),
         ("Cleanup: __init__.py import cleanup", test_no_general_import_in_init),
         ("Cleanup: app.py import cleanup", test_no_general_in_app_import),
-        ("Cleanup: COMMAND_TREE has 16 commands", test_commmand_tree_has_13),
+        ("Cleanup: COMMAND_TREE has 13 commands", test_commmand_tree_has_13),
         ("Config: imports work", test_config_imports),
         ("Config: backward compat (no config file)", test_config_backward_compat_no_file),
         ("Config: generate_default_config_yaml", test_config_generate_default_yaml),
@@ -287,7 +286,7 @@ if __name__ == "__main__":
         ("Technique: detection works", test_technique_detection),
         ("DataLoader: signature has technique/device", test_data_loader_signature),
         ("Project: _get_projects_root uses config", test_project_uses_config),
-        ("Extensions: discover_extensions works", test_extensions_discovery),
+        ("Techniques: built-in techniques available", test_builtin_techniques),
         ("Compile: all modified files", test_all_modified_files_compile),
         ("Docs: documentation files exist", test_documentation_files_exist),
     ]

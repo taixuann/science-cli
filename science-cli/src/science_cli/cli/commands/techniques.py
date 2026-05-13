@@ -4,17 +4,15 @@ from rich.console import Console
 from rich.table import Table
 from rich import print as rprint
 
+from science_cli.core.technique import BUILTIN_TECHNIQUES, TechniqueDef
+
 console = Console()
 
 
 def techniques_handler(args: list) -> None:
     """Show available techniques and how to use them through the step system."""
-    from science_cli.extensions import discover_extensions
-
-    registry = discover_extensions()
-
-    if not registry.techniques:
-        console.print("[yellow]No techniques registered (no extensions loaded).[/yellow]")
+    if not BUILTIN_TECHNIQUES:
+        console.print("[yellow]No techniques registered.[/yellow]")
         return
 
     # Summary header
@@ -30,7 +28,7 @@ def techniques_handler(args: list) -> None:
     table.add_column("Description")
     table.add_column("Filename Patterns", style="dim")
 
-    for tid, tdef in sorted(registry.techniques.items()):
+    for tid, tdef in sorted(BUILTIN_TECHNIQUES.items()):
         patterns = ", ".join(tdef.patterns)
         table.add_row(tid, tdef.label, tdef.description, patterns)
 

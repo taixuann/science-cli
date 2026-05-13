@@ -46,7 +46,7 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
-    # ── Auto-detect LabVIEW Measurement (.lvm) files ──
+    # ── Auto-detect tab-separated measurement files ──
     with open(path, newline="") as f:
         first_line = f.readline()
     if "LabVIEW Measurement" in first_line:
@@ -168,7 +168,7 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
 
 
 def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    """Read voltage and current from a LabVIEW Measurement (.lvm) file.
+    """Read voltage and current from a tab-separated measurement file.
 
     Parses the two-block header delimited by ``***End_of_Header***`` markers,
     extracts metadata (date, time, operator, channels, samples), and reads
@@ -181,7 +181,7 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         - col4: Comment (ignored)
 
     Args:
-        filepath: Path to the .lvm file.
+        filepath: Path to the data file.
 
     Returns:
         (voltage, current, metadata_dict) where ``metadata_dict`` includes
@@ -190,7 +190,7 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
 
     Raises:
         FileNotFoundError: If the file doesn't exist.
-        ValueError: If the file is not an LVM file, has fewer than 3 data
+        ValueError: If the file is not in the expected format, has fewer than 3 data
             columns, or contains no valid numeric data.
     """
 
@@ -199,7 +199,7 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         raise FileNotFoundError(f"File not found: {path}")
 
     with open(path, newline="") as f:
-        # ── LVM signature check ──
+        # ── Header signature check ──
         first_line = f.readline()
         if "LabVIEW Measurement" not in first_line:
             raise ValueError(

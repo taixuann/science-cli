@@ -13,7 +13,7 @@ from science_cli.cli.commands.techniques import techniques_handler
 from science_cli.cli.commands.results import results_handler
 from science_cli.cli.commands.close import close_handler
 from science_cli.cli.commands.status import status_handler
-from science_cli.cli.commands.ext import ext_handler
+from science_cli.cli.commands.memristor import memristor_handler
 
 COMMAND_TREE = {
     "add":     {"handler": add_handler,  "desc": "Add project/protocol/metadata/data (group 1)"},
@@ -27,6 +27,6 @@ COMMAND_TREE = {
     "config":  {"handler": config_handler, "desc": "Configure settings (group 3)"},
     "status":  {"handler": status_handler, "desc": "Show current context status (group 3)"},
     "results": {"handler": results_handler, "desc": "List saved results by protocol and step (group 3)"},
-    "ext":     {"handler": ext_handler, "desc": "Unified extension interface (group 4)"},
+    "memristor": {"handler": memristor_handler, "desc": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check, plot, dashboard) (group 4)"},
     "techniques": {"handler": techniques_handler, "desc": "List available techniques and usage guide (group 4)"},
 }
