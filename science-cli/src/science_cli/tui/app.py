@@ -296,6 +296,7 @@ class SCIApp(App):
         output = self.query_one(OutputPanel)
         header = self.query_one(TuiHeader)
         input_bar = self.query_one(CommandInput)
+        input_bar.clear()
 
         # --- Slash commands (handled internally) ---
         if cmd_name.startswith("/"):
