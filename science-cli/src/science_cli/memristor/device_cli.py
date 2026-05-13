@@ -998,7 +998,40 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Generate an HTML dashboard for plotted IV SVGs."""
-    from science_cli.memristor.dashboard import generate_dashboard
+    from science_cli.memristor.dashboard import generate_dashboard, generate_cross_protocol_dashboard
+
+    if getattr(args, "all", False):
+        # ── Cross-protocol mode ──
+        from science_cli.core.project import get_current_project_path
+
+        sess = load_session()
+        last_proj = sess.get("last_project", "")
+        if not last_proj:
+            print("No project open. Use 'open -m project <path>' first.")
+            sys.exit(1)
+
+        project_dir = get_current_project_path()
+        if not project_dir or not project_dir.exists():
+            print(f"Project directory not found: {project_dir}")
+            sys.exit(1)
+
+        # Ensure results dir exists
+        results_dir = project_dir / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = Path(args.output) if args.output else results_dir / "dashboard.html"
+        force = getattr(args, "force", False)
+
+        try:
+            out = generate_cross_protocol_dashboard(project_dir, output_path, force=force)
+            print(f"Cross-protocol dashboard generated: {out}")
+            if getattr(args, "open", False):
+                import subprocess
+                subprocess.run(["open", str(out)], check=False)
+        except Exception as exc:
+            print(f"Error generating cross-protocol dashboard: {exc}")
+            sys.exit(1)
+        return
 
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
@@ -1130,6 +1163,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--step-dir", default="")
     p_dash.add_argument("--output", default="", help="Custom output path (default: results/dashboard.html)")
     p_dash.add_argument("--open", action="store_true", help="Open in browser after generation")
+    p_dash.add_argument("--all", action="store_true", help="Cross-protocol dashboard (project-level)")
+    p_dash.add_argument("--force", action="store_true", help="Force full re-analysis, ignore cache")
     p_dash.set_defaults(func=cmd_dashboard)
 
     return parser
