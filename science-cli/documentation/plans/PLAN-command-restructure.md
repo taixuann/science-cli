@@ -4,14 +4,15 @@
 command-restructure
 
 ## Related Plans
-- [[PLAN-config-expansion]] — **blocks** — config expansion depends on new command structure (config subcommands reference new modes)
-- [[PLAN-extension-interface]] — **blocks** — extension interface depends on COMMAND_TREE changes
+- [[PLAN-config-expansion]] — **blocked** — config expansion depends on this; now unblocked
+- [[PLAN-extension-interface]] — **was blocked** — extension interface depends on COMMAND_TREE changes; now unblocked
 - [[PLAN-version-bump]] — **affects** — command restructuring justifies version bump to 2.0.0
+- [[PLAN-enhanced-dashboard]] — **supersedes** — Sprint 2 of enhanced dashboard further refined groups and removed aliases
 
 ## Status
 - **Created**: 2026-05-12
-- **Status**: draft
-- **Branch**: cleanup/architecture-guardrails
+- **Status**: superseded (fully implemented in Sprint 2 of PLAN-enhanced-dashboard)
+- **Branch**: mysci-tui_update
 
 ## Objective
 Restructure commands so `open`, `ls`, `add`, `close` support `-m project`, `-m protocol`, `-m step` modes. Remove `project` command entirely. Add 3-level state memory with auto-save on close and restore on open.

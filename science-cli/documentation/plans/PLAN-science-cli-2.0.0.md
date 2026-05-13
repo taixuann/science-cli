@@ -371,5 +371,50 @@ protocol/<name>/<step>/
 - [x] plot.py fzf: step/protocol display + raw_dir preview path ✅ (this commit)
 - [ ] Phase 6: Parquet support
 - [x] TEST passed: 16/16 guardrails ✅
-- [ ] DOCS updated
+- [x] DOCS updated ✅
 - [x] COMMIT done ✅
+
+## Post-2.0.0 Changes (Sprint 2 — mysci-tui_update)
+
+The following changes were made after the master plan was marked complete:
+
+### Command Restructure Refinements
+- Removed `project`, `extensions`, `memristor` from COMMAND_TREE entirely (no deprecation aliases)
+- Re-grouped commands: GROUP 1 (add/delete/edit/ls), GROUP 2 (open/close), GROUP 3 (plot/analyze/config/status/results), GROUP 4 (ext/techniques)
+- `ext` is now the ONLY way to access memristor/extension commands
+
+### TUI Enhancements
+- Added TechniquesBox widget next to ASCII art in banner (reads merged config)
+- Removed TuiHeader from compose
+- REPL prompt simplified to `sci>`
+
+### CLI Simplification
+- Removed all `--filter` CLI flags — `--fzf` is the only interactive selection method
+- `add -m data` already uses symlinks (verified)
+
+### Current Command Groups (post-Sprint 2)
+```
+GROUP 1: FILE MANAGEMENT
+  add                     Add project/protocol/metadata/data
+  delete                  Delete protocol/metadata
+  edit                    Edit protocol/metadata
+  ls                      List projects/protocols/steps/files
+
+GROUP 2: CONTEXT NAVIGATION
+  open                    Open project/protocol/step
+  close                   Close context with auto-save
+
+GROUP 3: DATA ANALYSIS
+  plot                    Plot data
+  analyze                 Analyze data
+  config                  Configure settings
+  status                  Show current context status
+  results                 List saved results
+
+GROUP 4: EXTENSIONS & TECHNIQUES
+  ext                     Unified extension interface
+  techniques              List available techniques
+
+ADDITIONAL
+  help, version, clear, history
+```

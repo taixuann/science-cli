@@ -4,13 +4,14 @@
 extension
 
 ## Related Plans
-- [[PLAN-command-restructure]] — **blocked-by** — depends on COMMAND_TREE changes and GROUP 4 definition
-- [[PLAN-version-bump]] — **affects** — extension interface contributes to version 2.0.0 justification
+- [[PLAN-command-restructure]] — **was blocked-by** — is now superseded by Sprint 2; GROUP 4 refined
+- [[PLAN-version-bump]] — **affects** — extension interface contributed to version 2.0.0
+- [[PLAN-enhanced-dashboard]] — **supersedes** — Sprint 2 removed extensions command and memristor alias
 
 ## Status
 - **Created**: 2026-05-12
-- **Status**: draft
-- **Branch**: cleanup/architecture-guardrails
+- **Status**: superseded (fully implemented; GROUP 4 further refined in Sprint 2)
+- **Branch**: mysci-tui_update
 
 ## Objective
 Create unified `ext <name> <subcommand>` interface for extension commands. Replace direct extension commands (like `memristor`) with central dispatch. Extensions register subcommands via `ExtensionRegistry`. Keep extensions as separate packages but expose through unified interface.
@@ -78,7 +79,7 @@ During transition, keep `memristor` as an alias that delegates to `ext memristor
 "memristor": {"handler": lambda args: ext_handler(["memristor"] + args), "desc": "Alias: ext memristor"},
 ```
 
-This will be removed after users migrate to `ext` interface.
+This was removed in Sprint 2. All users must use `ext memristor <subcommand>` now.
 
 ### Files to Modify
 
@@ -90,16 +91,15 @@ This will be removed after users migrate to `ext` interface.
 | `cli/help.py` | Modify | Add ext command help, list extension subcommands |
 | `cli/commands/memristor_cmd.py` | Modify | Wrap as alias to ext handler (temporary) |
 
-### Command Groups (GROUP 4)
+### Command Groups (GROUP 4 — updated in Sprint 2)
 
 ```
-GROUP 4: Extensions & Special
-  techniques                List techniques
-  extensions                List installed extensions + their subcommands
+GROUP 4: EXTENSIONS & TECHNIQUES
   ext <name> <subcommand>   Extension commands (unified interface)
-  memristor                 Alias: ext memristor (temporary, deprecated)
-  results                   List saved results
+  techniques                List available techniques
 ```
+
+Note: `extensions` and `memristor` were removed as top-level commands in Sprint 2. Use `ext list` to list extensions, `ext memristor` to run memristor commands.
 
 ### Extension Discovery
 

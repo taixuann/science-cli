@@ -5,6 +5,9 @@ feature
 
 ## Related Plans
 - [[PLAN-plotly-dashboard]] — supersedes — the Plotly dashboard was Phase 1; this PLAN enhances it
+- [[PLAN-science-cli-2.0.0]] — affects — Sprint 2 command restructuring updates the master plan groups
+- [[PLAN-command-restructure]] — supersedes — command restructure is now fully implemented and superseded by Sprint 2
+- [[PLAN-extension-interface]] — affects — GROUP 4 changed (removed extensions/memristor commands)
 
 ## Status
 - **Created**: 2026-05-13
@@ -198,6 +201,7 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
   - Item 3: config unification (deferred)
   - Item 6: devices.yaml routing (see Sprint 3)
   - Item 7: distribution (keep simple — pip install)
+  - Item 8 (plot command save path): Already implemented — `_get_results_dir()` in `plot.py:58` saves to `protocol/<name>/<step>/results/` when session context is active.
 
 ## Sprint 3: Cross-Protocol Dashboard
 
@@ -207,8 +211,14 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - Single main dashboard at `project/results/dashboard.html`
 - Scans all protocols' `devices.yaml` files
 - Material-based filtering for analysis (only analyze files matching selected materials via `extract_material_batch()`)
-- Heatmap rendered from each protocol's `devices.yaml` matrix definition (rows, cols, row_labels, col_labels)
+- Heatmap rendered from each protocol's `devices.yaml` matrix definition (rows, cols, row_labels, col_labels). Different matrix sizes per-protocol are rendered as stacked per-protocol heatmaps, not one unified grid.
 - Saves intermediate `project/results/analysis_data.json` with per-file extracted parameters for fast loading
+
+**devices.yaml role (from discussion):**
+- **devices.yaml = matrix MAP**: defines grid structure (rows, cols, labels), which cells exist and are measured, technique-to-step mapping (steps.iv, steps.endurance, etc.), and sweep metadata populated by `sync`
+- **Filename parsing = auto-discovery**: filenames follow `DDMMYY_material_type_matrix_suffix` pattern (e.g., `0605_Ta-PDA-ITO_r0c0_iv_set.csv`). Parsing extracts material, sweep type, matrix position automatically. `extract_material_batch()` already handles material extraction. The `sync` command populates sweep direction/rate metadata into devices.yaml by reading raw CSV files.
+- **Analysis results (Vset, Vreset, ratio) = computed on the fly**: NOT stored in devices.yaml. Computed during dashboard generation, cached in `analysis_data.json`. Dashboard shows raw IV data with overlaid markers so user can visually verify extracted values.
+- **Source truth**: raw CSV files in the step directory. Never modified. All derived data is in `results/` directory.
 
 **Analysis data structure (analysis_data.json):**
 ```json
@@ -242,6 +252,12 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - Analysis data file writer (JSON) saved to `project/results/`
 - Updated Plotly dashboard HTML consuming aggregated JSON data
 
+**JSON cache invalidation:**
+- Store file modification timestamps in `analysis_data.json` alongside extracted parameters
+- On dashboard regenerate: compare mtimes — only re-analyze changed/new files
+- `--force` flag forces full re-analysis
+- If `analysis_data.json` doesn't exist, analyze all files
+
 **Known limitations from earlier sprints:**
 - iv_reset files produce inverted ON/OFF ratios (WONTFIX — data organization issue)
 - analyze_all_devices' per_device dict overwrites on each file (only stores last file's params per device)
@@ -256,27 +272,33 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - **Risk**: MEDIUM. Re-analyzing all IV files on every dashboard regeneration could be slow for 1000+ files (each file requires full IV curve parsing + derivative computation).
 - **Mitigation**: JSON intermediate file enables incremental updates — only re-analyze files whose modification time has changed. Add `--force` flag to force full re-analysis.
 
-### 3. Missing Features
-- **Risk**: LOW. Current spec covers histograms, heatmap, KPI cards, IV overlay. Consider adding:
-  - Per-protocol filter (dropdown to select which protocols to include)
-  - Time-series view (Vset drift over measurement date)
-  - Export filtered data as CSV
-- **Mitigation**: These can be added incrementally; not blockers for v1.
+### 3. devices.yaml Role Ambiguity (from discussion)
+- **Risk**: MEDIUM. The user's filenames follow `DDMMYY_material_type_matrix_suffix` pattern which encodes material, sweep type, and matrix position. devices.yaml should serve as the **matrix map** (defines row/col grid, which cells exist and are measured) while filename **parsing fills in details** (material, type). Analysis results (Vset/Vreset/ratio) should be **computed on the fly during dashboard generation** and cached in analysis_data.json — NOT stored in devices.yaml. Sweep direction/rate metadata goes in devices.yaml via `ext memristor sync`.
+- **Mitigation**: Document the separation clearly: devices.yaml = structure + sweep metadata, JSON = analysis results, raw CSVs = source truth.
 
-### 4. Backward Compatibility
-- **Risk**: LOW. Existing per-protocol dashboard at `protocol/<name>/<step>/results/dashboard.html` remains unchanged. The new `--all` flag is additive. The `_get_results_dir()` logic in dashboard command ensures per-protocol dashboards still work when `--all` is not specified.
+### 4. JSON Cache Invalidation Strategy
+- **Risk**: MEDIUM. analysis_data.json becomes stale when new data files are added or existing ones modified. Need a clear invalidation strategy.
+- **Mitigation**: Store file modification timestamps in JSON. On dashboard regenerate, compare timestamps — only re-analyze changed files. Add `--force` flag for full re-analysis.
 
-### 5. Device YAML Coverage
-- **Risk**: MEDIUM. The cross-protocol collector needs to know where all protocol dirs are. Currently each protocol has its own `devices.yaml`. The collector must iterate `<project>/protocol/*/devices.yaml`.
-- **Mitigation**: Use `Path(proj / "protocol").glob("*/devices.yaml")` to discover all protocols. Handle missing/empty devices.yaml gracefully.
+### 5. Cross-Protocol Matrix Heterogeneity
+- **Risk**: MEDIUM-HIGH. Different protocols may use different matrix sizes (4x4, 6x6), different row/col labels, and different materials. A single heatmap can't overlay them directly.
+- **Mitigation**: Render per-protocol heatmaps stacked vertically with protocol header separators, not one unified grid. Protocol selector filter determines which are visible.
 
-### 6. User Workflow
-- **Risk**: LOW. Suggested command sequence:
-  1. `sci add -m protocol -n <name>` or use existing protocols
-  2. `ext memristor init --rows N --cols N` (per protocol)
-  3. `ext memristor sync` (per protocol, populates sweep metadata)
-  4. `sci dashboard --all` (generates project-level dashboard)
-- **Mitigation**: The `--all` flag should auto-discover protocols without requiring explicit registration.
+### 6. Cross-Plan References Outdated
+- **Risk**: HIGH. PLAN-science-cli-2.0.0 still references `memristor` alias (removed in Sprint 2), old GROUP 4 with `extensions` command, and incomplete progress. PLAN-command-restructure and PLAN-extension-interface also reference old groups.
+- **Mitigation**: Update PLAN-science-cli-2.0.0 to reflect Sprint 2 changes. Mark PLAN-command-restructure as superseded/complete.
+
+### 7. `project` Handler Orphan File
+- **Risk**: LOW. `src/science_cli/cli/commands/project.py` still exists on disk but is no longer imported in COMMAND_TREE. Not harmful but misleading.
+- **Mitigation**: Either delete it or add a deprecation warning.
+
+### 8. `plot` Command Save Path Verification
+- **Risk**: LOW. `_get_results_dir()` in `plot.py:58` already checks session context for protocol/step and saves to `protocol/<name>/<step>/results/` when context is active. Falls back to `project/results/` otherwise. Already satisfies Item 8.
+- **Mitigation**: Document this behavior in help text so users know to `open -m protocol` + `open -m step` before plotting.
+
+### 9. Filename Pattern Auto-Parsing (DDMMYY_material_type_matrix_suffix)
+- **Risk**: LOW. The `extract_material_batch()` function in `plotting.py` already parses material from filenames. But the row/col auto-detection from the `_rNcN_` or `_b#-t#_` patterns is only partially implemented in `device.py`'s `_parse_canonical_filename()`.
+- **Mitigation**: Extend filename parsing to auto-populate row/col during `sync` so manual `devices.yaml` entry requires minimal config.
 
 ## Files to Modify
 
@@ -337,12 +359,19 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 
 ### Sprint 3: Cross-Protocol Dashboard (Pending)
 - [ ] DESIGN: Full architecture review (gaps analysis above)
-- [ ] IMPLEMENT: Cross-protocol data collector (scan all devices.yaml)
-- [ ] IMPLEMENT: Analysis data file writer (JSON)
-- [ ] IMPLEMENT: Dashboard `--all` flag and routing
+- [ ] Cross-plan updates: PLAN-sci-2.0.0, PLAN-command-restructure, PLAN-extension-interface
+- [ ] IMPLEMENT: Cross-protocol data collector (scan all protocols' devices.yaml)
+- [ ] IMPLEMENT: JSON cache writer with mtime tracking + `--force` flag
+- [ ] IMPLEMENT: Dashboard `--all` flag and routing in device_cli.py
+- [ ] IMPLEMENT: devices.yaml → protocol/step mapping for CSV path resolution
+- [ ] IMPLEMENT: Per-protocol stacked heatmaps (handles different matrix sizes)
+- [ ] IMPLEMENT: Protocol selector filter dropdown
 - [ ] IMPLEMENT: Material filter in dashboard UI
-- [ ] IMPLEMENT: Toggleable Vset/Vreset markers on IV overlay
-- [ ] IMPLEMENT: Matrix heatmap from devices.yaml grid definition
+- [ ] IMPLEMENT: Toggleable Vset/Vreset markers + read-point dots on IV overlay
+- [ ] IMPLEMENT: Filename pattern auto-parsing for row/col (DDMMYY_material_type_matrix_suffix)
+- [ ] TEST: res_internship protocol 4 step iv data with real filename pattern
 - [ ] TEST: Project with multiple protocols and 100+ files
+- [ ] TEST: JSON cache invalidation (modify file, regenerate, verify updated values)
 - [ ] TEST: Backward compatibility (per-protocol dashboard still works)
+- [ ] Delete orphan files (project.py handler if confirmed)
 - [ ] COMMIT to `mysci-tui_update` branch
