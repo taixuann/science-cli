@@ -9,7 +9,7 @@ feature
 ## Status
 - **Created**: 2026-05-13
 - **Status**: draft
-- **Branch**: `mysci-tui_mem-advanced`
+- **Branch**: `mysci-tui_update`
 
 ## Objective
 Replace `dashboard.py` with the dark-themed interactive Plotly dashboard design from `documentation/memristor_dashboard_layout.html`, wired to real IV data from `devices.yaml`. Add Keithley 2400 / LabVIEW Measurement (.lvm) data format support, Vset/Vreset extraction (both abrupt and gradual switching detection), user-configurable V_read parameter, and ON/OFF ratio computation for the dashboard.
