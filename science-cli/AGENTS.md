@@ -477,8 +477,8 @@ from science_cli.core.config import (
 
 | Gap | Impact | Priority | PLAN | Status |
 |-----|--------|----------|------|--------|
-| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | PLAN-2 | PLAN created, not executed |
-| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | PLAN-2 | PLAN created, not executed |
+| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | PLAN-2 | **COMPLETED** |
+| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | PLAN-2 | **COMPLETED** |
 
 #### Extension Gaps
 
@@ -507,12 +507,12 @@ from science_cli.core.config import (
 | PLAN | Classification | Status | Blocks | Blocked By |
 |------|----------------|--------|--------|------------|
 | PLAN-1: Command Restructuring | command-restructure | **Superseded** — Sprint 2 implemented most changes | PLAN-2, PLAN-3 | — |
-| PLAN-2: Config Expansion | config | **Created** | — | PLAN-1 |
+| PLAN-2: Config Expansion | config | **Completed** — technique configs, `config set technique`, `config edit` | — | PLAN-1 |
 | PLAN-3: Extension Interface | extension | **Superseded** — `ext` command implemented | — | PLAN-1 |
-| PLAN-4: Version Bump to 2.0.0 | cleanup | **Created** | — | PLAN-1, PLAN-2, PLAN-3 |
-| PLAN-enhanced-dashboard: Sprint 3 | feature | **Completed** | — | — |
+| PLAN-4: Version Bump to 2.0.0 | cleanup | **Completed** — v2.0.0, CHANGELOG.md created | — | PLAN-1, PLAN-2, PLAN-3 |
+| PLAN-enhanced-dashboard: Sprint 3 | feature | **Completed** — cross-protocol dashboard | — | — |
 
-**Execution order**: PLAN-1 → PLAN-2 + PLAN-3 (parallel) → PLAN-4
+**Execution order**: All original PLANs (1-4) are now completed or superseded.
 
 **When creating a new PLAN, check if it relates to any of these pending items.**
 

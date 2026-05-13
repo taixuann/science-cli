@@ -9,11 +9,19 @@ config
 
 ## Status
 - **Created**: 2026-05-12
-- **Status**: draft
-- **Branch**: cleanup/architecture-guardrails
+- **Status**: **completed**
+- **Branch**: `mysci-tui_update`
 
 ## Objective
 Expand `config` command to handle technique-specific configs (patterns, devices, delimiters, headers) stored as per-technique YAML files. Add `config set technique`, `config edit` subcommands. Integrate with existing 3-tier config system.
+
+## Implementation Summary
+- `core/paths.py`: Added `get_techniques_config_dir()` function for resolving `~/.config/science-cli/techniques/`
+- `core/config.py`: Added technique config loading from `~/.config/science-cli/techniques/*.yaml`, per-project devices.yaml override, `write_technique_config()`, `list_technique_names()`, `list_technique_devices()`
+- `cli/commands/config.py`: Added `config set technique`, `config edit`, `config list techniques`, `config list devices` subcommands
+
+## Results
+All items implemented and committed on `mysci-tui_update` branch. 58/58 tests passing (GREEN).
 
 ## Context
 The current config system (`core/config.py`) supports 3-tier merging (hardcoded ← global ← project) but only handles themes and device configs inline. Users need to configure technique-specific settings: filename patterns, default devices, delimiters, decimal separators, header lines, column mappings. These should be stored as per-technique YAML files for easy editing.
@@ -124,9 +132,9 @@ config list devices <technique>        # List devices for a technique
 8. Verify backward compatibility (no config = same behavior as today)
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT done
-- [ ] TEST passed
-- [ ] DOCS updated
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT done
+- [x] TEST passed
+- [x] DOCS updated
+- [x] COMMIT done

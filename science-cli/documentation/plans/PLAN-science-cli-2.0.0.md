@@ -422,3 +422,6 @@ ADDITIONAL
 ## Cross-PLAN Update (2026-05-13)
 - **Sprint 2 Complete**: Help menu restructured (4 groups), `project`/`extensions`/`memristor` top-level commands removed, `ext` command implemented. PLAN-command-restructure and PLAN-extension-interface marked superseded.
 - **Sprint 3 Complete**: Cross-protocol dashboard implemented (`dashboard --all`, stacked heatmaps, material filter, `analysis_data.json` cache). See [[PLAN-enhanced-dashboard]] for details.
+- **PLAN-2 (Config Expansion)**: Completed — technique config files in `~/.config/science-cli/techniques/*.yaml`, `config set technique`, `config edit`, `config list techniques`, `config list devices` subcommands.
+- **PLAN-4 (Version Bump)**: Completed — version 2.0.0 already set, CHANGELOG.md created.
+- **Phase 6 (Parquet)**: Completed — `core/parquet_store.py` with `write_features()`, `read_features()`, `append_features()`, `list_feature_files()`, `feature_metadata()`.

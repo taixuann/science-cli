@@ -10,11 +10,19 @@ cleanup
 
 ## Status
 - **Created**: 2026-05-12
-- **Status**: draft
-- **Branch**: cleanup/architecture-guardrails
+- **Status**: **completed**
+- **Branch**: `mysci-tui_update`
 
 ## Objective
-Bump version from 7.0.0 to 2.0.0 to reflect major command restructuring, config expansion, and extension interface changes. This is a breaking change release — old command patterns (`project list`, `project open`, etc.) will no longer work.
+Bump version from 7.0.0 to 2.0.0 to reflect major command restructuring, config expansion, and extension interface changes. Create CHANGELOG.md documenting breaking changes.
+
+## Implementation Summary
+- Version already at 2.0.0 in both `__init__.py` and `pyproject.toml`
+- `CHANGELOG.md` created at project root with Keep a Changelog format
+- Migration guide considered — documented in breaking changes section
+
+## Results
+All items implemented and committed on `mysci-tui_update` branch. 58/58 tests passing (GREEN).
 
 ## Context
 Current version is 7.0.0 but the command structure is being fundamentally restructured:
@@ -108,9 +116,9 @@ This warrants a major version bump. Resetting to 2.0.0 (not 8.0.0) because the p
 5. Verify pyproject.toml version matches `__init__.py`
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT done
-- [ ] TEST passed
-- [ ] DOCS updated
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT done
+- [x] TEST passed
+- [x] DOCS updated
+- [x] COMMIT done

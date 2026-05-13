@@ -1,8 +1,12 @@
-# QA Test Report — Sprint 3: Cross-Protocol Dashboard
+# QA Test Report — PLAN-2 Config Expansion + Phase 6 Parquet
 
 **Date:** 2026-05-13  
 **Branch:** `mysci-tui_update`  
-**Test Suite:** Cross-Protocol Dashboard (Sprint 3)  
+**Commits under test:**
+- `64def42` — feat(config): implement PLAN-2 config expansion
+- `8708b9a` — feat(core): implement Phase 6 — parquet storage for processed data
+- `247c0a3` — feat(docs): create CHANGELOG.md for 2.0.0 release
+
 **Tester:** qa-tester agent
 
 ---
@@ -11,127 +15,174 @@
 
 | Phase | Status |
 |-------|--------|
-| 1. Import Check | ✅ PASS |
-| 2. Guardrail Tests (16/16) | ✅ PASS |
-| 3. Smoke Test — Empty Project | ✅ PASS |
-| 4. CLI Flags Smoke Test | ✅ PASS |
-| 5. Integration Test — Mini Project | ✅ PASS |
-| 6. Compile Check | ✅ PASS |
-| — HTML Structure & Content | ✅ PASS |
-| — Edge Cases | ✅ PASS |
+| 1. Smoke Tests (4/4) | ✅ PASS |
+| 2. Functional Tests — Technique Config (5/5) | ✅ PASS |
+| 3. Functional Tests — Parquet Store (5/5) | ✅ PASS |
+| 4. Guardrail Tests (16/16) | ✅ PASS |
+| 5. CLI Command Dispatching (5/5) | ✅ PASS |
+| 6. Edge Case Tests — Parquet (4/4) | ✅ PASS |
+| 7. Edge Case Tests — Config Subcommands (5/5) | ✅ PASS |
+| 8. Edge Case Tests — Technique Config Logic (5/5) | ✅ PASS |
+| 9. CHANGELOG Validation | ✅ PASS |
 | **TRAFFIC LIGHT** | **🟢 GREEN** |
 
 ---
 
-## 1. Import Check
+## 1. Smoke Tests (Import Verification)
 
+### Test 1.1: Config expansion imports
 ```python
-from science_cli.memristor.dashboard import (
-    generate_dashboard,
-    generate_cross_protocol_dashboard,
-    collect_cross_protocol_data,
-    _build_cross_protocol_html,
-)
+from science_cli.core.config import list_technique_names, list_technique_devices, write_technique_config, load_technique_configs
 ```
-**Result:** ✅ All imports OK
+**Result:** ✅ PASS — All imports resolve without error
 
-## 2. Guardrail Tests
+### Test 1.2: Parquet store imports
+```python
+from science_cli.core.parquet_store import write_features, read_features, append_features, list_feature_files, feature_metadata
+```
+**Result:** ✅ PASS — All imports resolve without error
+
+### Test 1.3: CLI config command imports
+```python
+from science_cli.cli.commands.config import _cmd_set_technique, _cmd_edit_technique, _cmd_list_techniques, _cmd_list_devices
+```
+**Result:** ✅ PASS — All imports resolve without error
+
+### Test 1.4: Techniques config directory path
+```python
+from science_cli.core.paths import get_techniques_config_dir
+# Returns: /Users/tai/.config/science-cli/techniques
+```
+**Result:** ✅ PASS — Path resolves to correct user config directory
+
+---
+
+## 2. Functional Tests — Technique Config
+
+| # | Test | Expected | Actual | Status |
+|---|------|----------|--------|--------|
+| 2.1 | `write_technique_config('test-tech', data)` | Writes YAML file, returns Path | Written to `~/.config/science-cli/techniques/test-tech.yaml` | ✅ PASS |
+| 2.2 | `load_technique_configs()` returns written config | `test-tech` in keys | `test-tech` found with matching data | ✅ PASS |
+| 2.3 | `list_technique_names()` includes new technique | 12 total names | 12 names including `test-tech` | ✅ PASS |
+| 2.4 | `list_technique_devices('test-tech')` returns devices | `['test-device']` | `['test-device']` | ✅ PASS |
+| 2.5 | Cleanup + cache invalidation | Config removed, cache cleared | `test-tech` gone after `invalidate_cache()` + rmtree | ✅ PASS |
+
+**Result:** ✅ 5/5 PASS
+
+---
+
+## 3. Functional Tests — Parquet Store
+
+| # | Test | Expected | Actual | Status |
+|---|------|----------|--------|--------|
+| 3.1 | `write_features(df, tmp)` | Writes .parquet, returns Path | `features.parquet` (2350 bytes) | ✅ PASS |
+| 3.2 | `read_features(tmp)` | Returns 3-row DataFrame | 3 rows, 3 columns | ✅ PASS |
+| 3.3 | `append_features(df3, tmp)` | Appends 1 row, total 4 | 4 rows after append | ✅ PASS |
+| 3.4 | `list_feature_files(tmp)` | Lists .parquet files | `[features.parquet]` | ✅ PASS |
+| 3.5 | `feature_metadata(path)` | Returns metadata dict | `num_rows: 4, num_columns: 3, columns: [...], file_size_bytes: 2367` | ✅ PASS |
+
+**Result:** ✅ 5/5 PASS
+
+---
+
+## 4. Guardrail Tests
 
 All 16 architecture guardrail tests pass:
-- Deleted files confirmed removed (`image.py`, `general.py`, `functions/`)
-- Clean imports (`__init__.py`, `app.py`)
-- COMMAND_TREE has 13 commands
-- Config accessors, backward compat, YAML generation
-- Technique detection (8 test cases)
-- Extension registry with 3 techniques
-- All 12 modified files compile cleanly
-- All 4 documentation files exist
+
+| # | Test | Status |
+|---|------|--------|
+| 4.1 | `image.py` deleted | ✅ PASS |
+| 4.2 | `general.py` deleted | ✅ PASS |
+| 4.3 | `functions/` deleted | ✅ PASS |
+| 4.4 | `__init__.py` cleaned of dead imports | ✅ PASS |
+| 4.5 | `app.py` cleaned of GENERAL_COMMANDS import | ✅ PASS |
+| 4.6 | COMMAND_TREE has 13 commands | ✅ PASS |
+| 4.7 | All config accessors import | ✅ PASS |
+| 4.8 | Config backward compat without config file | ✅ PASS |
+| 4.9 | `generate_default_config_yaml()` produces valid YAML | ✅ PASS |
+| 4.10 | Config with sample project file | ✅ PASS |
+| 4.11 | Technique detection (8 test cases) | ✅ PASS |
+| 4.12 | `load_data_file` has technique and device params | ✅ PASS |
+| 4.13 | `_get_projects_root` returns Path | ✅ PASS |
+| 4.14 | `discover_extensions` returns ExtensionRegistry (3 techniques) | ✅ PASS |
+| 4.15 | All 12 modified files compile cleanly | ✅ PASS |
+| 4.16 | All 4 documentation files exist and have content | ✅ PASS |
 
 **Result:** ✅ 16/16 PASS
 
-## 3. Smoke Test — Empty Project
+---
 
-| Test | Result |
-|------|--------|
-| `collect_cross_protocol_data()` on empty project | Returns 0 protocols (no crash) |
-| `generate_cross_protocol_dashboard()` on empty project | Raises `ValueError` with helpful message |
-| Cache JSON written with 0 protocols | ✅ Written correctly |
+## 5. CLI Command Dispatching
 
-**Result:** ✅ PASS
+| # | Test | Result |
+|---|------|--------|
+| 5.1 | `config_handler(['set', 'technique', 'iv-sweep', 'keithley-2400'])` | ✅ Dispatches to `_cmd_set_technique`, writes technique config, prints confirmation |
+| 5.2 | `config_handler(['list'])` | ✅ Dispatches to `_cmd_list_techniques`, renders Rich table |
+| 5.3 | `config_handler(['list', 'devices'])` (no technique) | ✅ Prints usage message, no crash |
+| 5.4 | `config_handler(['set'])` (no args) | ✅ Prints usage message, no crash |
+| 5.5 | `config_handler(['edit'])` (no technique) | ✅ Prints usage message, no crash |
+| 5.6 | `config_handler(['unknown-sub'])` | ✅ Prints error + help, no crash |
 
-## 4. CLI Flags Smoke Test
+**Result:** ✅ 6/6 PASS
 
-| Flag | Present |
-|------|---------|
-| `--all` | ✅ |
-| `--force` | ✅ |
+---
 
-Dashboard CLI `--help` renders correctly:
-```
-usage: device_cli.py dashboard [-h] [--step-dir STEP_DIR] [--output OUTPUT]
-                               [--open] [--all] [--force]
-```
+## 6. Edge Case Tests — Parquet Store
 
-**Result:** ✅ PASS
+| # | Test | Expected | Actual | Status |
+|---|------|----------|--------|--------|
+| 6.1 | `write_features(pd.DataFrame(), tmp)` | Raises `ValueError` | `ValueError: Cannot write empty DataFrame to parquet` | ✅ PASS |
+| 6.2 | `read_features('/nonexistent')` | Returns `None` | `None` | ✅ PASS |
+| 6.3 | `feature_metadata('/nonexistent.parquet')` | Returns `None` | `None` | ✅ PASS |
+| 6.4 | `append_features()` with duplicate rows | Deduplicates | 3 rows kept out of 6 (3 original + 3 duplicate) | ✅ PASS |
 
-## 5. Integration Test — Mini Project (2 Protocols)
+**Result:** ✅ 4/4 PASS
 
-### Data Collection
-| Metric | Expected | Actual | Status |
-|--------|----------|--------|--------|
-| Protocols detected | 2 | 2 | ✅ |
-| PDA-1 devices | 2 | 2 | ✅ |
-| PDA-2 devices | 1 | 1 | ✅ |
-| Total files | 3 | 3 | ✅ |
-| Median Vset | ~0.8–1.2 V | 0.869 V | ✅ |
+---
 
-### Cache Behavior
-- Cache file written: ✅
-- Cache reuse (no re-analysis): ✅
-- Force re-analysis: ✅
+## 7. Edge Case Tests — Config Subcommands
 
-### HTML Generation Checks
+| # | Test | Result |
+|---|------|--------|
+| 7.1 | `config list` — renders techniques table | ✅ Rich table with 11 techniques displayed |
+| 7.2 | `config list devices <technique>` — no technique given | ✅ Friendly usage error |
+| 7.3 | `config set` — no subcommand | ✅ Friendly usage error |
+| 7.4 | `config edit` — no technique | ✅ Friendly usage error |
+| 7.5 | `config unknown-sub` — unknown subcommand | ✅ Error message + help displayed |
+
+**Result:** ✅ 5/5 PASS
+
+---
+
+## 8. Edge Case Tests — Technique Config Logic
+
+| # | Test | Expected | Actual | Status |
+|---|------|----------|--------|--------|
+| 8.1 | `list_technique_devices('iv-sweep')` | Contains `keithley-2400` | `['keithley-2400']` | ✅ PASS |
+| 8.2 | `list_technique_devices('nonexistent-tech')` | Empty list | `[]` | ✅ PASS |
+| 8.3 | `list_technique_names()` includes hardcoded defaults | `iv-sweep`, `ec-cv`, `mem-endurance` present | All present (11 total) | ✅ PASS |
+| 8.4 | `get_merged_config()` includes techniques section | `'techniques'` in merged | `'techniques'` key present | ✅ PASS |
+| 8.5 | Technique config 4th layer integration | Technique configs override global but are overridden by project config | Verified via merge chain | ✅ PASS |
+
+**Result:** ✅ 5/5 PASS
+
+---
+
+## 9. CHANGELOG Validation
+
 | Check | Status |
 |-------|--------|
-| Plotly CDN included | ✅ PASS |
-| KPI cards present (`kpi-card` class) | ✅ PASS |
-| Protocol selector (`<select>` element) | ✅ PASS |
-| Material filter text | ✅ PASS |
-| Toggle switches | ✅ PASS |
-| Heatmap references | ✅ PASS |
-| CSS dark theme (`--bg-deep`) | ✅ PASS |
-| JavaScript (`_CROSS_PROTOCOL_JS` / functions) | ✅ PASS |
+| File exists (4596 bytes) | ✅ PASS |
+| `## [2.0.0] - 2026-05-13` header present | ✅ PASS |
+| `### Breaking Changes` section | ✅ PASS |
+| `### Added` section | ✅ PASS |
+| `### Changed` section | ✅ PASS |
+| `### Removed` section | ✅ PASS |
+| `### Fixed` section | ✅ PASS |
+| `### Security` section | ✅ PASS |
+| `### Planned` (Unreleased) section | ✅ PASS |
 
-### HTML Structural Checks
-| Check | Status |
-|-------|--------|
-| DOCTYPE declaration | ✅ PASS |
-| HTML tag | ✅ PASS |
-| Head / Body sections | ✅ PASS |
-| Protocol dropdown | ✅ PASS |
-| Heatmap div / Plotly reference | ✅ PASS |
-| No stack traces in output | ✅ PASS |
-| Balanced `<div>` tags | ✅ PASS |
-
-**Result:** ✅ PASS
-
-## 6. Compile Check
-
-| File | Status |
-|------|--------|
-| `src/science_cli/memristor/dashboard.py` | ✅ OK |
-| `src/science_cli/memristor/device_cli.py` | ✅ OK |
-| `src/science_cli/cli/commands/memristor_cmd.py` | ✅ OK |
-
-## 7. Additional Verifications
-
-| Check | Result |
-|-------|--------|
-| `_CROSS_PROTOCOL_JS` exists (20835 chars) | ✅ Contains heatmap draw/update functions |
-| Empty protocol subdirectory | ✅ 0 protocols, no crash |
-| `devices.yaml` with empty `points` list | ✅ 0 devices, no crash |
-| Missing `results/` directory | ✅ Auto-created, no crash |
-| Bad YAML in `devices.yaml` | ⚠️ Unhandled `yaml.ParserError` with stack trace (minor — pre-existing behavior, not a Sprint 3 regression) |
+**Result:** ✅ PASS — Valid Keep a Changelog format
 
 ---
 
@@ -141,24 +192,48 @@ usage: device_cli.py dashboard [-h] [--step-dir STEP_DIR] [--output OUTPUT]
 |----------|-------|---------|
 | 🔴 Critical | 0 | — |
 | 🟠 Major | 0 | — |
-| 🟡 Minor | 1 | Bad YAML in `devices.yaml` produces full stack trace from `yaml.ParserError`. The `collect_cross_protocol_data()` function delegates to `read_devices()` which does not catch YAML parse errors. This is pre-existing behavior shared with `generate_dashboard()`. Consider wrapping in a future cleanup sprint. |
-| 🔵 Suggestion | 0 | — |
+| 🟡 Minor | 0 | — |
+| 🔵 Suggestion | 1 | The `config set technique` handler writes technique configs with `default_device` placed under the technique root rather than in a `defaults:` subsection. While functional, future schema consistency could place default devices under a dedicated `defaults:` key at the config root. Non-blocking. |
+
+---
+
+## Detailed Observations
+
+### Technique config merge chain (4th layer)
+The `get_merged_config()` function now correctly merges 4 layers:
+1. Hardcoded defaults (`_DEFAULT_TECHNIQUE_PATTERNS`, `_DEFAULT_TECHNIQUE_DEVICES`)
+2. Global config (`~/.config/science-cli/config.yaml`)
+3. **NEW:** Technique configs (`~/.config/science-cli/techniques/*.yaml`)
+4. Per-project config (`<project_root>/sci-config.yaml`)
+
+Verified that technique configs are injected before project config, ensuring project-level overrides take highest priority.
+
+### Per-project devices.yaml override
+The `get_device_config()` function checks `project_root / "devices.yaml"` for per-project device overrides. Verified the merge logic uses `_merge_dicts()` for deep merging.
+
+### Parquet store robustness
+All edge cases handled:
+- Empty DataFrame → `ValueError` with clear message
+- Missing file → `None` returned gracefully
+- Append with duplicates → `drop_duplicates()` removes redundant rows
+- Metadata returns typed column info including numpy dtypes
+
+### CLI subcommand error handling
+All subcommands provide helpful usage messages on incorrect invocation. No stack traces are exposed to the user.
 
 ---
 
 ## Conclusion
 
-All functional tests pass across all categories:
+All tests pass across all categories:
 
-- **Import integrity:** ✅ No broken module references
+- **Import integrity:** ✅ All new modules resolve cleanly
+- **Technique config CRUD:** ✅ Write, read, list, query, cleanup all work correctly
+- **Parquet round-trip:** ✅ Write, read, append, list, metadata all work correctly with proper edge case handling
 - **Guardrails:** ✅ 16/16 architecture constraints satisfied
-- **Happy path:** ✅ Full pipeline from protocol scan → data collection → cache → HTML generation works with 2 protocols, 3 IV files
-- **Edge cases:** ✅ Empty projects, missing directories, empty YAML points all handled gracefully
-- **CLI integration:** ✅ `--all` and `--force` flags registered and displayed in help
-- **HTML quality:** ✅ Valid document structure with Plotly, KPIs, heatmaps, dark theme, and interactive controls
-- **Compilation:** ✅ No syntax errors in any modified file
-
----
+- **CLI integration:** ✅ All 3 new subcommands (`config set technique`, `config edit`, `config list techniques/devices`) dispatch correctly with proper error handling
+- **Config merge chain:** ✅ 4-layer merge (hardcoded ← global ← technique configs ← project config) verified
+- **CHANGELOG:** ✅ Valid Keep a Changelog format with all required sections
 
 ```
 TRAFFIC LIGHT: GREEN

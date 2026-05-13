@@ -16,6 +16,7 @@
 | `fzf_utils.py` | fzf integration for file selection | No |
 | `legacy.py` | Backward-compatibility shims | No |
 | `manifest.py` | Manifest management | No |
+| `parquet_store.py` | Parquet storage for processed analysis data (write/read/append features) | No |
 
 **Core modules must never import from `cli/` or `plot/`.** They are the
 foundation layer — CLI and plot depend on core, not the reverse.
@@ -44,8 +45,10 @@ Session file: `~/.config/science-cli/session.json`
 ```
 Hardcoded defaults (core/config.py::_DEFAULT_*)
        ↓ overwritten by
+Technique configs (~/.config/science-cli/techniques/<technique>.yaml)
+       ↓ overwritten by
 Global config (~/.config/science-cli/config.yaml)
-       ↓ overwritten by  
+       ↓ overwritten by
 Per-project config (<project_root>/sci-config.yaml)
        ↓
 Merged config (get_merged_config())
@@ -64,6 +67,9 @@ from science_cli.core.config import (
     get_header_marker,       # → header marker string
     get_merged_config,       # → full merged dict (for debugging)
     invalidate_cache,        # → clear all caches
+    write_technique_config,  # → write technique YAML
+    list_technique_names,    # → list configured techniques
+    list_technique_devices,  # → list devices for a technique
 )
 ```
 
