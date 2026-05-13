@@ -323,15 +323,54 @@ def _plot_interactive() -> None:
         return
 
     from science_cli.core.fzf_utils import fzf_select
-    items = [f.name for f in files]
-    selected = fzf_select(items, prompt="Select file(s) (Tab to multi-select):", multi=True)
+    import re
+
+    item_names = [f.name for f in files]
+
+    # Build file-to-step mapping from all protocols
+    from science_cli.core.paths import ProjectPaths
+    paths = ProjectPaths(proj)
+    file_step_map: dict[str, tuple[str, str]] = {}
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        with open(py) as f:
+            proto_data = __import__("yaml").safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                file_step_map[fname] = (pname, s["name"])
+
+    # Build display items with step/protocol info
+    marker_re = re.compile(r"\s+→ .*$")
+    display_items = []
+    for name in item_names:
+        if name in file_step_map:
+            proto, step = file_step_map[name]
+            display_items.append(f"{name} → {proto}/{step}")
+        else:
+            display_items.append(name)
+
+    selected = fzf_select(
+        items=display_items,
+        prompt="Select file(s) (Tab to multi-select):",
+        multi=True,
+        preview=f"head -n 20 {raw_dir}/$(echo {{}} | cut -d' ' -f1)",
+        preview_window="right:50%:border-sharp",
+    )
     if not selected:
         return
+
+    # Strip step info to get clean filenames
+    selected = [marker_re.sub("", s) for s in selected]
 
     # Show selected files summary
     rprint(f"\n[bold]Selected {len(selected)} file(s):[/bold]")
     for f in selected:
-        rprint(f"  [dim]• {f}[/dim]")
+        step_info = ""
+        if f in file_step_map:
+            proto, step = file_step_map[f]
+            step_info = f"  [dim]→ {proto}/{step}[/dim]"
+        rprint(f"  [dim]• {f}[/dim]{step_info}")
     rprint("")
 
     # Auto-detect technique from open protocol

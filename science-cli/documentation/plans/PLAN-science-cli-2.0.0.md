@@ -356,16 +356,20 @@ protocol/<name>/<step>/
 
 ## Progress
 
-- [ ] PLAN created
-- [ ] User approved
-- [ ] Phase 1: Version bump + branch setup
-- [ ] Phase 2: Rebuild TUI
-- [x] Phase 3b: Recover science-iv from .pyc — IV analysis module ✅
-- [ ] Phase 3a: Merge science-memristor into core
-- [ ] Phase 3c: Rebuild science-electrochem from .pyc
-- [x] Phase 4: Plotly dashboard ✅ (commit `c6196ad` on mysci-tui)
-- [ ] Phase 5: Command restructuring
+- [x] PLAN created ✅
+- [x] User approved ✅
+- [x] Phase 1: Version bump + branch setup ✅ (`315bb1f`)
+- [x] Phase 2: Rebuild TUI ✅ (`9b20605`, `6a4655c`)
+- [x] Phase 3a: Merge science-memristor into core ✅ (`9b20605`)
+- [x] Phase 3b: Recover science-iv from .pyc ✅ (`682b9a3`)
+- [x] Phase 3c: Rebuild science-electrochem from .pyc ✅ (`9b20605`)
+- [x] Phase 4: Plotly dashboard ✅ (`c6196ad`)
+- [x] Phase 5: Command restructuring ✅ (`9b20605`)
+- [x] TUI CSS fix: hardcoded color values in DEFAULT_CSS ✅ (`6a4655c`)
+- [x] extensions.py: silent skip of non-callable entry points ✅ (`72f2e8a`)
+- [x] _TeeWriter class for fzf output capture during TUI suspend ✅ (this commit)
+- [x] plot.py fzf: step/protocol display + raw_dir preview path ✅ (this commit)
 - [ ] Phase 6: Parquet support
-- [ ] TEST passed
+- [x] TEST passed: 16/16 guardrails ✅
 - [ ] DOCS updated
-- [ ] COMMIT done
+- [x] COMMIT done ✅
