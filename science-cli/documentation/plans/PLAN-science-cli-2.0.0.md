@@ -363,7 +363,7 @@ protocol/<name>/<step>/
 - [x] Phase 3b: Recover science-iv from .pyc — IV analysis module ✅
 - [ ] Phase 3a: Merge science-memristor into core
 - [ ] Phase 3c: Rebuild science-electrochem from .pyc
-- [ ] Phase 4: Plotly dashboard
+- [x] Phase 4: Plotly dashboard ✅ (commit `c6196ad` on mysci-tui)
 - [ ] Phase 5: Command restructuring
 - [ ] Phase 6: Parquet support
 - [ ] TEST passed
