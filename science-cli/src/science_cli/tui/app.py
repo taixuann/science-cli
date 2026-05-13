@@ -198,6 +198,21 @@ class SCIApp(App):
     }
     #sep-input-top, #sep-input-bottom {
         height: 1;
+        color: #2a4a2a;
+    }
+    #input-prompt {
+        color: #55ee77;
+        width: 2;
+        content-align: right middle;
+    }
+    CommandInput {
+        height: 1;
+    }
+    #input-prompt {
+        height: 1;
+    }
+    #sep-input-top, #sep-input-bottom {
+        height: 1;
         color: #55AA55;
     }
     #input-prompt {
@@ -238,14 +253,11 @@ class SCIApp(App):
 
     def on_mount(self) -> None:
         """Post-mount initialization — focus the input bar and load context."""
-        # Give the input bar focus so the user can type immediately.
         input_bar = self.query_one(CommandInput)
         input_bar.focus()
 
-        # Set initial separator widths.
         self._update_separators()
 
-        # Refresh status bar to pick up initial session state.
         self.refresh_status_bar()
 
     def refresh_status_bar(self) -> None:
@@ -255,6 +267,22 @@ class SCIApp(App):
             status_bar.refresh_from_session()
         except Exception:
             pass
+
+    def _update_separators(self) -> None:
+        """Set separator lines to full terminal width."""
+        w = self.size.width
+        if w < 1:
+            return
+        line = "\u2500" * w
+        try:
+            self.query_one("#sep-input-top", Static).update(line)
+            self.query_one("#sep-input-bottom", Static).update(line)
+        except Exception:
+            pass
+
+    def on_resize(self, event) -> None:
+        """Redraw separators when terminal resizes."""
+        self._update_separators()
 
     def _update_separators(self) -> None:
         """Set separator lines to full terminal width."""
