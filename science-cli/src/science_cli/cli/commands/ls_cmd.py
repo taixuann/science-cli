@@ -38,17 +38,22 @@ def ls_handler(args: list) -> None:
         return
 
     pos, flags = _parse_flags(args)
+    mode = flags.get("m") or flags.get("mode", "")
+
+    # -m project works globally — no project context required
+    if mode == "project":
+        _ls_projects()
+        return
 
     from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
-        console.print("[yellow]No project open. Use 'project open <name>' first.[/yellow]")
+        console.print("[yellow]No project open. Use 'open -m project <name>' or 'add -m project <name>' first.[/yellow]")
         return
 
     show_all = flags.get("all", False)
     show_step = flags.get("step", False)
     show_files = flags.get("files", False)
-    mode = flags.get("m") or flags.get("mode", "")
 
     if mode == "protocol" or show_all or show_step or show_files:
         _ls_protocol(proj, show_all=show_all, show_step=show_step, show_files=show_files)
@@ -160,13 +165,13 @@ def _ls_step(proj: Path, step_name: str) -> None:
     if not matches:
         rprint(f"[red]Step '{step_name}' not found in any protocol.[/red]")
         return
-    
+
     for proto_name, step_dir in matches:
         files = sorted(step_dir.iterdir())
         if not files:
             rprint(f"[yellow]No files in '{proto_name}/{step_name}'.[/yellow]")
             continue
-        
+
         prefix = (
             f"[bold white]{proto_name}/{step_name}[/bold white]"
             if len(matches) > 1
@@ -177,3 +182,70 @@ def _ls_step(proj: Path, step_name: str) -> None:
             if f.name == "results":
                 continue
             rprint(f"  [dim]• {f.name}[/dim]")
+
+
+def _ls_projects() -> None:
+    """List all projects in the configured projects root directory.
+
+    Works globally — does not require a project to be open.
+    """
+    from science_cli.core.project import list_projects, get_current_project_path
+    from science_cli.core.session import load_session
+
+    projects = list_projects()
+
+    if not projects:
+        rprint("[yellow]No projects found.[/yellow]")
+        return
+
+    current = load_session().get("last_project", "")
+    proj = get_current_project_path()
+
+    table = Table(title="Projects", border_style="cyan")
+    table.add_column("Project", style="bold white")
+    table.add_column("Path", style="dim")
+    table.add_column("Status", style="green")
+
+    for p in projects:
+        is_current = p == current
+        marker = "[bold cyan]◀ current[/bold cyan]" if is_current else ""
+        path_info = str(proj.parent / p) if proj and is_current else ""
+
+        # Quick stats for each project
+        from science_cli.core.project import _get_projects_root
+        root = _get_projects_root()
+        candidate = root / p
+
+        n_raw = 0
+        n_proto = 0
+        if candidate.exists():
+            raw_dir = candidate / "data" / "raw"
+            n_raw = len(list(raw_dir.iterdir())) if raw_dir.exists() else 0
+            proto_dir = candidate / "protocol"
+            n_proto = _count_protocol_yamls_local(proto_dir)
+
+        status_str = f"{n_raw} raw, {n_proto} protocols"
+        table.add_row(
+            f"{p} {marker}" if is_current else p,
+            str(path_info) if path_info else "",
+            status_str,
+        )
+
+    console.print(table)
+    rprint()
+
+
+def _count_protocol_yamls_local(proto_dir: Path) -> int:
+    """Count unique protocol YAMLs (local helper to avoid circular imports)."""
+    if not proto_dir.exists():
+        return 0
+    found: set[str] = set()
+    for sub in proto_dir.iterdir():
+        if sub.is_dir():
+            yaml_candidate = sub / f"{sub.name}.yaml"
+            if yaml_candidate.exists():
+                found.add(sub.name)
+    for y in proto_dir.glob("*.yaml"):
+        if y.stem not in found:
+            found.add(y.stem)
+    return len(found)

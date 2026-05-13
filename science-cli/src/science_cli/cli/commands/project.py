@@ -1,4 +1,21 @@
-"""project command handler."""
+"""project command handler — DEPRECATED.
+
+Use individual commands with -m project instead:
+    ls -m project      →  was 'project list'
+    open -m project    →  was 'project open'
+    add -m project     →  was 'project create'
+    close -m project   →  closes current project
+    status -m project  →  was 'project status'
+"""
+
+import warnings
+warnings.warn(
+    "The 'project' command is deprecated. "
+    "Use 'ls -m project', 'open -m project', 'add -m project', "
+    "'close -m project', 'status -m project' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from rich.console import Console
 from rich import print as rprint
@@ -29,8 +46,9 @@ def project_handler(args: list) -> None:
             console.print("[yellow]No projects found.[/yellow]")
 
     elif sub == "open":
+        console.print("[yellow]DEPRECATED: Use 'open -m project <name>' instead.[/yellow]")
         if not sub_args:
-            console.print("[yellow]Usage: project open <name>[/yellow]")
+            console.print("[yellow]Usage: open -m project <name>[/yellow]")
             return
         open_project(sub_args[0])
         from science_cli.core.session import set_last_project

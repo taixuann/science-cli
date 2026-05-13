@@ -51,12 +51,13 @@ def test_no_general_in_app_import():
 
 
 def test_commmand_tree_has_13():
-    """Verify COMMAND_TREE has all 13 registered commands."""
+    """Verify COMMAND_TREE has all 16 registered commands (Phase 5 added close, status, ext)."""
     from science_cli.cli.commands import COMMAND_TREE
     keys = sorted(COMMAND_TREE.keys())
-    expected = ['add', 'analyze', 'config', 'delete', 'edit', 'extensions',
-                'ls', 'memristor', 'open', 'plot', 'project', 'results', 'techniques']
-    assert keys == expected, f"Expected 13 commands, got {len(keys)}: {keys}"
+    expected = ['add', 'analyze', 'close', 'config', 'delete', 'edit', 'ext',
+                'extensions', 'ls', 'memristor', 'open', 'plot', 'project',
+                'results', 'status', 'techniques']
+    assert keys == expected, f"Expected 16 commands, got {len(keys)}: {keys}"
     print(f"  [PASS] COMMAND_TREE has {len(keys)} commands")
 
 
@@ -279,7 +280,7 @@ if __name__ == "__main__":
         ("Cleanup: functions/ deleted", test_functions_dir_deleted),
         ("Cleanup: __init__.py import cleanup", test_no_general_import_in_init),
         ("Cleanup: app.py import cleanup", test_no_general_in_app_import),
-        ("Cleanup: COMMAND_TREE has 13 commands", test_commmand_tree_has_13),
+        ("Cleanup: COMMAND_TREE has 16 commands", test_commmand_tree_has_13),
         ("Config: imports work", test_config_imports),
         ("Config: backward compat (no config file)", test_config_backward_compat_no_file),
         ("Config: generate_default_config_yaml", test_config_generate_default_yaml),

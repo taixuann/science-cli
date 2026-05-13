@@ -153,8 +153,8 @@ def _analyze_direct(files: list, rest_args: list) -> None:
 def _analyze_cv(filepath: str, flags: dict) -> None:
     from science_cli.core.data_loader import load_data_file
     import numpy as np
-    from science_electrochem.cv import peak_analysis, calculate_charge
-    from science_electrochem.models import CVData
+    from science_cli.electrochem.cv import peak_analysis, calculate_charge
+    from science_cli.electrochem.models import CVData
 
     df, info = load_data_file(filepath)
     cols = info.get("columns", [])
@@ -199,8 +199,8 @@ def _analyze_ca(filepath: str, flags: dict) -> None:
 
     console.print(f"\n[bold]CA Analysis: {Path(filepath).name}[/bold]")
 
-    from science_electrochem.models import CAData
-    from science_electrochem.ca import analyze_ca as _analyze_ca_func
+    from science_cli.electrochem.models import CAData
+    from science_cli.electrochem.ca import analyze_ca as _analyze_ca_func
     ca_data = CAData(time=t[m], current=i[m])
     ca_result = _analyze_ca_func(ca_data, {"fit": flags.get("fit", True), "steady_state": True})
     if "cottrell" in ca_result:
@@ -229,8 +229,8 @@ def _analyze_eis(filepath: str, flags: dict) -> None:
     z = df[cols[1]].values + 1j * df[cols[2]].values
     m = ~(np.isnan(freq) | np.isnan(z.real) | np.isnan(z.imag))
 
-    from science_electrochem.eis import circuit_fit, kramers_kronig
-    from science_electrochem.models import EISData
+    from science_cli.electrochem.eis import circuit_fit, kramers_kronig
+    from science_cli.electrochem.models import EISData
 
     eis_data = EISData(frequency=freq[m], impedance=z[m])
 

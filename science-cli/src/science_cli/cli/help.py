@@ -8,31 +8,35 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import print as rprint
 
+from science_cli import __version__
 from science_cli.theme import RICH_STYLES, RAW_COLORS
 
 console = Console()
 
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
-    "GROUP 2: PROTOCOL NAVIGATION": ["open"],
+    "GROUP 2: CONTEXT NAVIGATION": ["open", "close", "status"],
     "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config"],
-    "GROUP 4: EXTENSIONS": ["extensions", "memristor"],
+    "GROUP 4: EXTENSIONS": ["ext", "extensions", "memristor"],
     "ADDITIONAL": ["project", "techniques", "help", "version", "clear", "history"],
 }
 
 COMMAND_DESCRIPTIONS = {
-    "add":     "Add protocol/metadata/data",
+    "add":     "Add project/protocol/metadata/data",
     "delete":  "Delete protocol/metadata",
     "edit":    "Edit protocol/metadata",
-    "ls":      "List protocols/steps/files",
-    "open":    "Open protocol (sets session context)",
-    "project": "Manage projects",
+    "ls":      "List projects/protocols/steps/files",
+    "open":    "Open project/protocol/step (sets session context)",
+    "close":   "Close context with auto-save (step/protocol/project)",
+    "status":  "Show current context status",
+    "project": "[DEPRECATED] Use 'ls/open/add/close/status -m project' instead",
     "plot":    "Plot data — interactive or direct",
     "analyze": "Analyze data — peaks, fit, circuit",
     "config":  "Configure theme, settings",
     "techniques": "List available techniques — CV, CA, EIS — and how they map to protocol steps",
     "extensions": "List installed extension tools and their commands",
-    "memristor":  "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check)",
+    "ext":     "Unified extension interface — ext <name> <subcommand>",
+    "memristor":  "Crossbar device management (alias for 'ext memristor')",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -44,8 +48,9 @@ SUBCOMMAND_HELP: Dict[str, Dict] = {}
 COMMAND_HELP: Dict[str, dict] = {
     "add": {
         "usage": "add -m <mode> [flags]",
-        "desc": "Add protocol/metadata/data (Group 1).",
+        "desc": "Add project/protocol/metadata/data (Group 1).",
         "subcommands": {
+            "add -m project":     {"desc": "Create a new project (was 'project create')", "usage": "add -m project <name>"},
             "add -m protocol":    {"desc": "Create a protocol", "usage": "add -m protocol -n <name> [--desc <text>] [--step s1,s2] [-t ec-cv,ec-ca]"},
             "add -m metadata":    {"desc": "Update protocol metadata", "usage": "add -m metadata --step <steps> -pt <protocol> -t <techniques>"},
             "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data --fzf [--all] [--filter ddmm,technique,purpose]"},
@@ -61,6 +66,7 @@ COMMAND_HELP: Dict[str, dict] = {
             "--all":          {"desc": "Assign all selected files to one step (skip per-file prompt)"},
         },
         "examples": [
+            "add -m project my-project",
             "add -m protocol -n doping --step 1_deposition,2_characterization -t ec-ca,ec-cv",
             "add -m metadata -step 1_deposition -pt doping -t ec-ca",
             "add -m data --fzf",
@@ -117,9 +123,10 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "ls": {
         "usage": "ls [flags] [<step>]",
-        "desc": "List protocols/steps/files (Group 1). Global, not session-bound.",
+        "desc": "List projects/protocols/steps/files (Group 1). Global, not session-bound.",
         "subcommands": {
             "ls":                   {"desc": "List all protocols and steps", "usage": "ls"},
+            "ls -m project":        {"desc": "List all projects (was 'project list')", "usage": "ls -m project"},
             "ls -m protocol":       {"desc": "List all protocols (summary)", "usage": "ls -m protocol"},
             "ls -m protocol --step":{"desc": "Show protocol steps only", "usage": "ls -m protocol --step"},
             "ls -m protocol --all": {"desc": "Show steps + files (full view)", "usage": "ls -m protocol --all"},
@@ -128,33 +135,90 @@ COMMAND_HELP: Dict[str, dict] = {
         },
         "examples": [
             "ls",
+            "ls -m project",
             "ls -m protocol",
             "ls -m protocol --all",
             "ls 1_deposition",
         ],
     },
     "open": {
-        "usage": "open -m protocol -n <name>",
-        "desc": "Open protocol-specific view (Group 2). Sets session context — subsequent plot/analyze commands auto-reference this protocol's files.",
+        "usage": "open -m <mode> [flags] [args]",
+        "desc": "Open project/protocol/step — sets session context (Group 2).",
         "subcommands": {
-            "open -m protocol -n <name>": {"desc": "Open protocol and set session", "usage": "open -m protocol -n doping"},
+            "open -m project <name>":   {"desc": "Open a project and set context (was 'project open <name>')", "usage": "open -m project my_project"},
+            "open -m protocol -n <name>":{"desc": "Open protocol and set session", "usage": "open -m protocol -n doping"},
+            "open -m step <step_id>":   {"desc": "Open specific step within current protocol", "usage": "open -m step 1_deposition"},
         },
         "examples": [
+            "open -m project my_project",
             "open -m protocol -n doping",
+            "open -m step 1_deposition",
             "# After: plot --fzf auto-uses protocol files",
             "# After: analyze -f file --peaks uses protocol context",
         ],
     },
-    "project": {
-        "usage": "project <subcommand> [args]",
-        "desc": "Manage projects.",
+    "close": {
+        "usage": "close -m step|protocol|project",
+        "desc": "Close context with auto-save at step/protocol/project level. Saves state before clearing context.",
         "subcommands": {
-            "list":    {"desc": "List all projects", "usage": "project list"},
-            "open":    {"desc": "Switch to a project", "usage": "project open <name>"},
-            "create":  {"desc": "Create a new project", "usage": "project create"},
-            "status":  {"desc": "Show current project stats", "usage": "project status"},
-            "migrate": {"desc": "Migrate step directories to protocol-scoped layout", "usage": "project migrate"},
+            "close -m step":      {"desc": "Close current step, auto-save step state", "usage": "close -m step"},
+            "close -m protocol":  {"desc": "Close current protocol, auto-save protocol + step state", "usage": "close -m protocol"},
+            "close -m project":   {"desc": "Close current project, auto-save all context state", "usage": "close -m project"},
         },
+        "examples": [
+            "close -m step",
+            "close -m protocol",
+            "close -m project",
+        ],
+    },
+    "status": {
+        "usage": "status [-m project|protocol]",
+        "desc": "Show current context status — project, protocol, step.",
+        "subcommands": {
+            "status":               {"desc": "Show full context tree (project → protocol → step)", "usage": "status"},
+            "status -m project":    {"desc": "Show project-level context with metadata", "usage": "status -m project"},
+            "status -m protocol":   {"desc": "Show protocol context and steps", "usage": "status -m protocol"},
+        },
+        "examples": [
+            "status",
+            "status -m project",
+            "status -m protocol",
+        ],
+    },
+    "project": {
+        "usage": "[DEPRECATED] project <subcommand> [args]",
+        "desc": "Manage projects. DEPRECATED — use 'ls -m project', 'open -m project', 'add -m project', 'close -m project', 'status -m project' instead.",
+        "subcommands": {
+            "list":    {"desc": "List all projects → use 'ls -m project'", "usage": "project list"},
+            "open":    {"desc": "Switch to a project → use 'open -m project <name>'", "usage": "project open <name>"},
+            "create":  {"desc": "Create a new project → use 'add -m project <name>'", "usage": "project create"},
+            "status":  {"desc": "Show current project stats → use 'status -m project'", "usage": "project status"},
+        },
+    },
+    "ext": {
+        "usage": "ext <name> <subcommand> [args...]",
+        "desc": "Unified extension interface (Group 4). Dispatch to registered extensions.",
+        "subcommands": {
+            "ext memristor init":     {"desc": "Scaffold a devices.yaml for memristor array", "usage": "ext memristor init --rows 4 --cols 4 --label 'My Device'"},
+            "ext memristor ls":       {"desc": "List devices or matrix map", "usage": "ext memristor ls [--matrix]"},
+            "ext memristor add":      {"desc": "Add file to a matrix point", "usage": "ext memristor add --row 0 --col 0 --file data.txt"},
+            "ext memristor rm":       {"desc": "Remove file, technique, or point", "usage": "ext memristor rm --row 0 --col 0"},
+            "ext memristor info":     {"desc": "Show detailed point info", "usage": "ext memristor info --row 0 --col 0"},
+            "ext memristor sync":     {"desc": "Sync sweep metadata from data files", "usage": "ext memristor sync"},
+            "ext memristor validate": {"desc": "Validate device configuration", "usage": "ext memristor validate"},
+            "ext memristor stats":    {"desc": "Aggregate statistics across array", "usage": "ext memristor stats"},
+            "ext memristor check":    {"desc": "List unassigned files in step dir", "usage": "ext memristor check"},
+            "ext list":               {"desc": "List all available extensions", "usage": "ext list"},
+            "ext help <name>":        {"desc": "Show extension help", "usage": "ext help memristor"},
+        },
+        "examples": [
+            "ext memristor init --rows 4 --cols 4 --label 'ITO/PDA/Ta'",
+            "ext memristor ls --matrix",
+            "ext memristor add --row 0 --col 0 --file D1_r0c0_IV_set.txt",
+            "ext memristor stats",
+            "ext list",
+            "ext help memristor",
+        ],
     },
     "plot": {
         "usage": "plot [--fzf | -f file1,file2 [options]]",
@@ -246,8 +310,8 @@ COMMAND_HELP: Dict[str, dict] = {
         ],
     },
     "memristor": {
-        "usage": "memristor <subcommand> [args]",
-        "desc": "Crossbar device management for memristor arrays (Group 4).",
+        "usage": "[DEPRECATED — use 'ext memristor' instead] memristor <subcommand> [args]",
+        "desc": "Crossbar device management for memristor arrays (Group 4). Alias for 'ext memristor' — prefer the 'ext' interface.",
         "subcommands": {
             "memristor init":     {"desc": "Scaffold a devices.yaml", "usage": "memristor init --rows 4 --cols 4 --label 'My Device' [--area 10000]"},
             "memristor ls":       {"desc": "List devices or matrix map", "usage": "memristor ls [--matrix] [--technique iv]"},
@@ -296,7 +360,7 @@ def show_top_help() -> None:
 
     console.print()
     console.print(Panel(
-        "[bold]sci[/bold] — Scientific Data Analysis CLI  [dim]v7.0.0[/dim]\n"
+        f"[bold]sci[/bold] — Scientific Data Analysis CLI  [dim]v{__version__}[/dim]\n"
         "[dim]Work seamlessly with experimental data from the command line.[/dim]",
         border_style=accent_r,
     ))

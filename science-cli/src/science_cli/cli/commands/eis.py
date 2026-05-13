@@ -50,7 +50,7 @@ def _resolve_file(name: str) -> str:
 
 def _get_eis_data(filepath: str):
     import numpy as np
-    from science_electrochem.models import EISData
+    from science_cli.electrochem.models import EISData
     df, info = load_data_file(filepath)
     cols = info.get("columns", [])
     if len(cols) < 3:
@@ -96,7 +96,7 @@ def _eis_kk(args: list) -> None:
     if not filepath:
         console.print(f"[red]File not found: {positional[0]}[/red]")
         return
-    from science_electrochem.eis import kramers_kronig
+    from science_cli.electrochem.eis import kramers_kronig
     data = _get_eis_data(filepath)
     if data is None:
         return
@@ -117,7 +117,7 @@ def _eis_fit(args: list) -> None:
     if not filepath:
         console.print(f"[red]File not found: {positional[0]}[/red]")
         return
-    from science_electrochem.eis import circuit_fit
+    from science_cli.electrochem.eis import circuit_fit
     data = _get_eis_data(filepath)
     if data is None:
         return
@@ -134,7 +134,7 @@ def _eis_fit(args: list) -> None:
 
 def _eis_batch(args: list) -> None:
     from science_cli.core.project import get_current_project_path
-    from science_electrochem.eis import circuit_fit
+    from science_cli.electrochem.eis import circuit_fit
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -175,7 +175,7 @@ def _eis_export(args: list) -> None:
     if not filepath:
         console.print(f"[red]File not found: {positional[0]}[/red]")
         return
-    from science_electrochem.eis import circuit_fit
+    from science_cli.electrochem.eis import circuit_fit
     data = _get_eis_data(filepath)
     if data is None:
         return

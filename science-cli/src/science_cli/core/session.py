@@ -17,6 +17,9 @@ def _default_session():
         "last_project": "",
         "last_protocol": "",
         "last_step": "",
+        "project_state": {},       # Project-level metadata for auto-save/restore
+        "protocol_state": {},      # Protocol-level metadata for auto-save/restore
+        "step_state": {},          # Step-level metadata for auto-save/restore
         "history": [],
         "theme": "publication-acs",
         "fzf_opts": {
@@ -37,7 +40,17 @@ def load_session() -> dict:
         return sess
     try:
         with open(SESSION_FILE) as f:
-            return json.load(f)
+            sess = json.load(f)
+        # Auto-migrate: ensure new keys exist in old session files
+        defaults = _default_session()
+        changed = False
+        for key in defaults:
+            if key not in sess:
+                sess[key] = defaults[key]
+                changed = True
+        if changed:
+            save_session(sess)
+        return sess
     except (json.JSONDecodeError, OSError):
         sess = _default_session()
         save_session(sess)
@@ -99,3 +112,104 @@ def add_history(cmd: str):
 
 def get_history() -> list:
     return load_session().get("history", [])
+
+
+# ── 3-Level State Memory ──────────────────────────────────────────
+# project_state, protocol_state, and step_state support auto-save/restore
+# when closing and reopening context at each level.
+
+
+def save_project_state(state: dict | None = None) -> None:
+    """Merge `state` into the session's project_state dict and persist.
+
+    If `state` is None, no-op (preserves existing project_state).
+    Called before closing a project to snapshot metadata.
+    """
+    if state is None:
+        return
+    sess = load_session()
+    sess.setdefault("project_state", {})
+    sess["project_state"] |= state  # dict merge (Python 3.9+)
+    save_session(sess)
+
+
+def load_project_state() -> dict:
+    """Return the current project_state dict from the session."""
+    return load_session().get("project_state", {})
+
+
+def clear_project_state(sess: dict) -> None:
+    """Clear project_state (called during close -m project)."""
+    sess["project_state"] = {}
+
+
+def save_protocol_state(state: dict | None = None) -> None:
+    """Merge `state` into the session's protocol_state dict and persist."""
+    if state is None:
+        return
+    sess = load_session()
+    sess.setdefault("protocol_state", {})
+    sess["protocol_state"] |= state
+    save_session(sess)
+
+
+def load_protocol_state() -> dict:
+    """Return the current protocol_state dict from the session."""
+    return load_session().get("protocol_state", {})
+
+
+def clear_protocol_state(sess: dict) -> None:
+    """Clear protocol_state (called during close -m protocol)."""
+    sess["protocol_state"] = {}
+
+
+def save_step_state(state: dict | None = None) -> None:
+    """Merge `state` into the session's step_state dict and persist."""
+    if state is None:
+        return
+    sess = load_session()
+    sess.setdefault("step_state", {})
+    sess["step_state"] |= state
+    save_session(sess)
+
+
+def load_step_state() -> dict:
+    """Return the current step_state dict from the session."""
+    return load_session().get("step_state", {})
+
+
+def clear_step_state(sess: dict) -> None:
+    """Clear step_state (called during close -m step)."""
+    sess["step_state"] = {}
+
+
+def save_context_state() -> None:
+    """Save all 3 levels of context state at once.
+
+    Called before closing a protocol or project to snapshot
+    project_state, protocol_state, and step_state simultaneously.
+    Current last_project, last_protocol, last_step serve as keys.
+    """
+    sess = load_session()
+
+    # Ensure all state dicts exist
+    for key in ("project_state", "protocol_state", "step_state"):
+        sess.setdefault(key, {})
+
+    save_session(sess)
+
+
+def restore_context_state() -> None:
+    """Restore all 3 levels of context state at once.
+
+    Called after opening a project/protocol to reload saved metadata.
+    The state dicts are already loaded from session.json — this is a
+    convenience function that can trigger side-effects in future (e.g.,
+    rebuilding file index, re-loading protocol YAML into memory).
+    """
+    sess = load_session()
+    # Ensure all state dicts exist (for backward compat with old sessions)
+    for key in ("project_state", "protocol_state", "step_state"):
+        sess.setdefault(key, {})
+    # Currently a no-op for side-effects; callers access state dicts directly.
+    # Future: could rebuild in-memory caches from the restored dicts.

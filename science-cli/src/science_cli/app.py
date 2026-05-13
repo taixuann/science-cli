@@ -1,4 +1,10 @@
-"""REPL shell + direct CLI dispatch — the application entry point."""
+"""Entry point — TUI, REPL shell + direct CLI dispatch.
+
+Bare `sci` (no arguments) launches the Textual TUI.
+`sci --tui` also launches the TUI.
+`sci --repl` launches the legacy prompt_toolkit REPL.
+All other invocations dispatch to COMMAND_TREE handlers.
+"""
 
 import sys
 import shutil
@@ -21,7 +27,12 @@ console = Console()
 def run_cli():
     args = sys.argv[1:]
 
-    if not args or args[0] in ("--help", "-h"):
+    # Bare `sci` (no args) or `sci --tui` launches the Textual TUI.
+    if not args or args[0] in ("--tui",):
+        _run_tui()
+        return
+
+    if args[0] in ("--help", "-h"):
         show_top_help()
         return
 
@@ -61,6 +72,13 @@ def run_cli():
         console.print(f"[yellow]Unknown command: {cmd}[/yellow]")
         console.print(f"[dim]Use 'sci --help' to see available commands.[/dim]")
         sys.exit(1)
+
+
+def _run_tui():
+    """Launch the Textual TUI application."""
+    from science_cli.tui.app import SCIApp
+    app = SCIApp()
+    app.run()
 
 
 def _run_repl():

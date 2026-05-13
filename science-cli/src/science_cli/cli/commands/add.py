@@ -47,7 +47,9 @@ def add_handler(args: list) -> None:
         mode = sub_args[0]
         mode_args = sub_args[1:]
 
-        if mode == "protocol":
+        if mode == "project":
+            _add_project(mode_args)
+        elif mode == "protocol":
             _add_protocol(mode_args)
         elif mode == "metadata":
             _add_metadata(mode_args)
@@ -57,6 +59,67 @@ def add_handler(args: list) -> None:
             console.print(f"[yellow]Unknown add mode: {mode}[/yellow]")
     else:
         console.print(f"[yellow]Unknown add subcommand: {sub}[/yellow]")
+
+
+def _add_project(args: list) -> None:
+    """Create a new project — 'add -m project <name>' (was 'project create')."""
+    _, flags = _parse_flags(args)
+    name = flags.get("n") or flags.get("name")
+    if not name:
+        # If no -n flag, try positional argument
+        if args and not args[0].startswith("-"):
+            name = args[0]
+        else:
+            console.print("[yellow]Usage: add -m project <name>[/yellow]")
+            return
+
+    from science_cli.core.project import _get_projects_root
+    from science_cli.core.session import set_last_project
+
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name).strip().lower().replace(" ", "_")
+    if not safe_name:
+        console.print("[red]Invalid project name.[/red]")
+        return
+
+    projects_root = _get_projects_root()
+    project_path = projects_root / safe_name
+    if project_path.exists():
+        console.print(f"[yellow]Project '{safe_name}' already exists.[/yellow]")
+        return
+
+    dirs = [
+        project_path / "data" / "raw",
+        project_path / "data" / "processed",
+        project_path / "protocol",
+        project_path / "results",
+    ]
+    for d in dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Create initial sci-config.yaml
+    _create_default_config(project_path)
+
+    # Set project context
+    set_last_project(safe_name)
+
+    console.print(f"[bold green]✓[/bold green] Created project: [bold white]{safe_name}[/bold white]")
+    rprint(f"  [dim]Path: {project_path}[/dim]")
+    rprint(f"  [dim]Directories: data/raw, data/processed, protocol, results[/dim]")
+
+
+def _create_default_config(project_path: Path) -> None:
+    """Create a minimal sci-config.yaml in the new project."""
+    config_path = project_path / "sci-config.yaml"
+    if config_path.exists():
+        return
+    import yaml
+    default_config = {
+        "description": f"Project: {project_path.name}",
+        "techniques": {},
+        "defaults": {},
+    }
+    with open(config_path, "w") as f:
+        yaml.dump(default_config, f, default_flow_style=False)
 
 
 def _add_protocol(args: list) -> None:
@@ -71,7 +134,7 @@ def _add_protocol(args: list) -> None:
     from science_cli.core.paths import ProjectPaths
     proj = get_current_project_path()
     if not proj:
-        console.print("[yellow]No project open. Use 'project open <name>' first.[/yellow]")
+        console.print("[yellow]No project open. Use 'add -m project <name>' to create one, or 'open -m project <name>' to open one.[/yellow]")
         return
 
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
