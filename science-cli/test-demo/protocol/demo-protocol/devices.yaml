@@ -1,0 +1,215 @@
+device:
+  id: demo-2x2
+  label: Demo PDA Devices
+  rows: 2
+  cols: 2
+  description: Fake data for dashboard demonstration
+  row_labels:
+  - T1
+  - T2
+  col_labels:
+  - B1
+  - B2
+steps:
+  iv: 1_iv-measurements
+points:
+- row: 0
+  col: 0
+  tags:
+  - material:PDA
+  techniques:
+    iv:
+    - file: 0101_PDA_r0c0_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDA_r0c0_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDA_r0c0_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDA_r0c0_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDA_r0c0_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDA_r0c0_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 0
+  col: 0
+  tags:
+  - material:PDAc
+  techniques:
+    iv:
+    - file: 0101_PDAc_r0c0_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDAc_r0c0_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDAc_r0c0_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDAc_r0c0_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDAc_r0c0_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDAc_r0c0_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 1
+  col: 0
+  tags:
+  - material:PDA
+  techniques:
+    iv:
+    - file: 0101_PDA_r1c0_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDA_r1c0_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDA_r1c0_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDA_r1c0_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDA_r1c0_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDA_r1c0_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 1
+  col: 0
+  tags:
+  - material:PDAc
+  techniques:
+    iv:
+    - file: 0101_PDAc_r1c0_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDAc_r1c0_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDAc_r1c0_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDAc_r1c0_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDAc_r1c0_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDAc_r1c0_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 0
+  col: 1
+  tags:
+  - material:PDA
+  techniques:
+    iv:
+    - file: 0101_PDA_r0c1_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDA_r0c1_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDA_r0c1_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDA_r0c1_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDA_r0c1_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDA_r0c1_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 0
+  col: 1
+  tags:
+  - material:PDAc
+  techniques:
+    iv:
+    - file: 0101_PDAc_r0c1_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDAc_r0c1_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDAc_r0c1_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDAc_r0c1_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDAc_r0c1_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDAc_r0c1_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 1
+  col: 1
+  tags:
+  - material:PDA
+  techniques:
+    iv:
+    - file: 0101_PDA_r1c1_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDA_r1c1_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDA_r1c1_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDA_r1c1_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDA_r1c1_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDA_r1c1_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+- row: 1
+  col: 1
+  tags:
+  - material:PDAc
+  techniques:
+    iv:
+    - file: 0101_PDAc_r1c1_iv_set_01.csv
+      sweep_order: 1
+      sweep_type: set
+    - file: 0101_PDAc_r1c1_iv_reset_01.csv
+      sweep_order: 2
+      sweep_type: reset
+    - file: 0101_PDAc_r1c1_iv_set_02.csv
+      sweep_order: 3
+      sweep_type: set
+    - file: 0101_PDAc_r1c1_iv_reset_02.csv
+      sweep_order: 4
+      sweep_type: reset
+    - file: 0101_PDAc_r1c1_iv_set_03.csv
+      sweep_order: 5
+      sweep_type: set
+    - file: 0101_PDAc_r1c1_iv_reset_03.csv
+      sweep_order: 6
+      sweep_type: reset
+_meta:
+  generated_by: generate_fake_data.py
+  generated_at: '2026-05-13'
+  total_cells: 4
+  measured_cells: 4
+  missing_cells: []
+  technique_coverage:
+    iv: 48

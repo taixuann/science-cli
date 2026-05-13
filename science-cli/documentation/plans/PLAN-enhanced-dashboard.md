@@ -215,9 +215,9 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - Saves intermediate `project/results/analysis_data.json` with per-file extracted parameters for fast loading
 
 **devices.yaml role (from discussion):**
-- **devices.yaml = matrix MAP**: defines grid structure (rows, cols, labels), which cells exist and are measured, technique-to-step mapping (steps.iv, steps.endurance, etc.), and sweep metadata populated by `sync`
-- **Filename parsing = auto-discovery**: filenames follow `DDMMYY_material_type_matrix_suffix` pattern (e.g., `0605_Ta-PDA-ITO_r0c0_iv_set.csv`). Parsing extracts material, sweep type, matrix position automatically. `extract_material_batch()` already handles material extraction. The `sync` command populates sweep direction/rate metadata into devices.yaml by reading raw CSV files.
-- **Analysis results (Vset, Vreset, ratio) = computed on the fly**: NOT stored in devices.yaml. Computed during dashboard generation, cached in `analysis_data.json`. Dashboard shows raw IV data with overlaid markers so user can visually verify extracted values.
+- **devices.yaml = matrix MAP only**: defines grid structure (rows, cols, labels), which cells exist and are measured, technique-to-step mapping (steps.iv, etc.), and two sweep properties per file: sweep direction + sweep rate (populated by `sync`). No Vset/Vreset/ratio stored here.
+- **Filename parsing = auto-discovery**: filenames follow **`DDMMYY_material_type_matrix_suffix` ONLY** (e.g., `0605_Ta-PDA-ITO_r0c0_iv_set.csv`). Parsing extracts material, sweep type, matrix position. Non-matching files → CLI reminds user to rename.
+- **Analysis results (Vset, Vreset, ratio) = computed in `analysis_data.json`**: Run analysis on ALL files (batch). User inspects results on dashboard. For specific files needing recalibration, use a per-file command to re-analyze and update the JSON.
 - **Source truth**: raw CSV files in the step directory. Never modified. All derived data is in `results/` directory.
 
 **Analysis data structure (analysis_data.json):**
@@ -272,17 +272,17 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - **Risk**: MEDIUM. Re-analyzing all IV files on every dashboard regeneration could be slow for 1000+ files (each file requires full IV curve parsing + derivative computation).
 - **Mitigation**: JSON intermediate file enables incremental updates — only re-analyze files whose modification time has changed. Add `--force` flag to force full re-analysis.
 
-### 3. devices.yaml Role Ambiguity (from discussion)
-- **Risk**: MEDIUM. The user's filenames follow `DDMMYY_material_type_matrix_suffix` pattern which encodes material, sweep type, and matrix position. devices.yaml should serve as the **matrix map** (defines row/col grid, which cells exist and are measured) while filename **parsing fills in details** (material, type). Analysis results (Vset/Vreset/ratio) should be **computed on the fly during dashboard generation** and cached in analysis_data.json — NOT stored in devices.yaml. Sweep direction/rate metadata goes in devices.yaml via `ext memristor sync`.
-- **Mitigation**: Document the separation clearly: devices.yaml = structure + sweep metadata, JSON = analysis results, raw CSVs = source truth.
+### 3. devices.yaml Role (RESOLVED)
+- **Decision**: devices.yaml = matrix MAP only with sweep direction + sweep rate. No Vset/Vreset/ratio in YAML. Analysis goes to `analysis_data.json`. Filenames follow `DDMMYY_material_type_matrix_suffix` only — non-matching files get a rename reminder.
+- **Mitigation**: Documented in Sprint 3 spec above.
 
 ### 4. JSON Cache Invalidation Strategy
-- **Risk**: MEDIUM. analysis_data.json becomes stale when new data files are added or existing ones modified. Need a clear invalidation strategy.
-- **Mitigation**: Store file modification timestamps in JSON. On dashboard regenerate, compare timestamps — only re-analyze changed files. Add `--force` flag for full re-analysis.
+- **Risk**: MEDIUM. analysis_data.json becomes stale when new data files are added or existing ones modified.
+- **Mitigation**: Store file modification timestamps in JSON. On dashboard regenerate, compare timestamps — only re-analyze changed files. Add `--force` flag for full re-analysis. Per-file recalc via `ext memristor analyze --row 0 --col 0 --file X.csv` updates the JSON in-place.
 
-### 5. Cross-Protocol Matrix Heterogeneity
-- **Risk**: MEDIUM-HIGH. Different protocols may use different matrix sizes (4x4, 6x6), different row/col labels, and different materials. A single heatmap can't overlay them directly.
-- **Mitigation**: Render per-protocol heatmaps stacked vertically with protocol header separators, not one unified grid. Protocol selector filter determines which are visible.
+### 5. Cross-Protocol Matrix Heterogeneity (ACCEPTED)
+- **Risk**: MEDIUM-HIGH. Different protocols use different matrix sizes/labels. This is expected — not a bug.
+- **Mitigation**: Render per-protocol heatmaps stacked vertically with protocol headers. Protocol selector filter limits which are visible. No attempt to unify into one grid.
 
 ### 6. Cross-Plan References Outdated
 - **Risk**: HIGH. PLAN-science-cli-2.0.0 still references `memristor` alias (removed in Sprint 2), old GROUP 4 with `extensions` command, and incomplete progress. PLAN-command-restructure and PLAN-extension-interface also reference old groups.
