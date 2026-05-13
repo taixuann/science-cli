@@ -132,29 +132,13 @@ def discover_extensions() -> ExtensionRegistry:
     for ep in eps:
         try:
             ext = ep.load()
-            ext(_registry)
-        except Exception as e:
-            import warnings
-            warnings.warn(f"Failed to load extension '{ep.name}': {e}")
+            if callable(ext):
+                ext(_registry)
+        except Exception:
+            pass
 
     # 2. Load config-file techniques/devices
     _discover_config_techniques(_registry)
-
-    return _registry
-
-
-def get_registry() -> ExtensionRegistry:
-    return _registry
-    _loaded = True
-
-    eps = entry_points(group="science_cli.extensions")
-    for ep in eps:
-        try:
-            ext = ep.load()
-            ext(_registry)
-        except Exception as e:
-            import warnings
-            warnings.warn(f"Failed to load extension '{ep.name}': {e}")
 
     return _registry
 
