@@ -10,5 +10,6 @@ Usage:
 """
 
 from science_cli.tui.app import SCIApp
+from science_cli.tui.status_bar import StatusBar
 
-__all__ = ["SCIApp"]
+__all__ = ["SCIApp", "StatusBar"]

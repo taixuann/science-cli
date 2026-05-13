@@ -8,6 +8,8 @@ from datetime import datetime
 
 from textual.widgets import RichLog
 
+from science_cli import __version__
+
 
 class OutputPanel(RichLog):
     """A scrollable output display for command results.
@@ -47,13 +49,12 @@ class OutputPanel(RichLog):
 
     def on_mount(self) -> None:
         """Display a welcome message when the output panel first mounts."""
-        self.write("")
+        self.write(f"[bold #55ee77]myscience v{__version__}[/]")
         self.write(
-            "[bold #55ee77]SCI TUI[/] — Scientific Data Analysis CLI\n"
-            "[dim]Type commands below. [/dim]"
-            "[dim #5ea8b5]/help[/] [dim]for slash commands, [/dim]"
-            "[dim #5ea8b5]/clear[/] [dim]to clear output.[/dim]\n"
+            f"[dim]Type commands below. [/dim]"
+            f"[dim #5ea8b5]/help[/] [dim]/clear[/] [dim]/history[/] [dim]/version[/dim]"
         )
+        self.write(f"[dim]Tip: use [bold]--fzf[/] for interactive file selection[/dim]\n")
 
     def add_separator(self, command: str = "") -> None:
         """Add a timestamped separator line before command output.

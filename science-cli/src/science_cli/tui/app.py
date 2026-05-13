@@ -20,7 +20,7 @@ from rich.console import Console as RichConsole
 from rich.text import Text as RichText
 
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, Container
+from textual.containers import Vertical, Container, Horizontal
 from textual.widgets import Static, Input
 
 from science_cli import __version__
@@ -35,6 +35,7 @@ from science_cli.tui.theme import CSS_VARIABLES, MATCHA_COLORS, RICH_STYLES
 from science_cli.tui.banner import SCIBanner
 from science_cli.tui.header import TuiHeader
 from science_cli.tui.output_panel import OutputPanel
+from science_cli.tui.status_bar import StatusBar
 from science_cli.tui.input_bar import CommandInput, SLASH_COMMANDS
 
 
@@ -191,6 +192,24 @@ class SCIApp(App):
     SCIApp {
         background: $background;
     }
+    Container {
+        padding: 0;
+        margin: 0;
+    }
+    StatusBar {
+        color: #888888;
+    }
+    #sep-input-top, #sep-input-bottom {
+        color: #55AA55;
+        height: 1;
+        padding: 0;
+        margin: 0;
+    }
+    #input-prompt {
+        color: #55ee77;
+        width: 2;
+        content-align: right middle;
+    }
     """
     )
 
@@ -209,7 +228,13 @@ class SCIApp(App):
             SCIBanner(),
             TuiHeader(),
             OutputPanel(),
-            CommandInput(),
+            StatusBar(self),
+            Static(id="sep-input-top"),
+            Horizontal(
+                Static("\u276f ", id="input-prompt"),
+                CommandInput(),
+            ),
+            Static(id="sep-input-bottom"),
         )
 
     def on_mount(self) -> None:
@@ -218,15 +243,35 @@ class SCIApp(App):
         input_bar = self.query_one(CommandInput)
         input_bar.focus()
 
-        # Show a welcome message in the output panel.
-        output = self.query_one(OutputPanel)
-        output.write(
-            f"\n[bold #8BAA89]SCI TUI v{__version__}[/]\n"
-            f"[dim]Type commands below. [/dim]"
-            f"[dim #6aaa9a]/help[/] [dim]for slash commands, [/dim]"
-            f"[dim #6aaa9a]/clear[/] [dim]to clear output.[/dim]\n"
-            f"[dim]Ctrl+C or Ctrl+D to quit.[/dim]\n"
-        )
+        # Set initial separator widths.
+        self._update_separators()
+
+        # Refresh status bar to pick up initial session state.
+        self.refresh_status_bar()
+
+    def refresh_status_bar(self) -> None:
+        """Called after a command changes session context to refresh the status bar."""
+        try:
+            status_bar = self.query_one(StatusBar)
+            status_bar.refresh_from_session()
+        except Exception:
+            pass
+
+    def _update_separators(self) -> None:
+        """Set separator lines to full terminal width."""
+        w = self.size.width
+        if w < 1:
+            return
+        line = "\u2500" * w
+        try:
+            self.query_one("#sep-input-top", Static).update(line)
+            self.query_one("#sep-input-bottom", Static).update(line)
+        except Exception:
+            pass
+
+    def on_resize(self, event) -> None:
+        """Redraw separators when terminal resizes."""
+        self._update_separators()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle command submission from the input bar.
@@ -307,7 +352,7 @@ class SCIApp(App):
                 new_protocol = sess.get("last_protocol", "")
                 if new_project != header.context_project or new_protocol != header.context_protocol:
                     header.set_context(project=new_project, protocol=new_protocol)
-                    input_bar.update_context(project=new_project, protocol=new_protocol)
+                self.refresh_status_bar()
                 return
 
             # Normal (non-fzf) command: capture output to string.
@@ -321,7 +366,8 @@ class SCIApp(App):
 
             if new_project != header.context_project or new_protocol != header.context_protocol:
                 header.set_context(project=new_project, protocol=new_protocol)
-                input_bar.update_context(project=new_project, protocol=new_protocol)
+
+            self.refresh_status_bar()
 
             # Scroll to bottom after new output.
             output.scroll_end(animate=False)
