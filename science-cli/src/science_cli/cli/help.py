@@ -15,10 +15,10 @@ console = Console()
 
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
-    "GROUP 2: CONTEXT NAVIGATION": ["open", "close", "status"],
-    "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config"],
-    "GROUP 4: EXTENSIONS": ["ext", "extensions", "memristor"],
-    "ADDITIONAL": ["project", "techniques", "help", "version", "clear", "history"],
+    "GROUP 2: CONTEXT NAVIGATION": ["open", "close"],
+    "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config", "status", "results"],
+    "GROUP 4: EXTENSIONS & TECHNIQUES": ["ext", "techniques"],
+    "ADDITIONAL": ["help", "version", "clear", "history"],
 }
 
 COMMAND_DESCRIPTIONS = {
@@ -26,17 +26,15 @@ COMMAND_DESCRIPTIONS = {
     "delete":  "Delete protocol/metadata",
     "edit":    "Edit protocol/metadata",
     "ls":      "List projects/protocols/steps/files",
-    "open":    "Open project/protocol/step (sets session context)",
-    "close":   "Close context with auto-save (step/protocol/project)",
+    "open":    "Open project/protocol/step",
+    "close":   "Close context with auto-save",
+    "plot":    "Plot data",
+    "analyze": "Analyze data",
+    "config":  "Configure settings",
     "status":  "Show current context status",
-    "project": "[DEPRECATED] Use 'ls/open/add/close/status -m project' instead",
-    "plot":    "Plot data — interactive or direct",
-    "analyze": "Analyze data — peaks, fit, circuit",
-    "config":  "Configure theme, settings",
-    "techniques": "List available techniques — CV, CA, EIS — and how they map to protocol steps",
-    "extensions": "List installed extension tools and their commands",
+    "results": "List saved results by protocol and step",
     "ext":     "Unified extension interface — ext <name> <subcommand>",
-    "memristor":  "Crossbar device management (alias for 'ext memristor')",
+    "techniques": "List available techniques and usage guide",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -53,7 +51,7 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m project":     {"desc": "Create a new project (was 'project create')", "usage": "add -m project <name>"},
             "add -m protocol":    {"desc": "Create a protocol", "usage": "add -m protocol -n <name> [--desc <text>] [--step s1,s2] [-t ec-cv,ec-ca]"},
             "add -m metadata":    {"desc": "Update protocol metadata", "usage": "add -m metadata --step <steps> -pt <protocol> -t <techniques>"},
-            "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data --fzf [--all] [--filter ddmm,technique,purpose]"},
+            "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data --fzf [--all]"},
         },
         "flags": {
             "-n, --name":     {"desc": "Protocol name (required for protocol mode)"},
@@ -62,7 +60,6 @@ COMMAND_HELP: Dict[str, dict] = {
             "-t, --technique":{"desc": "Technique(s), comma-separated"},
             "-pt, --protocol":{"desc": "Protocol name (for metadata mode)"},
             "--fzf":          {"desc": "Interactive fzf file selection (shows assigned/unassigned)"},
-            "--filter":       {"desc": "Pre-filter: {ddmm},{technique},{purpose}"},
             "--all":          {"desc": "Assign all selected files to one step (skip per-file prompt)"},
         },
         "examples": [
@@ -70,7 +67,6 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m protocol -n doping --step 1_deposition,2_characterization -t ec-ca,ec-cv",
             "add -m metadata -step 1_deposition -pt doping -t ec-ca",
             "add -m data --fzf",
-            "add -m data --fzf --filter 0705,iv,set",
             "add -m data --fzf --all",
         ],
     },
@@ -159,7 +155,7 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "close": {
         "usage": "close -m step|protocol|project",
-        "desc": "Close context with auto-save at step/protocol/project level. Saves state before clearing context.",
+        "desc": "Close context with auto-save (Group 2). Saves state before clearing context.",
         "subcommands": {
             "close -m step":      {"desc": "Close current step, auto-save step state", "usage": "close -m step"},
             "close -m protocol":  {"desc": "Close current protocol, auto-save protocol + step state", "usage": "close -m protocol"},
@@ -173,10 +169,10 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "status": {
         "usage": "status [-m project|protocol]",
-        "desc": "Show current context status — project, protocol, step.",
+        "desc": "Show current context status (Group 3).",
         "subcommands": {
-            "status":               {"desc": "Show full context tree (project → protocol → step)", "usage": "status"},
-            "status -m project":    {"desc": "Show project-level context with metadata", "usage": "status -m project"},
+            "status":               {"desc": "Show full context tree", "usage": "status"},
+            "status -m project":    {"desc": "Show project-level context", "usage": "status -m project"},
             "status -m protocol":   {"desc": "Show protocol context and steps", "usage": "status -m protocol"},
         },
         "examples": [
@@ -185,15 +181,13 @@ COMMAND_HELP: Dict[str, dict] = {
             "status -m protocol",
         ],
     },
-    "project": {
-        "usage": "[DEPRECATED] project <subcommand> [args]",
-        "desc": "Manage projects. DEPRECATED — use 'ls -m project', 'open -m project', 'add -m project', 'close -m project', 'status -m project' instead.",
-        "subcommands": {
-            "list":    {"desc": "List all projects → use 'ls -m project'", "usage": "project list"},
-            "open":    {"desc": "Switch to a project → use 'open -m project <name>'", "usage": "project open <name>"},
-            "create":  {"desc": "Create a new project → use 'add -m project <name>'", "usage": "project create"},
-            "status":  {"desc": "Show current project stats → use 'status -m project'", "usage": "project status"},
-        },
+    "results": {
+        "usage": "results [flags]",
+        "desc": "List saved results by protocol and step (Group 3).",
+        "subcommands": {},
+        "examples": [
+            "results",
+        ],
     },
     "ext": {
         "usage": "ext <name> <subcommand> [args...]",
@@ -201,7 +195,7 @@ COMMAND_HELP: Dict[str, dict] = {
         "subcommands": {
             "ext memristor init":     {"desc": "Scaffold a devices.yaml for memristor array", "usage": "ext memristor init --rows 4 --cols 4 --label 'My Device'"},
             "ext memristor ls":       {"desc": "List devices or matrix map", "usage": "ext memristor ls [--matrix]"},
-            "ext memristor add":      {"desc": "Add file to a matrix point", "usage": "ext memristor add --row 0 --col 0 --file data.txt"},
+            "ext memristor add":      {"desc": "Add file to a matrix point", "usage": "ext memristor add --row 0 --col 0 --file data.txt [--fzf]"},
             "ext memristor rm":       {"desc": "Remove file, technique, or point", "usage": "ext memristor rm --row 0 --col 0"},
             "ext memristor info":     {"desc": "Show detailed point info", "usage": "ext memristor info --row 0 --col 0"},
             "ext memristor sync":     {"desc": "Sync sweep metadata from data files", "usage": "ext memristor sync"},
@@ -295,59 +289,10 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "techniques": {
         "usage": "techniques",
-        "desc": "List available techniques — CV, CA, EIS — and how they map to protocol steps.",
+        "desc": "List available techniques and usage guide (Group 4).",
         "subcommands": {},
         "examples": [
             "techniques",
-        ],
-    },
-    "extensions": {
-        "usage": "extensions",
-        "desc": "List installed extension tools and their REPL commands.",
-        "subcommands": {},
-        "examples": [
-            "extensions",
-        ],
-    },
-    "memristor": {
-        "usage": "[DEPRECATED — use 'ext memristor' instead] memristor <subcommand> [args]",
-        "desc": "Crossbar device management for memristor arrays (Group 4). Alias for 'ext memristor' — prefer the 'ext' interface.",
-        "subcommands": {
-            "memristor init":     {"desc": "Scaffold a devices.yaml", "usage": "memristor init --rows 4 --cols 4 --label 'My Device' [--area 10000]"},
-            "memristor ls":       {"desc": "List devices or matrix map", "usage": "memristor ls [--matrix] [--technique iv]"},
-            "memristor add":      {"desc": "Add file to a point (technique inferred)", "usage": "memristor add --row 0 --col 0 --file data.txt [--fzf] [--filter ddmm,tech,purpose] [--pattern regex]"},
-            "memristor rm":       {"desc": "Remove file, technique, or point", "usage": "memristor rm --row 0 --col 0 [--technique iv] [--file data.txt] [--confirm]"},
-            "memristor info":     {"desc": "Show detailed point info", "usage": "memristor info --row 0 --col 0"},
-            "memristor sync":     {"desc": "Sync sweep metadata from data files", "usage": "memristor sync"},
-            "memristor validate": {"desc": "Validate device configuration", "usage": "memristor validate"},
-            "memristor stats":    {"desc": "Aggregate statistics across array", "usage": "memristor stats"},
-            "memristor check":    {"desc": "List unassigned files in step dir", "usage": "memristor check [--list]"},
-        },
-        "flags": {
-            "--row":         {"desc": "Row index (0-based)"},
-            "--col":         {"desc": "Column index (0-based)"},
-            "--technique":   {"desc": "Technique (iv, endurance, retention, switching)"},
-            "--file":        {"desc": "Data filename"},
-            "--fzf":         {"desc": "Interactive fzf file picker"},
-            "--filter":      {"desc": "Pre-filter: {ddmm},{technique},{purpose}"},
-            "--pattern":     {"desc": "Regex for batch assignment: r(\\d+)c(\\d+)"},
-            "--dry-run":     {"desc": "Preview batch assignment without writing"},
-            "--yes":         {"desc": "Skip confirmation in batch mode"},
-            "--matrix":      {"desc": "ASCII grid view of technique coverage"},
-            "--list":        {"desc": "List unassigned files (check)"},
-            "--confirm":     {"desc": "Confirm destructive operation"},
-        },
-        "examples": [
-            "memristor init --rows 4 --cols 4 --label 'ITO/PDA/Ta 4x4' --area 10000",
-            "memristor add --row 0 --col 0 --file D1_r0c0_IV_set.txt --sweep-type SET",
-            "memristor add --fzf --filter 0705,iv,set",
-            "memristor add --pattern 'D1_r(\\d+)c(\\d+)_IV_set\\.txt' --dry-run",
-            "memristor ls --matrix",
-            "memristor info --row 0 --col 0",
-            "memristor sync",
-            "memristor validate",
-            "memristor stats",
-            "memristor check --list",
         ],
     },
 }

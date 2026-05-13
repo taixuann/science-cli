@@ -239,7 +239,7 @@ def _add_data(args: list) -> None:
     use_fzf = flags.get("fzf", False)
     use_all = flags.get("all", False)
     if not use_fzf:
-        console.print("[yellow]Usage: add -m data --fzf [--all] [--filter ddmm,technique,purpose][/yellow]")
+        console.print("[yellow]Usage: add -m data --fzf [--all][/yellow]")
         return
 
     from science_cli.core.project import get_current_project_path
@@ -309,11 +309,6 @@ def _add_data(args: list) -> None:
 
     item_names = [f.name for f in files]
 
-    filter_str = flags.get("filter", "")
-    if filter_str:
-        fd = parse_filter_string(filter_str)
-        item_names = filter_files_by_metadata(item_names, fd)
-
     display_items = []
     for name in item_names:
         if name in assigned_files:
@@ -326,7 +321,6 @@ def _add_data(args: list) -> None:
         items=display_items,
         prompt="Select files (Tab to multi-select):",
         multi=True,
-        query=filter_str.split(",")[0] if filter_str else "",
     )
     if not selected:
         console.print("[yellow]No files selected.[/yellow]")

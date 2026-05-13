@@ -9,14 +9,13 @@ Usage:
     mem-device ls [--matrix] [--technique iv]
     mem-device info --row 0 --col 0
     mem-device add --row 0 --col 0 --file data.txt [--technique iv]
-    mem-device add --fzf [--filter ddmm,tech,purpose]
-    mem-device add --pattern r'(\\d+)c(\\d+)' --technique iv [--dry-run]
-    mem-device rm --row 0 --col 0 [--technique iv] [--file data.txt] [--confirm]
-    mem-device sync
-    mem-device validate
-    mem-device stats
-    mem-device check [--list]
-    mem-device plot [--all] [--fzf] [--filter ...] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device add --fzf
+
+    # Plot all:
+    mem-device plot --all [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+
+    # Interactive:
+    mem-device plot [--all] [--fzf] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
     mem-device dashboard [--output path] [--open]
     
 In the sci REPL, use 'memristor' instead of 'mem-device'.
@@ -572,11 +571,7 @@ def cmd_add_pattern(args: argparse.Namespace) -> None:
 
 def cmd_add_fzf(args: argparse.Namespace) -> None:
     """Interactive fzf file picker — scans all step subdirs recursively."""
-    from science_cli.core.fzf_utils import (
-        fzf_select,
-        parse_filter_string,
-        filter_files_by_metadata,
-    )
+    from science_cli.core.fzf_utils import fzf_select
 
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
@@ -593,22 +588,12 @@ def cmd_add_fzf(args: argparse.Namespace) -> None:
 
     display_names = [rel for rel, _, _ in unassigned]
 
-    filter_str = getattr(args, "filter", "") or ""
-    if filter_str:
-        fd = parse_filter_string(filter_str)
-        display_names = filter_files_by_metadata(display_names, fd)
-
-    if not display_names:
-        print("No files match filter.")
-        return
-
     selected = fzf_select(
         items=display_names,
         prompt="Select data files to assign >",
         multi=True,
         preview="head -30 {}",
         preview_window="right:50%:border-sharp",
-        query=filter_str.split(",")[0] if filter_str else "",
     )
     if not selected:
         print("No files selected.")
@@ -893,9 +878,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
     # Apply fzf filter if requested
     if args.fzf:
-        from science_cli.core.fzf_utils import fzf_select, parse_filter_string, filter_files_by_metadata
+        from science_cli.core.fzf_utils import fzf_select
 
-        # Build display lines
         display_map: dict[str, dict] = {}
         display_lines: list[str] = []
         for t in targets:
@@ -903,24 +887,12 @@ def cmd_plot(args: argparse.Namespace) -> None:
             display_lines.append(line)
             display_map[line] = t
 
-        filter_str = getattr(args, "filter", "") or ""
-        if filter_str:
-            fd = parse_filter_string(filter_str)
-            # Re-filter using the parsed filter
-            if filter_str:
-                filtered_lines = filter_files_by_metadata(display_lines, fd)
-                if not filtered_lines:
-                    print("No files match filter.")
-                    return
-                display_lines = filtered_lines
-
         selected_lines = fzf_select(
             items=display_lines,
             prompt="Select IV files to plot >",
             multi=True,
             preview="echo {}",
             preview_window="",
-            query=filter_str.split(",")[0] if filter_str else "",
         )
         if not selected_lines:
             print("No files selected.")
@@ -1108,7 +1080,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--temperature", type=float, default=None)
     p_add.add_argument("--step-dir", default="")
     p_add.add_argument("--fzf", action="store_true", help="Interactive fzf (recursive)")
-    p_add.add_argument("--filter", default="", help="Pre-filter: {ddmm},{technique},{purpose}")
     p_add.add_argument(
         "--pattern", default="",
         help="Regex for batch: r(\\d+)c(\\d+) groups 1=row, 2=col",
@@ -1148,7 +1119,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_plot.add_argument("--step-dir", default="")
     p_plot.add_argument("--all", action="store_true", help="Plot all IV files (default if no filter)")
     p_plot.add_argument("--fzf", action="store_true", help="Interactive fzf multi-select picker")
-    p_plot.add_argument("--filter", default="", help="Pre-filter for fzf: {material},{sweep_type},{ddmm}")
     p_plot.add_argument("--material", default="", help="Plot files for a specific material+batch")
     p_plot.add_argument("--row", type=int, default=None, help="Filter by matrix row")
     p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")

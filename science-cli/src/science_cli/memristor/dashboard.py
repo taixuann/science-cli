@@ -1,244 +1,65 @@
-"""Self-contained interactive Plotly HTML dashboard for memristor IV curves.
+"""Self-contained dark-themed interactive dashboard for memristor crossbar characterization.
 
-Reads raw CSV data files directly (no SVG intermediates) and generates
-a self-contained ``dashboard.html`` with interactive Plotly plots.
+Reads raw IV CSV data, extracts switching parameters, and generates a
+self-contained ``dashboard.html`` with a dark-themed interactive Plotly layout.
+
 Works with ``file://`` protocol — no web server required.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# ── Material colour palette ─────────────────────────────────
 
-_MATERIAL_COLORS = [
-    "#a8d8ea",  # light blue
-    "#f4bfbf",  # light red
-    "#c3e6cb",  # light green
-    "#ffeaa7",  # light yellow
-    "#d4b8d9",  # light purple
-    "#ffd8a8",  # light orange
-    "#b8d4e3",  # steel blue
-    "#e8d4b8",  # tan
-]
-_COLOR_INDEX: dict[str, str] = {}
+# ════════════════════════════════════════════════════════════════
+#  Data Collection (Phase 1 — IV-driven)
+# ════════════════════════════════════════════════════════════════
 
 
-def _get_material_color(material_key: str) -> str:
-    """Assign a consistent colour to each material key."""
-    if material_key not in _COLOR_INDEX:
-        idx = len(_COLOR_INDEX) % len(_MATERIAL_COLORS)
-        _COLOR_INDEX[material_key] = _MATERIAL_COLORS[idx]
-    return _COLOR_INDEX[material_key]
+def _collect_device_data(config, results_dir: Path) -> dict:
+    """Collect all IV data from config, extract parameters per device.
 
-
-# ── Number range formatting ─────────────────────────────────
-
-
-def _format_number_ranges(numbers: list[int]) -> str:
-    """Collapse consecutive numbers into compact ranges.
-
-    Args:
-        numbers: Sorted (or unsorted) list of integers.
-
-    Returns:
-        String like ``"1-10"`` or ``"1-5, 11-15"``.
-        Single numbers shown as just the number.
-
-    Examples:
-        >>> _format_number_ranges([1,2,3,4,5,6,7,8,9,10])
-        '1-10'
-        >>> _format_number_ranges([1,2,3,4,5,11,12,13,14,15])
-        '1-5, 11-15'
-        >>> _format_number_ranges([3])
-        '3'
+    Returns a dict with:
+      - per_device: {(row, col): {row, col, material_key, v_set, v_reset,
+          ratio, switching_detected, n_files, files: [...raw data...]}}
+      - all_vset: list of all per-file V_set values
+      - all_vreset: list of all per-file V_reset values
+      - all_ratios: list of all per-file ON/OFF ratio values
+      - total_iv_files: int
+      - switching_count: int
+      - total_measured_devices: int
     """
-    if not numbers:
-        return ""
-    numbers = sorted(set(numbers))
-    ranges: list[tuple[int, int]] = []
-    start = numbers[0]
-    end = numbers[0]
-    for n in numbers[1:]:
-        if n == end + 1:
-            end = n
-        else:
-            ranges.append((start, end))
-            start = end = n
-    ranges.append((start, end))
-
-    parts: list[str] = []
-    for s, e in ranges:
-        if s == e:
-            parts.append(str(s))
-        else:
-            parts.append(f"{s}-{e}")
-    return ", ".join(parts)
-
-
-# ── Plotly figure generation ─────────────────────────────────
-
-
-def _should_use_log_scale(current: np.ndarray) -> bool:
-    """Determine if current should use log scale.
-
-    Uses log scale if the absolute current spans more than 2 decades
-    (ratio of max to min > 100), excluding values near zero.
-    """
-    abs_i = np.abs(current)
-    pos = abs_i[abs_i > 1e-30]
-    if len(pos) < 2:
-        return False
-    ratio = pos.max() / pos.min()
-    return ratio > 100.0
-
-
-def _create_iv_figure(
-    voltage: np.ndarray,
-    current: np.ndarray,
-    title: str,
-    plot_id: str,
-    use_log: bool = False,
-) -> str:
-    """Generate a Plotly IV curve figure as an HTML div.
-
-    Args:
-        voltage: Voltage data array (V).
-        current: Current data array (A).
-        title: Plot title (e.g. ``"#01  |  0.82 V/s  |  0→+3.5V→0"``).
-        plot_id: Unique DOM id for the plot div.
-        use_log: If True, plot |current| on log scale.
-
-    Returns:
-        HTML string: a ``<div>`` with inline Plotly.newPlot() call.
-        Does NOT include ``<script src="plotly.js">`` — that goes in the
-        page ``<head>`` once.
-    """
-    import plotly.graph_objects as go
-
-    display_current = np.abs(current) if use_log else current
-
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=voltage,
-            y=display_current,
-            mode="lines",
-            line={"color": "#1f77b4", "width": 1.2},
-            name=title,
-            hovertemplate=(
-                "V = %{x:.4f} V<br>I = %{y:.4e} A<extra></extra>"
-            ),
-        )
-    )
-
-    y_title = "|Current| (A)" if use_log else "Current (A)"
-    fig.update_layout(
-        title={"text": title, "font": {"size": 12, "family": "Arial, sans-serif"}},
-        xaxis_title="Voltage (V)",
-        yaxis_title=y_title,
-        template="plotly_white",
-        margin={"l": 60, "r": 20, "t": 40, "b": 50},
-        height=350,
-        hovermode="closest",
-        dragmode="pan",
-        showlegend=False,
-        font={"family": "Arial, sans-serif", "size": 10},
-    )
-
-    if use_log:
-        fig.update_yaxes(type="log")
-
-    fig.update_xaxes(
-        showline=True,
-        linewidth=1,
-        linecolor="black",
-        mirror=True,
-        ticks="inside",
-    )
-    fig.update_yaxes(
-        showline=True,
-        linewidth=1,
-        linecolor="black",
-        mirror=True,
-        ticks="inside",
-    )
-
-    # Generate div-only HTML (no <html>, no plotly.js include)
-    div_html = fig.to_html(
-        include_plotlyjs=False,
-        full_html=False,
-        div_id=plot_id,
-        config={
-            "displayModeBar": True,
-            "modeBarButtonsToRemove": [
-                "lasso2d",
-                "select2d",
-                "sendDataToCloud",
-            ],
-            "displaylogo": False,
-            "toImageButtonOptions": {
-                "format": "png",
-                "filename": plot_id,
-                "height": 600,
-                "width": 800,
-                "scale": 2,
-            },
-        },
-    )
-    return div_html
-
-
-# ── Dashboard generation ─────────────────────────────────────
-
-
-def generate_dashboard(
-    config,
-    results_dir: Path,
-    output_path: str | Path,
-) -> Path:
-    """Generate a self-contained interactive Plotly HTML dashboard.
-
-    Reads raw CSV data files directly (no intermediate SVGs) and
-    generates Plotly IV curves embedded in a filterable, clickable
-    matrix layout.
-
-    Args:
-        config: DeviceConfig instance loaded from devices.yaml.
-        results_dir: Directory containing (or sibling to) raw data files.
-            Raw files are resolved as ``results_dir.parent / fe.file``
-            for each FileEntry.
-        output_path: Where to write the HTML file.
-
-    Returns:
-        Path to the generated ``dashboard.html`` file.
-
-    Raises:
-        ValueError: If no IV files are found in the config.
-    """
-    from science_cli.memristor.plotting import (
-        _extract_sweep_annotations,
-        read_iv_csv,
-    )
+    from science_cli.memristor.plotting import read_iv_csv
+    from science_cli.memristor.switching import extract_iv_parameters
     from science_cli.memristor.device import extract_material_batch
 
-    # Raw data files live in the step directory (parent of results/)
     data_dir = results_dir.parent
+    per_device: dict[tuple[int, int], dict] = {}
+    all_vset: list[float] = []
+    all_vreset: list[float] = []
+    all_ratios: list[float] = []
+    total_iv_files = 0
 
-    # Collect all IV files from config
-    plots: list[dict] = []
     for pt, fe in config.get_all_files("iv"):
-        # Resolve raw CSV path
         csv_path = data_dir / fe.file
         if not csv_path.exists():
             logger.warning(f"Raw data file not found, skipping: {csv_path}")
+            continue
+
+        try:
+            voltage, current, _info = read_iv_csv(csv_path)
+            params = extract_iv_parameters(voltage, current)
+        except Exception:
+            logger.warning(
+                f"Skipping unreadable file: {fe.file}", exc_info=True,
+            )
             continue
 
         # Extract material+batch key
@@ -249,108 +70,228 @@ def generate_dashboard(
         else:
             mat_key = "unknown"
 
-        # Determine display order
-        order = fe.sweep_order or 0
-        if order == 0:
-            tg = pt.techniques.get("iv")
-            if tg:
-                for idx, f in enumerate(tg.sorted_files(), 1):
-                    if f.file == fe.file:
-                        order = idx
-                        break
+        key = (pt.row, pt.col)
+        if key not in per_device:
+            per_device[key] = {
+                "row": pt.row,
+                "col": pt.col,
+                "material_key": mat_key,
+                "v_set_values": [],
+                "v_reset_values": [],
+                "ratio_values": [],
+                "switching_detected": False,
+                "files": [],
+            }
 
-        # Build annotation text from sweep metadata
-        annotations = _extract_sweep_annotations(fe.sweep)
-        caption_parts = [f"#{order:02d}"]
-        if annotations.get("sweep_rate"):
-            caption_parts.append(annotations["sweep_rate"])
-        direction = annotations.get("direction")
-        if direction:
-            caption_parts.append(direction)
-        else:
-            caption_parts.append(fe.sweep_type or "uc")
-
-        sweep_type = fe.sweep_type or "uc"
-        plot_id = f"plot_r{pt.row}c{pt.col}_{mat_key.replace('-', '_').replace('(', '_').replace(')', '')}_{sweep_type}_{order:02d}"
-
-        plots.append({
-            "material_key": mat_key,
-            "row": pt.row,
-            "col": pt.col,
-            "sweep_type": sweep_type,
-            "order": order,
-            "caption": "  |  ".join(caption_parts),
-            "material_caption": f"r{pt.row}c{pt.col} | {mat_key} | {sweep_type}",
-            "csv_path": csv_path,
-            "plot_id": plot_id,
-            "file_entry": fe,
-            "point": pt,
+        device = per_device[key]
+        device["files"].append({
+            "voltage": voltage.tolist(),
+            "current": current.tolist(),
+            "v_set": params["v_set"],
+            "v_reset": params["v_reset"],
+            "ratio": params["on_off_ratio"],
         })
+        total_iv_files += 1
 
-    if not plots:
+        if params["switching_detected"]:
+            device["switching_detected"] = True
+        if params["v_set"] is not None:
+            device["v_set_values"].append(float(params["v_set"]))
+            all_vset.append(float(params["v_set"]))
+        if params["v_reset"] is not None:
+            device["v_reset_values"].append(float(params["v_reset"]))
+            all_vreset.append(float(params["v_reset"]))
+        if params["on_off_ratio"] is not None:
+            device["ratio_values"].append(float(params["on_off_ratio"]))
+            all_ratios.append(float(params["on_off_ratio"]))
+
+    # Compute per-device medians
+    for key, device in per_device.items():
+        device["v_set"] = (
+            float(np.median(device["v_set_values"]))
+            if device["v_set_values"]
+            else None
+        )
+        device["v_reset"] = (
+            float(np.median(device["v_reset_values"]))
+            if device["v_reset_values"]
+            else None
+        )
+        device["ratio"] = (
+            float(np.median(device["ratio_values"]))
+            if device["ratio_values"]
+            else None
+        )
+        device["n_files"] = len(device["files"])
+
+    switching_count = sum(
+        1 for d in per_device.values() if d["switching_detected"]
+    )
+
+    return {
+        "per_device": per_device,
+        "all_vset": all_vset,
+        "all_vreset": all_vreset,
+        "all_ratios": all_ratios,
+        "total_iv_files": total_iv_files,
+        "switching_count": switching_count,
+        "total_measured_devices": len(per_device),
+    }
+
+
+def _compute_aggregate(collection: dict, config) -> dict:
+    """Compute aggregate statistics from collected data."""
+    all_vset = collection["all_vset"]
+    all_vreset = collection["all_vreset"]
+    all_ratios = collection["all_ratios"]
+    per_device = collection["per_device"]
+
+    measured = collection["total_measured_devices"]
+    switching_count = collection["switching_count"]
+
+    return {
+        "total_cells": config.device.total_cells,
+        "measured_cells": config.measured_cells,
+        "total_iv_files": collection["total_iv_files"],
+        "median_vset": round(float(np.median(all_vset)), 3) if all_vset else None,
+        "median_vreset": round(float(np.median(all_vreset)), 3) if all_vreset else None,
+        "median_ratio": float(np.median(all_ratios)) if all_ratios else None,
+        "yield_pct": round((switching_count / measured * 100.0), 1) if measured > 0 else 0.0,
+        "n_devices_with_switching": switching_count,
+        "n_devices_measured": measured,
+    }
+
+
+def _build_histogram_data(collection: dict) -> dict:
+    """Build histogram bin/count data for Vset, Vreset, Ratio distributions."""
+    result = {}
+
+    for label, values in [
+        ("vset", collection["all_vset"]),
+        ("vreset", collection["all_vreset"]),
+        ("ratio", collection["all_ratios"]),
+    ]:
+        if not values:
+            result[label] = {"bins": [], "counts": []}
+            continue
+        n_bins = min(30, max(5, len(values) // 3))
+        counts, bin_edges = np.histogram(values, bins=n_bins)
+        result[label] = {
+            "bins": bin_edges.tolist(),
+            "counts": counts.tolist(),
+        }
+
+    return result
+
+
+def _build_heatmap_matrix(config, per_device: dict) -> dict:
+    """Build a 2D matrix of per-cell values for the heatmap."""
+    rows = config.device.rows
+    cols = config.device.cols
+
+    matrix = []
+    for r in range(rows):
+        row_data = []
+        for c in range(cols):
+            device = per_device.get((r, c))
+            if device:
+                row_data.append({
+                    "v_set": device["v_set"],
+                    "v_reset": device["v_reset"],
+                    "ratio": device["ratio"],
+                    "switching": device["switching_detected"],
+                    "material": device["material_key"],
+                    "n_files": device["n_files"],
+                    "failed": not device["switching_detected"],
+                })
+            else:
+                row_data.append(None)
+        matrix.append(row_data)
+
+    return {"rows": rows, "cols": cols, "matrix": matrix}
+
+
+# ════════════════════════════════════════════════════════════════
+#  Public API
+# ════════════════════════════════════════════════════════════════
+
+
+def generate_dashboard(
+    config,
+    results_dir: Path,
+    output_path: str | Path,
+) -> Path:
+    """Generate a self-contained dark-themed interactive Plotly HTML dashboard.
+
+    Reads raw IV CSV data, extracts V_set/V_reset/ON-OFF ratio per device,
+    and generates an interactive HTML dashboard matching the reference layout.
+
+    Args:
+        config: DeviceConfig instance loaded from devices.yaml.
+        results_dir: Directory containing (or sibling to) raw data files.
+            Raw files are resolved as ``results_dir.parent / fe.file``.
+        output_path: Where to write the HTML file.
+
+    Returns:
+        Path to the generated ``dashboard.html`` file.
+
+    Raises:
+        ValueError: If no IV files are found or no data could be collected.
+    """
+    # ── Phase 1: Collect data ──
+    collection = _collect_device_data(config, results_dir)
+
+    if not collection["per_device"]:
         raise ValueError(
-            "No IV data files found. Check that devices.yaml has IV entries "
-            "and raw data files exist in the step directory."
+            "No IV data files found or none could be read successfully. "
+            "Check that devices.yaml has IV entries and raw data files "
+            "exist in the step directory."
         )
 
-    # Read data and generate Plotly divs
-    for p in plots:
-        try:
-            voltage, current, info = read_iv_csv(str(p["csv_path"]))
-        except Exception as exc:
-            logger.error(f"Error reading {p['csv_path'].name}: {exc}")
-            p["plot_html"] = (
-                f'<div class="plot-error" id="{p["plot_id"]}">'
-                f"Error: {exc}</div>"
-            )
-            continue
+    # ── Compute aggregates and histograms ──
+    aggregate = _compute_aggregate(collection, config)
+    histograms = _build_histogram_data(collection)
+    heatmap = _build_heatmap_matrix(config, collection["per_device"])
 
-        use_log = _should_use_log_scale(current)
+    # ── Build per-device dictionary for JS embedding ──
+    devices_js = {}
+    iv_js = {}
+    for (row, col), device in collection["per_device"].items():
+        cell_id = f"R{row + 1}C{col + 1}"
+        devices_js[cell_id] = {
+            "row": row,
+            "col": col,
+            "material": device["material_key"],
+            "v_set": device["v_set"],
+            "v_reset": device["v_reset"],
+            "ratio": device["ratio"],
+            "switching": device["switching_detected"],
+            "n_files": device["n_files"],
+        }
+        iv_js[cell_id] = [
+            {
+                "voltage": f["voltage"],
+                "current": f["current"],
+                "label": f"#{i + 1:02d}",
+            }
+            for i, f in enumerate(device["files"])
+        ]
 
-        try:
-            plot_html = _create_iv_figure(
-                voltage=voltage,
-                current=current,
-                title=p["caption"],
-                plot_id=p["plot_id"],
-                use_log=use_log,
-            )
-            p["plot_html"] = plot_html
-        except Exception as exc:
-            logger.error(f"Error generating Plotly figure for {p['csv_path'].name}: {exc}")
-            p["plot_html"] = (
-                f'<div class="plot-error" id="{p["plot_id"]}">'
-                f"Plotly error: {exc}</div>"
-            )
+    # ── Build HTML ──
+    device_label = config.device.label or config.device.id or "Memristor Device"
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # Build data structures for layout
-    material_groups: dict[str, list[dict]] = {}
-    for p in plots:
-        material_groups.setdefault(p["material_key"], []).append(p)
-
-    cell_groups: dict[tuple[int, int], list[dict]] = {}
-    for p in plots:
-        cell_groups.setdefault((p["row"], p["col"]), []).append(p)
-
-    all_rows = {p["row"] for p in plots}
-    all_cols = {p["col"] for p in plots}
-    if all_rows and all_cols:
-        min_row, max_row = min(all_rows), max(all_rows)
-        min_col, max_col = min(all_cols), max(all_cols)
-    else:
-        min_row = max_row = min_col = max_col = 0
-
-    # Build HTML
     html = _build_html(
-        config=config,
-        material_groups=material_groups,
-        cell_groups=cell_groups,
-        total_plots=len(plots),
-        min_row=min_row,
-        max_row=max_row,
-        min_col=min_col,
-        max_col=max_col,
-        plots=plots,
+        device_label=device_label,
+        device_id=config.device.id,
+        rows=config.device.rows,
+        cols=config.device.cols,
+        aggregate=aggregate,
+        heatmap=heatmap,
+        histograms=histograms,
+        devices_js=devices_js,
+        iv_js=iv_js,
+        date_str=date_str,
     )
 
     out = Path(output_path)
@@ -359,664 +300,1344 @@ def generate_dashboard(
     return out
 
 
-# ── HTML construction ─────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+#  HTML Assembly
+# ════════════════════════════════════════════════════════════════
 
 
 def _build_html(
-    config,
-    material_groups: dict[str, list[dict]],
-    cell_groups: dict[tuple[int, int], list[dict]],
-    total_plots: int,
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
-    plots: list[dict],
+    device_label: str,
+    device_id: str,
+    rows: int,
+    cols: int,
+    aggregate: dict,
+    heatmap: dict,
+    histograms: dict,
+    devices_js: dict,
+    iv_js: dict,
+    date_str: str,
 ) -> str:
-    """Assemble the full HTML document."""
-    device_label = config.device.label or config.device.id or "Memristor Device"
-    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    matrices_html = _build_matrices_row(
-        material_groups=material_groups,
-        min_row=min_row,
-        max_row=max_row,
-        min_col=min_col,
-        max_col=max_col,
-    )
-
-    # Collect unique materials and sweep types for filter bar
-    all_materials = sorted(material_groups.keys())
-    all_sweep_types = sorted(set(p["sweep_type"] for p in plots))
-    all_orders = sorted(set(p["order"] for p in plots))
-    cycle_range = _format_number_ranges(all_orders) if all_orders else "—"
-
-    filter_bar_html = _build_filter_bar(
-        materials=all_materials,
-        sweep_types=all_sweep_types,
-        cycle_range=cycle_range,
-    )
-
-    cell_details_html = _build_cell_details(
-        cell_groups=cell_groups,
-        min_row=min_row,
-        max_row=max_row,
-        min_col=min_col,
-        max_col=max_col,
-    )
-
+    """Assemble the full self-contained HTML document."""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{device_label} — IV Dashboard</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<title>{device_label} — Memristor Crossbar Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-{css()}
+{_CSS}
 </style>
 </head>
 <body>
+<div id="app">
 
-<header>
-  <h1>{device_label}</h1>
-  <p>{total_plots} IV plots | {len(material_groups)} material(s) | {len(cell_groups)} cell(s) | Generated: {date_str}</p>
-</header>
+  <!-- ══════════════ SIDEBAR ══════════════ -->
+  <nav id="sidebar">
+    <!-- Logo -->
+    <div class="sb-logo">
+      <div class="sb-logo-title">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="6" height="6" rx="1" stroke="#00d4ff" stroke-width="1.2"/>
+          <rect x="9" y="1" width="6" height="6" rx="1" stroke="#00d4ff" stroke-width="1.2" opacity="0.6"/>
+          <rect x="1" y="9" width="6" height="6" rx="1" stroke="#00d4ff" stroke-width="1.2" opacity="0.6"/>
+          <rect x="9" y="9" width="6" height="6" rx="1" stroke="#00d4ff" stroke-width="1.2"/>
+          <line x1="4" y1="4" x2="12" y2="12" stroke="#00d4ff" stroke-width="0.8" opacity="0.4"/>
+        </svg>
+        Memristor Lab
+      </div>
+      <div class="sb-logo-sub">{device_id} · v2.4.1</div>
+    </div>
 
-<main>
-{matrices_html}
-{filter_bar_html}
-{cell_details_html}
-</main>
+    <!-- Navigation -->
+    <div class="sb-section">
+      <div class="sb-section-title">Navigation</div>
+      <div class="nav-item active">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Overview
+      </div>
+      <div class="nav-item">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Device Explorer
+      </div>
+      <div class="nav-item">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Statistics
+      </div>
+      <div class="nav-item">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        Batch Analysis
+      </div>
+      <div class="nav-item">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+        Settings
+      </div>
+    </div>
 
-<script>
-{_js_click_to_open()}
+    <!-- Filters -->
+    <div class="sb-section">
+      <div class="sb-section-title">Filters</div>
+      <div class="filter-group">
+        <div class="filter-label">Measurement Type</div>
+        <select class="filter-select">
+          <option>IV Sweep</option>
+          <option>Pulse</option>
+          <option>Retention</option>
+          <option>Endurance</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Material</div>
+        <select class="filter-select" id="filter-material">
+          <option>All</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Cycle Range</div>
+        <div class="range-row"><span>1</span><span id="cycle-val">All</span></div>
+        <input type="range" id="cycle-range" min="1" max="200" value="200" oninput="document.getElementById('cycle-val').textContent=this.value">
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Sweep Direction</div>
+        <select class="filter-select">
+          <option>All</option>
+          <option>Forward</option>
+          <option>Reverse</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Compliance (A)</div>
+        <select class="filter-select">
+          <option>All</option>
+          <option>1 mA</option>
+          <option>100 uA</option>
+          <option>10 uA</option>
+        </select>
+      </div>
+      <div style="margin-top:8px">
+        <div class="toggle-row"><span>Log Scale</span><label class="toggle"><input type="checkbox" id="toggle-log" checked><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row"><span>Overlay Mode</span><label class="toggle"><input type="checkbox" id="toggle-overlay" checked><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row"><span>Highlight Outliers</span><label class="toggle"><input type="checkbox" id="toggle-outliers"><span class="toggle-slider"></span></label></div>
+      </div>
+    </div>
+
+    <!-- Color Map By -->
+    <div class="sb-section">
+      <div class="sb-section-title">Color Map By</div>
+      <div class="radio-group" id="colormap-radio">
+        <label class="radio-item active"><input type="radio" name="colormap" value="ratio" checked> ON/OFF Ratio</label>
+        <label class="radio-item"><input type="radio" name="colormap" value="vset"> Vset (V)</label>
+        <label class="radio-item"><input type="radio" name="colormap" value="vreset"> Vreset (V)</label>
+        <label class="radio-item"><input type="radio" name="colormap" value="yield"> Yield (%)</label>
+      </div>
+    </div>
+
+    <!-- Device Info -->
+    <div class="sb-section">
+      <div class="sb-section-title">Selected Device</div>
+      <div id="sb-device-info" class="info-grid">
+        <div class="info-row"><span class="info-key">Device ID</span><span class="info-val" id="si-id">—</span></div>
+        <div class="info-row"><span class="info-key">Row/Col</span><span class="info-val" id="si-rc">—</span></div>
+        <div class="info-row"><span class="info-key">Material</span><span class="info-val" id="si-mat">—</span></div>
+        <div class="info-row"><span class="info-key">Files</span><span class="info-val" id="si-files">—</span></div>
+        <div class="info-row"><span class="info-key">Vset</span><span class="info-val" id="si-vset">—</span></div>
+        <div class="info-row"><span class="info-key">Vreset</span><span class="info-val" id="si-vreset">—</span></div>
+        <div class="info-row"><span class="info-key">ON/OFF</span><span class="info-val" id="si-ratio">—</span></div>
+        <div class="info-row"><span class="info-key">Switching</span><span class="info-val" id="si-sw">—</span></div>
+      </div>
+    </div>
+
+    <!-- Review Queue -->
+    <div class="sb-section">
+      <div class="sb-section-title">Review Queue <span style="color:var(--orange);margin-left:4px" class="mono">0</span></div>
+      <div class="review-scroll" id="review-list">
+        <div style="font-size:10px;color:var(--text-dim);padding:8px 0">No devices flagged for review.</div>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="sb-section">
+      <div class="sb-section-title">Summary</div>
+      <div class="stat-row"><span class="stat-key">Total Cells</span><span class="stat-val" id="sum-total">{aggregate["total_cells"]}</span></div>
+      <div class="stat-row"><span class="stat-key">Measured</span><span class="stat-val green" id="sum-measured">{aggregate["measured_cells"]}</span></div>
+      <div class="stat-row"><span class="stat-key">Switching</span><span class="stat-val green" id="sum-switching">{aggregate["n_devices_with_switching"]}</span></div>
+      <div class="stat-row"><span class="stat-key">IV Files</span><span class="stat-val" id="sum-files">{aggregate["total_iv_files"]}</span></div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="sb-section" style="padding-bottom:16px">
+      <div class="sb-section-title">Quick Actions</div>
+      <button class="qa-btn">Open Raw Data</button>
+      <button class="qa-btn">Export Device Report</button>
+      <button class="qa-btn">Mark for Review</button>
+      <button class="qa-btn danger">Exclude Device</button>
+    </div>
+  </nav>
+
+  <!-- ══════════════ MAIN ══════════════ -->
+  <div id="main">
+    <!-- HEADER -->
+    <header id="header">
+      <div>
+        <div class="header-title">{device_label}</div>
+        <div class="header-subtitle">{device_id} / {rows}x{cols} Crossbar / IV Measurement</div>
+      </div>
+      <div class="header-sep"></div>
+      <div class="header-label">
+        <span>Meas. Type</span>
+        <select class="header-select"><option>IV</option><option>Pulse</option><option>Retention</option></select>
+      </div>
+      <div class="header-label">
+        <span>Material</span>
+        <select class="header-select" id="header-material"><option>All</option></select>
+      </div>
+      <div class="header-label">
+        <span>Matrix</span>
+        <select class="header-select"><option>{rows}x{cols}</option></select>
+      </div>
+      <div class="header-label">
+        <span>Generated</span>
+        <select class="header-select"><option>{date_str}</option></select>
+      </div>
+      <div class="header-spacer"></div>
+      <div class="search-box">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="device-search" placeholder="Search device..." oninput="onSearch(this.value)">
+      </div>
+      <button class="icon-btn" onclick="location.reload()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-8.64"/></svg>
+        Refresh
+      </button>
+      <button class="export-btn">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Report
+      </button>
+      <div class="device-badge">
+        <div class="badge-dot"></div>
+        <span class="badge-text" id="badge-count">{aggregate["measured_cells"]} Devices</span>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <div id="content">
+
+      <!-- KPI ROW -->
+      <div class="kpi-row">
+        <div class="kpi-card" style="--kpi-color: var(--cyan)">
+          <div class="kpi-header"><div class="kpi-label">Median V<sub>set</sub></div><div class="kpi-badge">IV Sweep</div></div>
+          <div class="kpi-val" id="kpi-vset">{_fmt_kpi_val(aggregate["median_vset"])} <span style="font-size:13px;opacity:0.7">V</span></div>
+          <div class="kpi-sub">n = {aggregate["n_devices_measured"]}</div>
+        </div>
+        <div class="kpi-card" style="--kpi-color: var(--blue-bright)">
+          <div class="kpi-header"><div class="kpi-label">Median V<sub>reset</sub></div><div class="kpi-badge">IV Sweep</div></div>
+          <div class="kpi-val" id="kpi-vreset">{_fmt_kpi_val(aggregate["median_vreset"])} <span style="font-size:13px;opacity:0.7">V</span></div>
+          <div class="kpi-sub">n = {aggregate["n_devices_measured"]}</div>
+        </div>
+        <div class="kpi-card" style="--kpi-color: var(--purple)">
+          <div class="kpi-header"><div class="kpi-label">ON/OFF Ratio</div><div class="kpi-badge">Median</div></div>
+          <div class="kpi-val" id="kpi-ratio">{_fmt_kpi_ratio(aggregate["median_ratio"])}</div>
+          <div class="kpi-sub">n = {aggregate["n_devices_measured"]}</div>
+        </div>
+        <div class="kpi-card" style="--kpi-color: var(--green)">
+          <div class="kpi-header"><div class="kpi-label">Yield</div><div class="kpi-badge">Switching</div></div>
+          <div class="kpi-val" id="kpi-yield">{aggregate["yield_pct"]} <span style="font-size:13px;opacity:0.7">%</span></div>
+          <div class="kpi-sub">{aggregate["n_devices_with_switching"]} / {aggregate["n_devices_measured"]} devices</div>
+        </div>
+      </div>
+
+      <!-- MAIN ROW: Heatmap + IV Overlay -->
+      <div class="main-row">
+
+        <!-- HEATMAP -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Crossbar Heatmap</div>
+            <div class="panel-badge" id="heatmap-badge">ON/OFF Ratio</div>
+            <div class="panel-spacer"></div>
+            <select class="ctrl-select" id="heatmap-metric">
+              <option>ON/OFF Ratio</option>
+              <option>Vset (V)</option>
+              <option>Vreset (V)</option>
+              <option>Yield (%)</option>
+            </select>
+          </div>
+          <div class="panel-body" style="padding-top:8px">
+            <div id="heatmap-plot" style="height:300px"></div>
+            <div class="hint-text" style="margin-top:4px">Click any cell to explore device details</div>
+            <div class="selected-cell-info" id="selected-cell-label" style="margin-top:2px">Selected: —</div>
+          </div>
+        </div>
+
+        <!-- IV OVERLAY -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Device Explorer</div>
+            <span id="iv-device-badge" class="panel-badge">—</span>
+            <div class="panel-spacer"></div>
+            <div class="tab-bar">
+              <div class="tab active" onclick="switchTab('iv', this)">IV Overlay</div>
+              <div class="tab" onclick="switchTab('params', this)">Extracted Params</div>
+              <div class="tab" onclick="switchTab('evo', this)">Cycle Evo.</div>
+              <div class="tab" onclick="switchTab('raw', this)">Raw Data</div>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <div id="iv-plot" style="height:330px"></div>
+            <div id="tab-placeholder" style="display:none;height:330px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-family:'DM Sans',sans-serif"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- HISTOGRAM ROW -->
+      <div class="hist-row">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">V<sub>set</sub> Distribution</div>
+            <div class="panel-badge">All Devices</div>
+          </div>
+          <div class="panel-body" style="padding:6px">
+            <div id="hist-vset" style="height:170px"></div>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">V<sub>reset</sub> Distribution</div>
+            <div class="panel-badge">All Devices</div>
+          </div>
+          <div class="panel-body" style="padding:6px">
+            <div id="hist-vreset" style="height:170px"></div>
+          </div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">ON/OFF Ratio Distribution</div>
+            <div class="panel-badge">All Devices</div>
+          </div>
+          <div class="panel-body" style="padding:6px">
+            <div id="hist-ratio" style="height:170px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEMPORAL + CONFIDENCE ROW -->
+      <div class="bottom-row">
+        <!-- Cycle Evolution -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Cycle Evolution</div>
+            <span id="cycle-device-badge" class="panel-badge">—</span>
+            <div class="panel-spacer"></div>
+            <select class="ctrl-select">
+              <option>Vset vs Cycle</option>
+              <option>Vreset vs Cycle</option>
+              <option>Ron vs Cycle</option>
+            </select>
+          </div>
+          <div class="panel-body" style="padding:6px">
+            <div id="cycle-plot" style="height:190px"></div>
+            <div style="text-align:center;color:var(--text-dim);font-size:10px;padding:8px;font-family:'DM Sans',sans-serif">Cycle evolution analysis requires endurance cycling data.</div>
+          </div>
+        </div>
+
+        <!-- Extraction Confidence -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Extraction Confidence</div>
+            <div class="panel-badge">All Devices</div>
+          </div>
+          <div class="panel-body" style="padding:6px">
+            <div id="conf-plot" style="height:150px"></div>
+            <div class="conf-stats">
+              <div class="conf-stat-card"><div class="conf-stat-val" style="color:var(--green)" id="conf-valid">{aggregate["n_devices_with_switching"]}</div><div class="conf-stat-key">Valid</div></div>
+              <div class="conf-stat-card"><div class="conf-stat-val" style="color:var(--yellow)">0</div><div class="conf-stat-key">Low Conf.</div></div>
+              <div class="conf-stat-card"><div class="conf-stat-val" style="color:var(--red)">0</div><div class="conf-stat-key">Failed</div></div>
+            </div>
+            <div style="text-align:center;color:var(--text-dim);font-size:10px;padding:4px;font-family:'DM Sans',sans-serif">Extraction confidence analysis will be available in a future update.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- REVIEW TABLE -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title">Low-Confidence Device Review</div>
+          <div class="panel-badge" style="background:rgba(249,115,22,0.1);border-color:rgba(249,115,22,0.3);color:var(--orange)">0 Flagged</div>
+          <div class="panel-spacer"></div>
+          <select class="ctrl-select"><option>All Issues</option><option>Weak Vset</option><option>No Switching</option><option>High Noise</option></select>
+        </div>
+        <div class="panel-body" style="padding:20px 14px">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th>Device ID</th>
+                <th>Issue</th>
+                <th>Confidence</th>
+                <th>Ext. Method</th>
+                <th>Vset est.</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="review-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;font-family:'DM Sans',sans-serif">No devices flagged for review. All confidence scores are acceptable.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script id="iv-data" type="application/json">
+{json.dumps(devices_js, separators=(",", ":"))}
+</script>
+<script id="iv-raw-data" type="application/json">
+{json.dumps(iv_js, separators=(",", ":"))}
+</script>
+<script id="heatmap-data" type="application/json">
+{json.dumps(heatmap, separators=(",", ":"))}
+</script>
+<script id="histogram-data" type="application/json">
+{json.dumps(histograms, separators=(",", ":"))}
+</script>
+<script id="aggregate-data" type="application/json">
+{json.dumps(aggregate, separators=(",", ":"))}
 </script>
 <script>
-{_js_filters()}
+{_JS}
 </script>
 
 </body>
 </html>"""
 
 
-def _build_filter_bar(
-    materials: list[str],
-    sweep_types: list[str],
-    cycle_range: str,
-) -> str:
-    """Build the filter bar with dropdowns for material, sweep type, cycle range."""
-    material_options = '<option value="all">All Materials</option>' + "".join(
-        f'<option value="{m}">{m}</option>' for m in materials
-    )
-    sweep_options = '<option value="all">All Sweeps</option>' + "".join(
-        f'<option value="{st}">{st}</option>' for st in sweep_types
-    )
-
-    return f"""
-<div class="filter-bar" id="filter-bar">
-  <div class="filter-group">
-    <label for="filter-material">Material:</label>
-    <select id="filter-material" onchange="applyFilters()">
-      {material_options}
-    </select>
-  </div>
-  <div class="filter-group">
-    <label for="filter-sweep">Sweep:</label>
-    <select id="filter-sweep" onchange="applyFilters()">
-      {sweep_options}
-    </select>
-  </div>
-  <div class="filter-group">
-    <span class="filter-label">Cycles: {cycle_range}</span>
-  </div>
-  <div class="filter-group">
-    <button class="filter-btn" onclick="expandAllCells()" title="Expand all cell details">+ Expand All</button>
-    <button class="filter-btn" onclick="collapseAllCells()" title="Collapse all cell details">− Collapse All</button>
-    <button class="filter-btn" onclick="resetFilters()" title="Reset all filters">↺ Reset</button>
-  </div>
-</div>"""
+def _fmt_kpi_val(val) -> str:
+    """Format a KPI value for display."""
+    if val is None:
+        return "N/A"
+    return f"{val:.2f}"
 
 
-# ── Matrix row ───────────────────────────────────────────────
+def _fmt_kpi_ratio(val) -> str:
+    """Format ON/OFF ratio for KPI display."""
+    if val is None:
+        return "N/A"
+    if val >= 1000:
+        return f"{val:.1e}"
+    return f"{val:.1f}"
 
 
-def _build_matrices_row(
-    material_groups: dict[str, list[dict]],
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
-) -> str:
-    """Build a horizontal flex row of per-material matrix grids."""
-    matrices = ""
-    for mat_key in sorted(material_groups.keys()):
-        plots = material_groups[mat_key]
-        color = _get_material_color(mat_key)
+# ════════════════════════════════════════════════════════════════
+#  CSS — Full Dark Theme from Mockup
+# ════════════════════════════════════════════════════════════════
 
-        positions = set()
-        for p in plots:
-            positions.add((p["row"], p["col"]))
+_CSS = r"""
+:root {
+  --bg-deep: #050a14;
+  --bg-base: #080e1c;
+  --bg-panel: #0c1525;
+  --bg-card: #0f1a2e;
+  --bg-card2: #111e33;
+  --bg-hover: #162038;
+  --border: rgba(32, 70, 130, 0.35);
+  --border-bright: rgba(0, 200, 255, 0.25);
+  --cyan: #00d4ff;
+  --cyan-dim: rgba(0, 212, 255, 0.6);
+  --cyan-glow: rgba(0, 212, 255, 0.15);
+  --blue: #3b82f6;
+  --blue-bright: #60a5fa;
+  --purple: #a855f7;
+  --purple-dim: rgba(168, 85, 247, 0.6);
+  --teal: #2dd4bf;
+  --orange: #f97316;
+  --red: #ef4444;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --text-primary: #e8f0fe;
+  --text-secondary: #8ba3c7;
+  --text-dim: #4a6a96;
+  --text-mono: #7dd3fc;
+  --sidebar-w: 240px;
+  --header-h: 52px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.2), 0 0 40px rgba(0, 212, 255, 0.08);
+  --glow-blue: 0 0 20px rgba(59, 130, 246, 0.2), 0 0 40px rgba(59, 130, 246, 0.08);
+  --shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
 
-        matrix_html = _build_matrix_table(
-            plots=plots,
-            mat_key=mat_key,
-            positions=positions,
-            min_row=min_row,
-            max_row=max_row,
-            min_col=min_col,
-            max_col=max_col,
-            color=color,
-        )
-        matrices += matrix_html
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: var(--bg-deep); color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; }
 
-    if not matrices:
-        return ""
+/* ── LAYOUT ── */
+#app { display: flex; height: 100vh; overflow: hidden; }
 
-    return f'<div class="matrix-row">{matrices}</div>'
+/* ── SIDEBAR ── */
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  z-index: 10;
+}
+#sidebar::-webkit-scrollbar { width: 4px; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+.sb-logo {
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sb-logo-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.sb-logo-title svg { flex-shrink: 0; }
+.sb-logo-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
 
-def _build_matrix_table(
-    plots: list[dict],
-    mat_key: str,
-    positions: set[tuple[int, int]],
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
-    color: str,
-) -> str:
-    """Build an HTML table for one material's crossbar matrix.
+.sb-section { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.sb-section-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
 
-    Cell links point to ``#cell-r{row}c{col}``. Cell text uses
-    ``_format_number_ranges`` for compact display.
-    """
-    cell_plots: dict[tuple[int, int], list[int]] = {}
-    for p in plots:
-        cell_plots.setdefault((p["row"], p["col"]), []).append(p["order"])
+/* Nav items */
+.nav-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.18s ease;
+  color: var(--text-secondary); font-size: 12.5px; font-weight: 500;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.nav-item.active { background: rgba(0,212,255,0.1); color: var(--cyan); border: 1px solid rgba(0,212,255,0.2); }
+.nav-item svg { opacity: 0.7; }
+.nav-item.active svg { opacity: 1; }
 
-    rows_html = ""
-    for r in range(max_row, min_row - 1, -1):
-        cells = ""
-        for c in range(min_col, max_col + 1):
-            pos = (r, c)
-            orders = cell_plots.get(pos, [])
-            if orders:
-                sorted_orders = sorted(set(orders))
-                range_text = _format_number_ranges(sorted_orders)
-                anchor = f"cell-r{r}c{c}"
-                n_files = len(sorted_orders)
-                label = (
-                    f"#{range_text}"
-                    if n_files == 1
-                    else f"#{range_text} ({n_files})"
-                )
-                cells += (
-                    f'<td class="cell measured" style="background-color: {color};"'
-                    f'><a href="#{anchor}" class="matrix-cell-link"'
-                    f' title="T{r+1}-B{c+1}: {n_files} file(s)">{label}</a></td>'
-                )
-            else:
-                cells += '<td class="cell empty"></td>'
-        t_label = f"T{r + 1}" if r >= 0 else ""
-        rows_html += f"<tr><th>{t_label}</th>{cells}</tr>\n"
+/* Filter controls */
+.filter-group { margin-bottom: 10px; }
+.filter-label { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+.filter-select {
+  width: 100%; background: var(--bg-card2); border: 1px solid var(--border);
+  color: var(--text-primary); padding: 5px 8px; border-radius: 6px;
+  font-size: 11.5px; outline: none; cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%234a6a96' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.filter-select:focus { border-color: var(--cyan-dim); }
 
-    b_labels = "".join(f"<th>B{c + 1}</th>" for c in range(min_col, max_col + 1))
+.range-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-bottom: 3px; }
+input[type=range] {
+  width: 100%; height: 3px; appearance: none;
+  background: linear-gradient(to right, var(--cyan) 0%, var(--cyan) 80%, var(--border) 80%);
+  border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 12px; height: 12px;
+  background: var(--cyan); border-radius: 50%;
+  box-shadow: 0 0 6px var(--cyan);
+}
 
-    return f"""
-<div class="matrix-container">
-<h4>{mat_key}</h4>
-<table class="matrix">
-  <thead>
-    <tr><th></th>{b_labels}</tr>
-  </thead>
-  <tbody>
-    {rows_html}
-  </tbody>
-</table>
-</div>"""
+.toggle-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px; font-size: 11.5px; color: var(--text-secondary);
+}
+.toggle { position: relative; width: 28px; height: 15px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg-card2); border: 1px solid var(--border);
+  border-radius: 15px; transition: 0.2s;
+}
+.toggle-slider:before {
+  content: ''; position: absolute; height: 9px; width: 9px;
+  left: 2px; bottom: 2px; background: var(--text-dim);
+  border-radius: 50%; transition: 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: rgba(0,212,255,0.2); border-color: var(--cyan-dim); }
+.toggle input:checked + .toggle-slider:before { transform: translateX(13px); background: var(--cyan); }
 
+/* Radio group */
+.radio-group { display: flex; flex-direction: column; gap: 4px; }
+.radio-item { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 11.5px; color: var(--text-secondary); padding: 3px 0; }
+.radio-item input[type=radio] { accent-color: var(--cyan); cursor: pointer; }
+.radio-item.active { color: var(--text-primary); }
 
-# ── Cell details ──────────────────────────────────────────────
+/* Device info */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+.info-row { display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px solid rgba(32,70,130,0.2); }
+.info-key { font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.info-val { font-size: 11.5px; font-family: 'JetBrains Mono', monospace; color: var(--text-mono); font-weight: 500; }
 
+/* Review queue */
+.review-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; border-radius: 6px; margin-bottom: 4px;
+  background: var(--bg-card2); border: 1px solid var(--border);
+  cursor: pointer; transition: all 0.18s;
+}
+.review-item:hover { border-color: var(--orange); background: rgba(249,115,22,0.05); }
+.conf-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.review-info { flex: 1; min-width: 0; }
+.review-id { font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text-primary); }
+.review-conf { font-size: 10px; color: var(--text-dim); }
+.review-btn {
+  font-size: 9.5px; padding: 2px 7px; border-radius: 4px;
+  background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3);
+  color: var(--blue-bright); cursor: pointer; font-family: 'DM Sans', sans-serif;
+  transition: all 0.18s; flex-shrink: 0;
+}
+.review-btn:hover { background: rgba(59,130,246,0.3); }
 
-def _build_cell_details(
-    cell_groups: dict[tuple[int, int], list[dict]],
-    min_row: int,
-    max_row: int,
-    min_col: int,
-    max_col: int,
-) -> str:
-    """Build ``<details>`` elements per cell position with Plotly figures."""
-    if not cell_groups:
-        return '<p class="no-data">No data cells found.</p>'
+/* Summary stats */
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(32,70,130,0.15); }
+.stat-key { font-size: 11px; color: var(--text-secondary); }
+.stat-val { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-mono); font-weight: 500; }
+.stat-val.green { color: var(--green); }
+.stat-val.yellow { color: var(--yellow); }
+.stat-val.red { color: var(--red); }
 
-    sections = ""
-    for row in range(min_row, max_row + 1):
-        for col in range(min_col, max_col + 1):
-            cell_plots = cell_groups.get((row, col))
-            if not cell_plots:
-                continue
+/* ── MAIN AREA ── */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
-            materials_in_cell = sorted(set(p["material_key"] for p in cell_plots))
-            orders = sorted(set(p["order"] for p in cell_plots))
-            n_files = len(orders)
-            range_text = _format_number_ranges(orders)
-            n_materials = len(materials_in_cell)
+/* ── HEADER ── */
+#header {
+  height: var(--header-h);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px; flex-shrink: 0; z-index: 9;
+}
+.header-title { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+.header-subtitle { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; white-space: nowrap; margin-left: 2px; }
+.header-sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
 
-            t_label = row + 1
-            b_label = col + 1
-            mat_summary = ", ".join(materials_in_cell)
+.header-select {
+  background: var(--bg-card2); border: 1px solid var(--border);
+  color: var(--text-primary); padding: 4px 22px 4px 8px; border-radius: 6px;
+  font-size: 11.5px; outline: none; cursor: pointer;
+  font-family: 'DM Sans', sans-serif; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M1 1l3 3 3-3' stroke='%234a6a96' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center;
+}
+.header-label { font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; display: flex; flex-direction: column; gap: 2px; }
 
-            if n_materials == 1:
-                summary_line = (
-                    f"T{t_label}-B{b_label}  |  {mat_summary}"
-                    f"  ({n_files} files: #{range_text})"
-                )
-            else:
-                summary_line = (
-                    f"T{t_label}-B{b_label}  ({n_materials} materials, "
-                    f"{n_files} files: #{range_text})"
-                )
+.header-spacer { flex: 1; }
 
-            gallery_parts = ""
-            for mat_key in materials_in_cell:
-                mat_plots = [
-                    p for p in cell_plots if p["material_key"] == mat_key
-                ]
-                gallery_parts += (
-                    f'<h5 class="cell-material-heading">{mat_key}</h5>'
-                )
-                gallery_parts += _build_plot_gallery(mat_plots)
+.search-box {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-card2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; transition: all 0.18s;
+}
+.search-box:focus-within { border-color: var(--cyan-dim); box-shadow: 0 0 0 2px var(--cyan-glow); }
+.search-box input { background: none; border: none; outline: none; color: var(--text-primary); font-size: 11.5px; font-family: 'DM Sans', sans-serif; width: 120px; }
+.search-box input::placeholder { color: var(--text-dim); }
 
-            sections += f"""
-<details class="cell-details" id="cell-r{row}c{col}">
-  <summary>
-    <span class="cell-summary-text">{summary_line}</span>
-  </summary>
-  <div class="cell-body">
-    {gallery_parts}
-  </div>
-</details>"""
+.icon-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  background: var(--bg-card2); border: 1px solid var(--border);
+  color: var(--text-secondary); font-size: 11.5px; transition: all 0.18s;
+  font-family: 'DM Sans', sans-serif;
+}
+.icon-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); background: var(--cyan-glow); }
 
-    return sections
+.export-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(59,130,246,0.15));
+  border: 1px solid rgba(0,212,255,0.35);
+  color: var(--cyan); font-size: 11.5px; font-weight: 600;
+  transition: all 0.18s; font-family: 'DM Sans', sans-serif;
+}
+.export-btn:hover { background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(59,130,246,0.25)); box-shadow: var(--glow-cyan); }
 
+.device-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 20px;
+  background: linear-gradient(135deg, rgba(0,212,255,0.12), rgba(59,130,246,0.12));
+  border: 1px solid rgba(0,212,255,0.3);
+  box-shadow: var(--glow-cyan);
+}
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+.badge-text { font-size: 11.5px; font-weight: 700; color: var(--cyan); font-family: 'JetBrains Mono', monospace; }
 
-def _build_plot_gallery(plots: list[dict]) -> str:
-    """Build a 2-column grid of Plotly figure containers."""
-    items = ""
-    for p in plots:
-        plot_html = p.get("plot_html", "")
-        if not plot_html:
-            plot_html = (
-                f'<div class="plot-error" id="{p["plot_id"]}">'
-                f"No data available</div>"
-            )
+/* ── CONTENT ── */
+#content {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  background: var(--bg-base);
+}
+#content::-webkit-scrollbar { width: 5px; }
+#content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        # Wrap each plot div in a filterable container
-        items += f"""
-  <div class="plot-figure"
-       data-material="{_escape_attr(p['material_key'])}"
-       data-sweep="{p['sweep_type']}"
-       data-cycle="{p['order']}"
-       data-cell="r{p['row']}c{p['col']}">
-    <div class="plotly-wrapper" id="wrapper-{p['plot_id']}">
-      {plot_html}
-    </div>
-    <figcaption>{p['caption']}</figcaption>
-  </div>"""
+/* ── KPI ROW ── */
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.kpi-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  transition: all 0.22s; cursor: default;
+  position: relative; overflow: hidden;
+}
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--kpi-color, var(--cyan)), transparent);
+}
+.kpi-card:hover { border-color: var(--border-bright); transform: translateY(-1px); box-shadow: var(--shadow); }
+.kpi-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); font-weight: 600; }
+.kpi-badge { font-size: 9px; padding: 2px 6px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim); }
+.kpi-val { font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--kpi-color, var(--cyan)); line-height: 1; margin-bottom: 2px; }
+.kpi-sub { font-size: 10px; color: var(--text-dim); }
 
-    return f'<div class="plot-gallery">{items}</div>'
+/* ── PANEL CARDS ── */
+.panel-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.panel-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); background: var(--bg-card2);
+}
+.panel-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+.panel-badge {
+  font-size: 9.5px; padding: 2px 7px; border-radius: 10px;
+  background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.2);
+  color: var(--cyan-dim); font-family: 'JetBrains Mono', monospace;
+}
+.panel-spacer { flex: 1; }
+.panel-body { padding: 12px; }
 
+/* ── MAIN ROW ── */
+.main-row { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; }
 
-def _escape_attr(value: str) -> str:
-    """Escape a string for safe use in HTML attributes."""
-    return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+/* ── HEATMAP PANEL ── */
+.heatmap-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ctrl-select {
+  background: var(--bg-card2); border: 1px solid var(--border);
+  color: var(--text-primary); padding: 3px 18px 3px 7px;
+  border-radius: 5px; font-size: 10.5px; outline: none; cursor: pointer;
+  font-family: 'DM Sans', sans-serif; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4' viewBox='0 0 7 4'%3E%3Cpath d='M1 1l2.5 2 2.5-2' stroke='%234a6a96' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 5px center;
+}
 
+/* ── IV TAB BAR ── */
+.tab-bar { display: flex; gap: 2px; }
+.tab {
+  padding: 5px 12px; border-radius: 5px; cursor: pointer;
+  font-size: 11.5px; color: var(--text-dim); transition: all 0.18s;
+  border: 1px solid transparent;
+}
+.tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.tab.active { background: rgba(0,212,255,0.1); color: var(--cyan); border-color: rgba(0,212,255,0.2); }
 
-# ── JavaScript ─────────────────────────────────────────────────
+/* ── HISTOGRAM ROW ── */
+.hist-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 
+/* ── BOTTOM ROW ── */
+.bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-def _js_click_to_open() -> str:
-    """Return inline JavaScript that opens ``<details>`` on matrix-cell click."""
-    return r"""
-/* ── Click-to-open: matrix cell links → <details> ── */
-(function() {
-  document.querySelectorAll('.matrix-cell-link').forEach(function(link) {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      var id = this.getAttribute('href').substring(1);
-      var details = document.getElementById(id);
-      if (details) {
-        details.open = true;
-        setTimeout(function() {
-          details.scrollIntoView({behavior: 'smooth', block: 'start'});
-        }, 100);
-      }
-    });
-  });
-})();
+/* ── REVIEW TABLE ── */
+.review-table { width: 100%; border-collapse: collapse; }
+.review-table th {
+  text-align: left; font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-dim); padding: 5px 8px;
+  border-bottom: 1px solid var(--border); font-weight: 600;
+}
+.review-table td { padding: 6px 8px; border-bottom: 1px solid rgba(32,70,130,0.15); font-size: 11px; vertical-align: middle; }
+.review-table tr:hover td { background: var(--bg-hover); }
+.conf-bar { display: flex; align-items: center; gap: 6px; }
+.conf-track { flex: 1; height: 3px; background: var(--bg-card2); border-radius: 2px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 2px; }
+.conf-num { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; min-width: 28px; }
+.issue-tag {
+  font-size: 9.5px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.25); color: var(--orange);
+}
+.tbl-btn {
+  font-size: 9.5px; padding: 2px 8px; border-radius: 4px;
+  background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3);
+  color: var(--blue-bright); cursor: pointer; font-family: 'DM Sans', sans-serif;
+  transition: all 0.15s;
+}
+.tbl-btn:hover { background: rgba(59,130,246,0.25); }
+
+/* ── CONFIDENCE PANEL ── */
+.conf-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 8px; }
+.conf-stat-card {
+  background: var(--bg-card2); border-radius: 7px; padding: 7px 10px;
+  border: 1px solid var(--border); text-align: center;
+}
+.conf-stat-val { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+.conf-stat-key { font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+/* Plotly override */
+.js-plotly-plot .plotly .modebar { display: none !important; }
+.js-plotly-plot .plotly .modebar-container { display: none; }
+
+/* ── SCROLLBAR for review list ── */
+.review-scroll { max-height: 180px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* ── UTIL ── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+.text-cyan { color: var(--cyan); }
+.text-dim { color: var(--text-dim); }
+.row-flex { display: flex; gap: 8px; align-items: center; }
+.flex-1 { flex: 1; }
+.hint-text { font-size: 10px; color: var(--cyan); margin-top: 4px; padding: 0 2px; }
+
+/* Quick actions */
+.qa-btn {
+  display: block; width: 100%; text-align: center; padding: 7px;
+  border-radius: 6px; font-size: 11.5px; cursor: pointer; margin-bottom: 5px;
+  background: var(--bg-card2); border: 1px solid var(--border); color: var(--text-secondary);
+  transition: all 0.18s; font-family: 'DM Sans', sans-serif;
+}
+.qa-btn:hover { background: var(--bg-hover); border-color: var(--blue); color: var(--blue-bright); }
+.qa-btn.danger { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.3); color: var(--red); }
+.qa-btn.danger:hover { background: rgba(239,68,68,0.15); }
+
+.selected-cell-info {
+  font-size: 10px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; padding: 0 2px;
+}
 """
 
 
-def _js_filters() -> str:
-    """Return inline JavaScript for the filter bar."""
-    return r"""
-/* ── Filter bar ── */
-function applyFilters() {
-  var material = document.getElementById('filter-material').value;
-  var sweep = document.getElementById('filter-sweep').value;
+# ════════════════════════════════════════════════════════════════
+#  JavaScript — Interactive Elements (with real data)
+# ════════════════════════════════════════════════════════════════
 
-  document.querySelectorAll('.plot-figure').forEach(function(el) {
-    var elMat = el.getAttribute('data-material');
-    var elSweep = el.getAttribute('data-sweep');
+_JS = r"""
+// ══════════════════════════════════════════════════════
+//  DATA LOADING
+// ══════════════════════════════════════════════════════
 
-    var show = true;
-    if (material !== 'all' && elMat !== material) show = false;
-    if (sweep !== 'all' && elSweep !== sweep) show = false;
+var DEVICE_DATA = JSON.parse(document.getElementById('iv-data').textContent);
+var IV_RAW_DATA = JSON.parse(document.getElementById('iv-raw-data').textContent);
+var HEATMAP_META = JSON.parse(document.getElementById('heatmap-data').textContent);
+var HISTOGRAM_META = JSON.parse(document.getElementById('histogram-data').textContent);
+var AGGREGATE = JSON.parse(document.getElementById('aggregate-data').textContent);
 
-    el.style.display = show ? '' : 'none';
-  });
+// Default selected cell — pick the first available device
+var selectedCellId = null;
+var selectedCell = null;
+for (var k in DEVICE_DATA) {
+  if (DEVICE_DATA.hasOwnProperty(k)) {
+    selectedCellId = k;
+    selectedCell = DEVICE_DATA[k];
+    break;
+  }
+}
 
-  // Hide empty material headings and cell details
-  document.querySelectorAll('.cell-details').forEach(function(details) {
-    var visible = details.querySelectorAll('.plot-figure[style*="display: none"]').length;
-    var total = details.querySelectorAll('.plot-figure').length;
-    if (visible === total && total > 0) {
-      details.style.display = 'none';
-    } else {
-      details.style.display = '';
+// ── Plotly theme defaults
+var PAPER_BG = 'rgba(0,0,0,0)';
+var PLOT_BG = 'rgba(0,0,0,0)';
+var FONT_COLOR = '#8ba3c7';
+var GRID_COLOR = 'rgba(32,70,130,0.25)';
+var AXIS_COLOR = 'rgba(32,70,130,0.5)';
+
+var baseLayout = {
+  paper_bgcolor: PAPER_BG, plot_bgcolor: PLOT_BG,
+  font: { color: FONT_COLOR, family: 'JetBrains Mono, monospace', size: 10 },
+  margin: { t: 10, r: 10, b: 30, l: 40 },
+  xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR },
+  yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR },
+  legend: { bgcolor: 'rgba(15,26,46,0.7)', bordercolor: AXIS_COLOR, borderwidth: 1, font: { size: 9 } },
+  hoverlabel: {
+    bgcolor: 'rgba(8,14,28,0.95)', bordercolor: '#00d4ff',
+    font: { family: 'JetBrains Mono, monospace', size: 10, color: '#e8f0fe' }
+  },
+  transition: { duration: 300, easing: 'cubic-in-out' }
+};
+
+var plotConfig = {
+  displayModeBar: false,
+  responsive: true
+};
+
+// ══════════════════════════════════════════════════════
+//  HEATMAP
+// ══════════════════════════════════════════════════════
+
+function getMetricValue(d, metric) {
+  if (!d) return null;
+  if (d.failed) return null;
+  if (metric === 'ON/OFF Ratio') return d.ratio ? Math.log10(d.ratio) : null;
+  if (metric === 'Vset (V)') return d.v_set;
+  if (metric === 'Vreset (V)') return d.v_reset;
+  if (metric === 'Yield (%)') return d.switching ? 100 : 0;
+  return null;
+}
+
+function buildHeatmapData(metric) {
+  var rows = HEATMAP_META.rows;
+  var cols = HEATMAP_META.cols;
+  var matrix = HEATMAP_META.matrix;
+  var z = [], hovertext = [];
+  for (var r = 0; r < rows; r++) {
+    var zr = [], ht = [];
+    for (var c = 0; c < cols; c++) {
+      var d = matrix[r] ? matrix[r][c] : null;
+      var v = getMetricValue(d, metric);
+      zr.push(v);
+      if (!d) {
+        ht.push('<b>R'+(r+1)+'C'+(c+1)+'</b><br>No data');
+      } else {
+        ht.push(
+          '<b>R'+(r+1)+'C'+(c+1)+'</b><br>' +
+          'ON/OFF: ' + (d.ratio ? d.ratio.toExponential(2) : 'N/A') + '<br>' +
+          'Vset: ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A') + '<br>' +
+          'Vreset: ' + (d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A') + '<br>' +
+          'Switching: ' + (d.switching ? 'Yes' : 'No') + '<br>' +
+          'Material: ' + (d.material || 'unknown')
+        );
+      }
+    }
+    z.push(zr);
+    hovertext.push(ht);
+  }
+  return { z: z, hovertext: hovertext };
+}
+
+function drawHeatmap(metric) {
+  var metricName = metric || 'ON/OFF Ratio';
+  document.getElementById('heatmap-badge').textContent = metricName;
+
+  var data = buildHeatmapData(metricName);
+  var rows = HEATMAP_META.rows;
+  var cols = HEATMAP_META.cols;
+  var labels = Array.from({length: Math.max(rows, cols)}, function(_,i){return ''+(i+1)});
+
+  var colorscale = metricName === 'ON/OFF Ratio' ?
+    [[0,'#0a0f1f'],[0.2,'#0d2040'],[0.4,'#0e3d60'],[0.6,'#1a6b7a'],[0.75,'#24a88c'],[0.88,'#6ec96f'],[1.0,'#fde74c']] :
+    [[0,'#0a0f1f'],[0.3,'#1a3a6e'],[0.6,'#2196c8'],[0.8,'#5ed4e6'],[1.0,'#e2f3ff']];
+
+  var selX = selectedCell ? [selectedCell.col + 0.5] : [];
+  var selY = selectedCell ? [selectedCell.row + 0.5] : [];
+
+  Plotly.react('heatmap-plot', [
+    {
+      type: 'heatmap',
+      z: data.z, x: labels.slice(0, cols), y: labels.slice(0, rows),
+      colorscale: colorscale, hovertext: data.hovertext, hovertemplate: '%{hovertext}<extra></extra>',
+      colorbar: {
+        thickness: 10, len: 0.8,
+        tickfont: { size: 9, color: '#8ba3c7', family: 'JetBrains Mono' },
+        outlinecolor: 'rgba(32,70,130,0.4)', outlinewidth: 1,
+        bgcolor: 'rgba(0,0,0,0)',
+        title: { text: metricName === 'ON/OFF Ratio' ? 'log10' : '', font: { size: 9, color: '#8ba3c7' }, side: 'right' }
+      },
+      zsmooth: false,
+      xgap: 1.5, ygap: 1.5
+    },
+    {
+      type: 'scatter', x: selX, y: selY, mode: 'markers',
+      marker: { color: 'rgba(0,212,255,0)', size: 20, line: { color: '#00d4ff', width: 2 } },
+      hoverinfo: 'skip', showlegend: false
+    }
+  ], {
+    paper_bgcolor: PAPER_BG, plot_bgcolor: PLOT_BG,
+    font: { color: FONT_COLOR, family: 'JetBrains Mono, monospace', size: 10 },
+    margin: { t: 8, r: 70, b: 30, l: 30 },
+    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: '', tickfont: { size: 8 }, showgrid: false },
+    yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: '', tickfont: { size: 8 }, showgrid: false, autorange: true },
+    height: 300
+  }, plotConfig);
+
+  var heatmapEl = document.getElementById('heatmap-plot');
+  heatmapEl.removeAllListeners && heatmapEl.removeAllListeners('plotly_click');
+  heatmapEl.on('plotly_click', function(eventData) {
+    if (eventData.points && eventData.points.length > 0 && eventData.points[0].curveNumber === 0) {
+      var p = eventData.points[0];
+      var rIdx = parseInt(p.y) - 1;
+      var cIdx = parseInt(p.x) - 1;
+      var cellId = 'R' + (rIdx+1) + 'C' + (cIdx+1);
+      var d = DEVICE_DATA[cellId];
+      if (d) {
+        selectedCellId = cellId;
+        selectedCell = d;
+        updateSelectedDevice(d);
+        drawHeatmap(metricName);
+      }
     }
   });
-
-  document.querySelectorAll('.cell-material-heading').forEach(function(h5) {
-    var parent = h5.parentElement;
-    var nextEl = h5.nextElementSibling;
-    var hasVisible = false;
-    while (nextEl) {
-      if (nextEl.classList.contains('cell-material-heading')) break;
-      var figs = nextEl.querySelectorAll ? nextEl.querySelectorAll('.plot-figure') : [];
-      for (var i = 0; i < figs.length; i++) {
-        if (figs[i].style.display !== 'none') { hasVisible = true; break; }
-      }
-      if (hasVisible) break;
-      nextEl = nextEl.nextElementSibling;
-    }
-    h5.style.display = hasVisible ? '' : 'none';
-  });
 }
 
-function expandAllCells() {
-  document.querySelectorAll('.cell-details').forEach(function(el) {
-    el.open = true;
-  });
+function updateSelectedDevice(d) {
+  document.getElementById('si-id').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
+  document.getElementById('si-rc').textContent = (d.row+1)+' / '+(d.col+1);
+  document.getElementById('si-mat').textContent = d.material || 'unknown';
+  document.getElementById('si-files').textContent = d.n_files || 0;
+  document.getElementById('si-vset').textContent = d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A';
+  document.getElementById('si-vreset').textContent = d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A';
+  document.getElementById('si-ratio').textContent = d.ratio != null ? d.ratio.toExponential(2) : 'N/A';
+  document.getElementById('si-sw').textContent = d.switching ? 'Yes' : 'No';
+  document.getElementById('iv-device-badge').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
+  if (document.getElementById('cycle-device-badge'))
+    document.getElementById('cycle-device-badge').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
+  document.getElementById('selected-cell-label').textContent =
+    'Selected: R'+(d.row+1)+'C'+(d.col+1)+' · ON/OFF = '+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+
+    ' · Vset = '+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A');
+  drawIVPlot(d);
 }
 
-function collapseAllCells() {
-  document.querySelectorAll('.cell-details').forEach(function(el) {
-    el.open = false;
-  });
-}
+// ── Heatmap metric selector
+document.getElementById('heatmap-metric').addEventListener('change', function() {
+  drawHeatmap(this.value);
+});
 
-function resetFilters() {
-  document.getElementById('filter-material').value = 'all';
-  document.getElementById('filter-sweep').value = 'all';
-  applyFilters();
-}
-
-/* ── Auto-resize Plotly plots on details open ── */
-(function() {
-  document.querySelectorAll('.cell-details').forEach(function(details) {
-    details.addEventListener('toggle', function() {
-      if (details.open) {
-        setTimeout(function() {
-          var wrappers = details.querySelectorAll('.plotly-wrapper');
-          wrappers.forEach(function(w) {
-            var gd = w.firstElementChild;
-            if (gd && gd.id && typeof Plotly !== 'undefined') {
-              try { Plotly.Plots.resize(gd); } catch(e) {}
-            }
-          });
-        }, 150);
-      }
+// ── Colormap radio buttons
+document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(radio) {
+  radio.addEventListener('change', function() {
+    document.querySelectorAll('#colormap-radio .radio-item').forEach(function(item) {
+      item.classList.remove('active');
     });
+    this.parentElement.classList.add('active');
+    var metricMap = {
+      'ratio': 'ON/OFF Ratio',
+      'vset': 'Vset (V)',
+      'vreset': 'Vreset (V)',
+      'yield': 'Yield (%)'
+    };
+    var metric = metricMap[this.value] || 'ON/OFF Ratio';
+    document.getElementById('heatmap-metric').value = metric;
+    drawHeatmap(metric);
   });
-})();
-"""
+});
 
+// ══════════════════════════════════════════════════════
+//  IV OVERLAY PLOT (Real Data)
+// ══════════════════════════════════════════════════════
 
-# ── CSS ───────────────────────────────────────────────────────
+var currentTab = 'iv';
 
+function drawIVPlot(deviceInfo) {
+  var cellId = 'R'+(deviceInfo.row+1)+'C'+(deviceInfo.col+1);
+  var files = IV_RAW_DATA[cellId] || [];
+  var vset = deviceInfo.v_set;
+  var vreset = deviceInfo.v_reset;
 
-def css() -> str:
-    """Return the CSS stylesheet for the Plotly dashboard."""
-    return """
-/* ── Reset & Base ─────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: #f5f5f5;
-  color: #222;
-  line-height: 1.5;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
-}
+  if (files.length === 0) {
+    Plotly.react('iv-plot', [], {
+      ...baseLayout, height: 330,
+      annotations: [{ text: 'No IV data available', showarrow: false, font: {size:14, color:'#4a6a96'}, xref:'paper',yref:'paper',x:0.5,y:0.5 }]
+    }, plotConfig);
+    return;
+  }
 
-/* ── Header ───────────────────────────────── */
-header {
-  background: #fff;
-  border-radius: 8px;
-  padding: 24px 32px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-header h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
-header p  { color: #666; font-size: 0.9rem; }
+  var traces = [];
+  var colors = [
+    'rgba(0,180,220,0.7)',
+    'rgba(220,80,80,0.7)',
+    'rgba(100,200,120,0.7)',
+    'rgba(200,180,60,0.7)',
+    'rgba(160,100,220,0.7)',
+    'rgba(100,180,200,0.7)',
+    'rgba(220,140,60,0.7)',
+    'rgba(140,200,160,0.7)',
+  ];
 
-/* ── Filter bar ────────────────────────────── */
-.filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: center;
-  background: #fff;
-  border-radius: 8px;
-  padding: 12px 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.filter-group label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #555;
-}
-.filter-group select {
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  background: #fff;
-  cursor: pointer;
-}
-.filter-label {
-  font-size: 0.85rem;
-  color: #888;
-  font-weight: 500;
-}
-.filter-btn {
-  padding: 4px 12px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #f8f8f8;
-  font-size: 0.78rem;
-  color: #555;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.filter-btn:hover {
-  background: #e8e8e8;
-}
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var color = colors[i % colors.length];
+    // Separate positive and negative voltage for log scale
+    var posV = [], posI = [], negV = [], negI = [];
+    for (var j = 0; j < f.voltage.length; j++) {
+      var v = f.voltage[j];
+      var absI = Math.abs(f.current[j]);
+      if (absI < 1e-14) continue;
+      if (v >= 0) { posV.push(v); posI.push(absI); }
+      else { negV.push(v); negI.push(absI); }
+    }
+    if (posV.length > 0) {
+      traces.push({
+        x: posV, y: posI, type: 'scatter', mode: 'lines',
+        line: { color: color, width: 1.0 },
+        name: f.label || ('#'+ (i+1)),
+        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+      });
+    }
+    if (negV.length > 0) {
+      traces.push({
+        x: negV, y: negI, type: 'scatter', mode: 'lines',
+        line: { color: color, width: 1.0, dash: 'dash' },
+        showlegend: false,
+        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+      });
+    }
+  }
 
-/* ── Matrix row (all materials, top of page) ── */
-.matrix-row {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 16px;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  margin-bottom: 8px;
-}
-.matrix-row .matrix-container {
-  flex: 0 0 auto;
-  min-width: 200px;
-  max-width: 320px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
+  // Vset / Vreset markers
+  if (vset != null) {
+    traces.push({
+      x: [vset], y: [1e-3], type: 'scatter', mode: 'markers+text',
+      marker: { color: '#ef4444', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
+      text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444' },
+      name: 'Vset', showlegend: true,
+      hovertemplate: 'Vset = ' + vset.toFixed(3) + ' V<extra></extra>'
+    });
+  }
+  if (vreset != null) {
+    var vresetAbs = Math.abs(vreset);
+    var vresetSign = vreset < 0 ? vreset : -vreset;
+    traces.push({
+      x: [vresetSign], y: [1e-3], type: 'scatter', mode: 'markers+text',
+      marker: { color: '#3b82f6', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
+      text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6' },
+      name: 'Vreset', showlegend: true,
+      hovertemplate: 'Vreset = ' + vreset.toFixed(3) + ' V<extra></extra>'
+    });
+  }
 
-/* ── Per-cell <details> ─────────────────────── */
-.cell-details {
-  background: #fff;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  padding: 16px 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  border-left: 4px solid #aaa;
-}
-.cell-details summary {
-  cursor: pointer;
-  font-size: 1.05rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  user-select: none;
-  color: #333;
-}
-.cell-details summary::-webkit-details-marker { display: none; }
-.cell-details summary::before {
-  content: "▸";
-  display: inline-block;
-  width: 16px;
-  transition: transform 0.2s;
-  font-size: 0.8rem;
-  color: #888;
-}
-.cell-details[open] summary::before {
-  transform: rotate(90deg);
-}
-.cell-summary-text { flex: 1; }
-.cell-body { margin-top: 16px; }
-
-/* ── Material sub-headings inside cell details ── */
-.cell-material-heading {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #555;
-  margin: 12px 0 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #eee;
-}
-.cell-material-heading:first-child { margin-top: 0; }
-
-/* ── Matrix table ──────────────────────────── */
-.matrix-container { margin-bottom: 0; overflow-x: auto; }
-.matrix-container h4 { font-size: 0.95rem; margin-bottom: 8px; color: #555; }
-.matrix {
-  border-collapse: collapse;
-  font-size: 0.85rem;
-  width: 100%;
-}
-.matrix th, .matrix td {
-  border: 1px solid #ddd;
-  padding: 5px 8px;
-  text-align: center;
-  min-width: 32px;
-  height: 30px;
-}
-.matrix th {
-  background: #eee;
-  font-weight: 600;
-  color: #444;
-}
-.matrix td.empty {
-  background: #fafafa;
-  color: #ccc;
-}
-.matrix td.measured {
-  font-weight: 600;
-}
-.matrix td.measured a {
-  color: #222;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 0.78rem;
-}
-.matrix td.measured a:hover {
-  text-decoration: underline;
+  Plotly.react('iv-plot', traces, {
+    ...baseLayout,
+    height: 330,
+    margin: { t: 10, r: 140, b: 40, l: 60 },
+    xaxis: {
+      ...baseLayout.xaxis, title: { text: 'Voltage (V)', font: { size: 10 } },
+      zeroline: true, zerolinecolor: 'rgba(100,150,200,0.3)',
+      tickfont: { size: 9 }
+    },
+    yaxis: {
+      ...baseLayout.yaxis, title: { text: '|Current| (A)', font: { size: 10 } },
+      type: 'log', tickfont: { size: 9 }
+    },
+    legend: {
+      ...baseLayout.legend, x: 1.01, y: 0.95, xanchor: 'left',
+      bgcolor: 'rgba(8,14,28,0.7)', font: { size: 9 }
+    },
+    showlegend: true
+  }, plotConfig);
 }
 
-/* ── Plot gallery ──────────────────────────── */
-.plot-gallery {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 8px;
-}
-@media (max-width: 900px) {
-  .plot-gallery { grid-template-columns: 1fr; }
-}
-.plot-figure {
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 10px;
-  text-align: center;
-}
-.plot-figure .plotly-wrapper {
-  width: 100%;
-  min-height: 300px;
-}
-.plot-figure .plotly-wrapper .js-plotly-plot,
-.plot-figure .plotly-wrapper .plot-container {
-  width: 100% !important;
-}
-.plot-figure figcaption {
-  margin-top: 8px;
-  font-size: 0.78rem;
-  color: #555;
-  font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
-  word-break: break-all;
+// ══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ══════════════════════════════════════════════════════
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  el.classList.add('active');
+  currentTab = tab;
+  var ivPlot = document.getElementById('iv-plot');
+  var placeholder = document.getElementById('tab-placeholder');
+
+  if (tab === 'iv') {
+    ivPlot.style.display = '';
+    placeholder.style.display = 'none';
+    if (selectedCell) drawIVPlot(selectedCell);
+  } else if (tab === 'params') {
+    ivPlot.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Extracted parameters view will be available in a future update.';
+  } else if (tab === 'evo') {
+    ivPlot.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Cycle evolution analysis requires endurance cycling data.';
+  } else if (tab === 'raw') {
+    ivPlot.style.display = 'none';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Raw data table view will be available in a future update.';
+  }
 }
 
-/* ── Plot error fallback ────────────────────── */
-.plot-error {
-  padding: 20px;
-  color: #c00;
-  font-size: 0.85rem;
-  background: #fff5f5;
-  border: 1px solid #fcc;
-  border-radius: 4px;
-  min-height: 150px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+// ══════════════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════════════
+
+function onSearch(query) {
+  query = query.trim().toUpperCase();
+  if (!query) {
+    // Reset
+    return;
+  }
+  // Try to find device by ID
+  var d = DEVICE_DATA[query];
+  if (!d) {
+    // Try partial match
+    for (var k in DEVICE_DATA) {
+      if (DEVICE_DATA.hasOwnProperty(k) && k.toUpperCase().indexOf(query) >= 0) {
+        d = DEVICE_DATA[k];
+        break;
+      }
+    }
+  }
+  if (d) {
+    selectedCellId = 'R'+(d.row+1)+'C'+(d.col+1);
+    selectedCell = d;
+    updateSelectedDevice(d);
+    drawHeatmap(document.getElementById('heatmap-metric').value);
+  }
 }
 
-/* ── No data fallback ───────────────────────── */
-.no-data {
-  text-align: center;
-  color: #999;
-  font-size: 1rem;
-  padding: 40px;
+// ══════════════════════════════════════════════════════
+//  HISTOGRAMS
+// ══════════════════════════════════════════════════════
+
+function drawHistograms() {
+  var histBase = {
+    ...baseLayout,
+    margin: { t: 8, r: 8, b: 32, l: 36 },
+    bargap: 0.06
+  };
+
+  // Collect all values from DEVICE_DATA
+  var vsetVals = [], vresetVals = [], ratioVals = [];
+  for (var k in DEVICE_DATA) {
+    if (!DEVICE_DATA.hasOwnProperty(k)) continue;
+    var d = DEVICE_DATA[k];
+    if (d.v_set != null) vsetVals.push(d.v_set);
+    if (d.v_reset != null) vresetVals.push(Math.abs(d.v_reset));
+    if (d.ratio != null && d.ratio > 0) ratioVals.push(d.ratio);
+  }
+
+  // Vset histogram
+  if (vsetVals.length > 0) {
+    var vsetMean = vsetVals.reduce(function(a,b){return a+b},0)/vsetVals.length;
+    var vsetStd = Math.sqrt(vsetVals.map(function(v){return (v-vsetMean)*(v-vsetMean)}).reduce(function(a,b){return a+b},0)/vsetVals.length);
+    var nbins = Math.min(30, Math.max(5, Math.floor(vsetVals.length / 3)));
+    Plotly.react('hist-vset', [{
+      x: vsetVals, type: 'histogram', nbinsx: nbins,
+      marker: { color: 'rgba(0,180,220,0.7)', line: { color: 'rgba(0,212,255,0.3)', width: 0.5 } },
+      hovertemplate: 'Vset: %{x:.2f} V<br>Count: %{y}<extra></extra>'
+    }, {
+      x: [vsetMean, vsetMean], y: [0, Math.max(1, vsetVals.length/5)], type: 'scatter', mode: 'lines',
+      line: { color: '#00d4ff', width: 1.5, dash: 'dash' }, showlegend: false, hoverinfo: 'skip'
+    }], {
+      ...histBase,
+      xaxis: { ...histBase.xaxis, title: { text: 'Vset (V)', font:{size:10} }, tickfont:{size:9} },
+      yaxis: { ...histBase.yaxis, title: { text: 'Count', font:{size:10} }, tickfont:{size:9} },
+      annotations: [{
+        x: 0.05, y: 0.95, xref:'paper', yref:'paper', showarrow: false,
+        text: String.fromCharCode(0x03BC)+' = '+vsetMean.toFixed(2)+' V<br>'+
+              String.fromCharCode(0x03C3)+' = '+vsetStd.toFixed(2)+' V',
+        font: { size: 9, color: '#7dd3fc' }, align: 'left',
+        bgcolor: 'rgba(8,14,28,0.6)', bordercolor: 'rgba(32,70,130,0.4)', borderwidth:1, borderpad:4
+      }]
+    }, plotConfig);
+  }
+
+  // Vreset histogram
+  if (vresetVals.length > 0) {
+    var vresetMean = vresetVals.reduce(function(a,b){return a+b},0)/vresetVals.length;
+    var vresetStd = Math.sqrt(vresetVals.map(function(v){return (v-vresetMean)*(v-vresetMean)}).reduce(function(a,b){return a+b},0)/vresetVals.length);
+    var nbins = Math.min(30, Math.max(5, Math.floor(vresetVals.length / 3)));
+    Plotly.react('hist-vreset', [{
+      x: vresetVals, type: 'histogram', nbinsx: nbins,
+      marker: { color: 'rgba(220,80,80,0.7)', line: { color: 'rgba(239,100,100,0.3)', width: 0.5 } },
+      hovertemplate: '|Vreset|: %{x:.2f} V<br>Count: %{y}<extra></extra>'
+    }, {
+      x: [vresetMean, vresetMean], y: [0, Math.max(1, vresetVals.length/5)], type: 'scatter', mode: 'lines',
+      line: { color: '#ef4444', width: 1.5, dash: 'dash' }, showlegend: false, hoverinfo: 'skip'
+    }], {
+      ...histBase,
+      xaxis: { ...histBase.xaxis, title: { text: '|Vreset| (V)', font:{size:10} }, tickfont:{size:9}, autorange: true },
+      yaxis: { ...histBase.yaxis, title: { text: 'Count', font:{size:10} }, tickfont:{size:9} },
+      annotations: [{
+        x: 0.05, y: 0.95, xref:'paper', yref:'paper', showarrow: false,
+        text: String.fromCharCode(0x03BC)+' = '+vresetMean.toFixed(2)+' V<br>'+
+              String.fromCharCode(0x03C3)+' = '+vresetStd.toFixed(2)+' V',
+        font: { size: 9, color: '#fca5a5' }, align: 'left',
+        bgcolor: 'rgba(8,14,28,0.6)', bordercolor: 'rgba(32,70,130,0.4)', borderwidth:1, borderpad:4
+      }]
+    }, plotConfig);
+  }
+
+  // ON/OFF Ratio histogram (log)
+  if (ratioVals.length > 0) {
+    var logRatios = ratioVals.map(function(v){return Math.log10(v)});
+    var logMean = logRatios.reduce(function(a,b){return a+b},0)/logRatios.length;
+    var logStd = Math.sqrt(logRatios.map(function(v){return (v-logMean)*(v-logMean)}).reduce(function(a,b){return a+b},0)/logRatios.length);
+    var nbins = Math.min(25, Math.max(5, Math.floor(ratioVals.length / 3)));
+    Plotly.react('hist-ratio', [{
+      x: logRatios, type: 'histogram', nbinsx: nbins,
+      marker: { color: 'rgba(100,200,120,0.7)', line: { color: 'rgba(34,197,94,0.3)', width: 0.5 } },
+      hovertemplate: '10^%{x:.1f}<br>Count: %{y}<extra></extra>'
+    }, {
+      x: [logMean, logMean], y: [0, Math.max(1, ratioVals.length/4)], type: 'scatter', mode: 'lines',
+      line: { color: '#22c55e', width: 1.5, dash: 'dash' }, showlegend: false, hoverinfo: 'skip'
+    }], {
+      ...histBase,
+      xaxis: {
+        ...histBase.xaxis, title: { text: 'log10(ON/OFF)', font:{size:10} }, tickfont:{size:9}
+      },
+      yaxis: { ...histBase.yaxis, title: { text: 'Count', font:{size:10} }, tickfont:{size:9} },
+      annotations: [{
+        x: 0.05, y: 0.95, xref:'paper', yref:'paper', showarrow: false,
+        text: String.fromCharCode(0x03BC)+' = '+Math.pow(10, logMean).toExponential(2),
+        font: { size: 9, color: '#86efac' }, align: 'left',
+        bgcolor: 'rgba(8,14,28,0.6)', bordercolor: 'rgba(32,70,130,0.4)', borderwidth:1, borderpad:4
+      }]
+    }, plotConfig);
+  }
 }
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+
+function init() {
+  // Populate material filters
+  var materials = {};
+  for (var k in DEVICE_DATA) {
+    if (!DEVICE_DATA.hasOwnProperty(k)) continue;
+    var m = DEVICE_DATA[k].material;
+    if (m) materials[m] = true;
+  }
+  var matOptions = '<option>All</option>';
+  for (var m in materials) {
+    if (materials.hasOwnProperty(m)) matOptions += '<option>'+m+'</option>';
+  }
+  var filterMat = document.getElementById('filter-material');
+  var headerMat = document.getElementById('header-material');
+  if (filterMat) filterMat.innerHTML = matOptions;
+  if (headerMat) headerMat.innerHTML = matOptions;
+
+  drawHeatmap();
+  if (selectedCell) {
+    updateSelectedDevice(selectedCell);
+  }
+  drawHistograms();
+
+  // Placeholder for Cycle Evolution
+  Plotly.react('cycle-plot', [], {
+    ...baseLayout, height: 190,
+    annotations: [{ text: 'Cycle evolution analysis requires endurance cycling data.', showarrow: false, font: {size:11, color:'#4a6a96'}, xref:'paper',yref:'paper',x:0.5,y:0.5 }]
+  }, plotConfig);
+
+  // Placeholder for confidence plot
+  Plotly.react('conf-plot', [], {
+    ...baseLayout, height: 150,
+    annotations: [{ text: 'Confidence scores calculated from switching detection quality.', showarrow: false, font: {size:11, color:'#4a6a96'}, xref:'paper',yref:'paper',x:0.5,y:0.5 }]
+  }, plotConfig);
+}
+
+window.addEventListener('load', init);
+window.addEventListener('resize', function() {
+  ['heatmap-plot','iv-plot','hist-vset','hist-vreset','hist-ratio','cycle-plot','conf-plot'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { try { Plotly.Plots.resize(el); } catch(e) {} }
+  });
+});
 """

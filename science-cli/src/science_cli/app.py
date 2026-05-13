@@ -144,19 +144,7 @@ def _run_repl():
 
 def _build_context():
     from prompt_toolkit.formatted_text import FormattedText
-    sess = load_session()
-    proj = sess.get("last_project", "")
-    proto = sess.get("last_protocol", "")
-
-    parts = [("", "("), ("bold", "sci")]
-    if proj:
-        parts.append(("", " "))
-        parts.append(("ansibrightgreen bold", proj))
-    if proto:
-        parts.append(("", " "))
-        parts.append(("ansibrightcyan bold", proto))
-    parts.append(("", ") "))
-    return FormattedText(parts)
+    return FormattedText([("bold #55dd77", "sci> ")])
 
 
 def _show_banner():

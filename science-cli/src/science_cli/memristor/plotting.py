@@ -46,6 +46,12 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
 
+    # ── Auto-detect LabVIEW Measurement (.lvm) files ──
+    with open(path, newline="") as f:
+        first_line = f.readline()
+    if "LabVIEW Measurement" in first_line:
+        return read_iv_lvm(path)
+
     # ── Read header and detect columns ──
     with open(path, newline="") as f:
         reader = csv.reader(f)
@@ -159,6 +165,157 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         "time": time_arr,
     }
     return voltage, current, info
+
+
+def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Read voltage and current from a LabVIEW Measurement (.lvm) file.
+
+    Parses the two-block header delimited by ``***End_of_Header***`` markers,
+    extracts metadata (date, time, operator, channels, samples), and reads
+    tab-separated numeric data with positional column mapping:
+
+        - col0: X_Value (row counter, skipped)
+        - col1: Untitled (Voltage)
+        - col2: Untitled 1 (Current)
+        - col3: Untitled 2 (Timestamp)
+        - col4: Comment (ignored)
+
+    Args:
+        filepath: Path to the .lvm file.
+
+    Returns:
+        (voltage, current, metadata_dict) where ``metadata_dict`` includes
+        ``source``, ``date``, ``time``, ``operator``, ``channels``,
+        ``samples``, ``voltage_col``, ``current_col``, ``n_points``.
+
+    Raises:
+        FileNotFoundError: If the file doesn't exist.
+        ValueError: If the file is not an LVM file, has fewer than 3 data
+            columns, or contains no valid numeric data.
+    """
+
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    with open(path, newline="") as f:
+        # ── LVM signature check ──
+        first_line = f.readline()
+        if "LabVIEW Measurement" not in first_line:
+            raise ValueError(
+                f"Not a LabVIEW Measurement file: {path.name}"
+            )
+
+        # ── Read entire file into lines for multi-pass parsing ──
+        raw = f.read()
+        lines = raw.splitlines()
+
+    # ── Locate header-block delimiters ──
+    eoh_positions: list[int] = []
+    for idx, line in enumerate(lines):
+        if line.strip() == "***End_of_Header***":
+            eoh_positions.append(idx)
+
+    if len(eoh_positions) < 2:
+        raise ValueError(
+            f"LVM file {path.name} missing required ***End_of_Header*** "
+            f"delimiters (found {len(eoh_positions)})"
+        )
+
+    first_eoh = eoh_positions[0]
+    second_eoh = eoh_positions[1]
+
+    # ── Block 1: General metadata (before first End_of_Header) ──
+    block1_lines = lines[:first_eoh]
+    metadata: dict = {"source": "LabVIEW Measurement"}
+    for raw_line in block1_lines:
+        row = raw_line.split("\t")
+        if len(row) >= 2:
+            key = row[0].strip()
+            val = row[1].strip()
+            if key and val:
+                metadata[key] = val
+
+    # ── Block 2: Channel info (between first and second End_of_Header) ──
+    block2_lines = lines[first_eoh + 1 : second_eoh]
+    for raw_line in block2_lines:
+        row = raw_line.split("\t")
+        if len(row) >= 2:
+            key = row[0].strip()
+            val = row[1].strip()
+            if key and val:
+                metadata[key] = val
+
+    # ── Column header line (first non-blank line after second End_of_Header) ──
+    data_start = second_eoh + 1
+    # Skip blank lines between End_of_Header marker and column headers
+    while data_start < len(lines) and not lines[data_start].strip():
+        data_start += 1
+    if data_start >= len(lines):
+        raise ValueError(f"LVM file {path.name} has no column header after headers")
+
+    col_header_line = lines[data_start]
+    col_headers = [c.strip() for c in col_header_line.split("\t")]
+
+    if len(col_headers) < 3:
+        raise ValueError(
+            f"LVM file {path.name} has fewer than 3 data columns "
+            f"(found {len(col_headers)})"
+        )
+
+    # ── Read tab-separated numeric data rows ──
+    numeric_rows: list[list[float]] = []
+
+    for raw_line in lines[data_start + 1 :]:
+        stripped_line = raw_line.strip()
+        if not stripped_line:
+            continue
+
+        fields = [s.strip() for s in raw_line.split("\t")]
+
+        # Require at least voltage + current columns (col1, col2)
+        if len(fields) < 3:
+            continue
+
+        try:
+            # Only parse voltage (col1) and current (col2) as numeric;
+            # col0 (X_Value / row counter) and col3 (timestamp) may be
+            # non-numeric strings.
+            _ = [float(fields[1]), float(fields[2])]  # validate parseable
+            numeric_rows.append([float(fields[1]), float(fields[2])])
+        except (ValueError, IndexError):
+            continue
+
+    if not numeric_rows:
+        raise ValueError(
+            f"No valid numeric data found in LVM file {path.name}"
+        )
+
+    data = np.array(numeric_rows)
+    voltage = data[:, 0]   # col1 → Untitled (Voltage)
+    current = data[:, 1]   # col2 → Untitled 1 (Current)
+
+    # Remove NaN
+    mask = ~(np.isnan(voltage) | np.isnan(current))
+    voltage = voltage[mask]
+    current = current[mask]
+
+    # ── Build result metadata map ──
+    lvm_info = {
+        "source": "LabVIEW Measurement",
+        "date": metadata.get("Date", ""),
+        "time": metadata.get("Time", ""),
+        "operator": metadata.get("Operator", ""),
+        "channels": metadata.get("Channels", ""),
+        "samples": metadata.get("Samples", ""),
+        "voltage_col": col_headers[1] if len(col_headers) > 1 else "col1",
+        "current_col": col_headers[2] if len(col_headers) > 2 else "col2",
+        "n_points": len(voltage),
+        "skipped_lines": 0,
+        "clarius_metadata": {},
+        "time_col": None,
+    }
+    return voltage, current, lvm_info
 
 
 def _parse_clarius_metadata(rows: list[list[str]]) -> dict:

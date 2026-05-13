@@ -34,7 +34,6 @@ from science_cli.core.session import (
 )
 from science_cli.tui.theme import CSS_VARIABLES, MATCHA_COLORS, RICH_STYLES
 from science_cli.tui.banner import SCIBanner
-from science_cli.tui.header import TuiHeader
 from science_cli.tui.output_panel import OutputPanel
 from science_cli.tui.status_bar import StatusBar
 from science_cli.tui.input_bar import CommandInput, SLASH_COMMANDS
@@ -222,9 +221,8 @@ class SCIApp(App):
     ]
 
     def compose(self) -> ComposeResult:
-        """Build the TUI layout — banner, header, output, input."""
+        """Build the TUI layout — banner, output, input."""
         yield SCIBanner()
-        yield TuiHeader()
         yield OutputPanel()
         yield StatusBar(self)
         yield Static(id="sep-input-top")
@@ -294,7 +292,6 @@ class SCIApp(App):
 
         # Get references to UI components.
         output = self.query_one(OutputPanel)
-        header = self.query_one(TuiHeader)
         input_bar = self.query_one(CommandInput)
         input_bar.clear()
 
@@ -346,25 +343,12 @@ class SCIApp(App):
                 if captured.strip():
                     output.write(RichText.from_ansi(captured))
 
-                sess = load_session()
-                new_project = sess.get("last_project", "")
-                new_protocol = sess.get("last_protocol", "")
-                if new_project != header.context_project or new_protocol != header.context_protocol:
-                    header.set_context(project=new_project, protocol=new_protocol)
                 self.refresh_status_bar()
                 return
 
             # Normal (non-fzf) command: capture output to string.
             captured = _capture_handler_output(cmd_name, cmd_args)
             output.write_command_output(line, captured)
-
-            # After command execution, refresh session state
-            sess = load_session()
-            new_project = sess.get("last_project", "")
-            new_protocol = sess.get("last_protocol", "")
-
-            if new_project != header.context_project or new_protocol != header.context_protocol:
-                header.set_context(project=new_project, protocol=new_protocol)
 
             self.refresh_status_bar()
 

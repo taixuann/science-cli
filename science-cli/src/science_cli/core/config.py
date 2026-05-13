@@ -51,12 +51,28 @@ _DEFAULT_TECHNIQUE_PATTERNS: dict[str, list[str]] = {
     "ec-eis": [r"\.mpt$", r"_EIS\.", r"\.eis$", r"_impedance", r"\.z"],
     "ec-lsv": [r"_LSV\.", r"\.lsv$"],
     "ec-swv": [r"_SWV\.", r"\.swv$"],
-    "iv-sweep": [r"_IV\.", r"\.iv$", r"iv_", r"iv-", r"_sweep", r"sweep_"],
+    "iv-sweep": [r"_IV\.", r"\.iv$", r"iv_", r"iv-", r"_sweep", r"sweep_", r"\.lvm$"],
     "iv-breakdown": [r"_bd\.", r"breakdown_", r"_Vbd", r"bd_"],
     "iv-leakage": [r"_leak", r"leakage_", r"leak_"],
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
     "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
     "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
+}
+
+_DEFAULT_TECHNIQUE_DEVICES: dict[str, dict[str, dict]] = {
+    "iv-sweep": {
+        "keithley-2400": {
+            "delimiter": "\t",
+            "decimal": ".",
+            "header_lines": 23,
+            "encoding": "utf-8",
+            "columns": {
+                "voltage": "Untitled",
+                "current": "Untitled 1",
+                "time": "Untitled 2",
+            },
+        },
+    },
 }
 
 _DEFAULT_PROJECTS_ROOT = str(Path.home() / "workspace" / "projects" / "active_projects")
@@ -199,7 +215,11 @@ def get_device_config(
 
     device_cfg = devices.get(device_name, None)
     if device_cfg is None:
-        return None
+        # Fallback to hardcoded built-in device configs
+        builtin_devices = _DEFAULT_TECHNIQUE_DEVICES.get(technique, {})
+        device_cfg = builtin_devices.get(device_name, None)
+        if device_cfg is None:
+            return None
 
     # Merge with defaults so callers don't need to check every key
     merged = _DEFAULT_DEVICE.copy()
