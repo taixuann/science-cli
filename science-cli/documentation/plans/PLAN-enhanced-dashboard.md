@@ -189,6 +189,15 @@ def analyze_all_devices(config, results_dir) -> dict:
 
 This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 
+## Sprint 2 Results
+
+- **Items 1-5 implemented and committed**: All specification subsections A-E have been implemented and committed to the `mysci-tui_update` branch.
+- **Test status**: 16/16 tests passing, GREEN status.
+- **Open items for discussion**: 
+  - Item 3: config unification
+  - Item 6: YAML routing  
+  - Item 7: distribution
+
 ## Files to Modify
 
 | File | Action | Reason |

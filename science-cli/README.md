@@ -137,11 +137,35 @@ See extension READMEs for their analysis functions.
 
 ## CLI Commands
 
+Commands are organized into four groups:
+
+**Group 1 (Basic Operations):**
 ```bash
-s-cli parse   <file>               # Parse and display data summary
-s-cli analyze <file>               # Run analysis, print results
-s-cli plot    <file> [options]     # Plot with themes, output PDF
-s-cli config  get/set <key> <val>  # Manage config (theme, etc.)
+s-cli add       <target>           # Add protocol/metadata/data/project
+s-cli delete    <target>           # Delete protocol/metadata
+s-cli edit      <target>           # Edit protocol/metadata
+s-cli ls        [options]          # List projects/protocols/steps/files
+```
+
+**Group 2 (Context Management):**
+```bash
+s-cli open      <target>           # Open project/protocol/step
+s-cli close                 # Close context with auto-save
+```
+
+**Group 3 (Analysis & Configuration):**
+```bash
+s-cli plot      <file> [options]   # Plot with themes, output PDF
+s-cli analyze   <file>             # Run analysis, print results
+s-cli config    get/set <key> <val> # Manage config (theme, etc.)
+s-cli status            # Show current context status
+s-cli results           # List saved results by protocol and step
+```
+
+**Group 4 (Extensions & Info):**
+```bash
+s-cli ext       <name> [subcommand] # Unified extension interface
+s-cli techniques          # List available techniques and usage guide
 ```
 
 ## Protocol System — Sweep Metadata

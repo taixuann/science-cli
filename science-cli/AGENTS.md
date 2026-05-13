@@ -229,28 +229,28 @@ science-cli/
     ├── app.py                         ← CLI entry point (run_cli + REPL)
     ├── config.py                      ← Legacy config (theme, projects_root)
     │
-    ├── cli/                           ← CLI dispatch layer
-    │   ├── commands/                  ← One module per command
-    │   │   ├── __init__.py            ← COMMAND_TREE (all registered commands)
-    │   │   ├── add.py                 ← add handler
-    │   │   ├── analyze.py             ← analyze handler
-    │   │   ├── config.py              ← config handler (theme, init, show)
-    │   │   ├── data_cmd.py            ← data handler (import/export/assign)
-    │   │   ├── delete_cmd.py          ← delete handler
-    │   │   ├── edit_cmd.py            ← edit handler
-    │   │   ├── eis.py                 ← EIS fitting helpers
-    │   │   ├── extensions_cmd.py      ← extensions list handler
-    │   │   ├── fit.py                 ← fit handler
-    │   │   ├── ls_cmd.py              ← ls handler
-    │   │   ├── memristor_cmd.py       ← memristor handler
-    │   │   ├── metadata.py            ← metadata handler
-    │   │   ├── open_cmd.py            ← open handler
-    │   │   ├── parse.py               ← parse handler
-    │   │   ├── plot.py                ← plot handler
-    │   │   ├── project.py             ← project handler
-    │   │   ├── protocol.py            ← protocol handler
-    │   │   ├── results.py             ← results handler
-    │   │   └── techniques.py          ← techniques handler
+├── cli/                           ← CLI dispatch layer
+│   ├── commands/                  ← One module per command
+│   │   ├── __init__.py            ← COMMAND_TREE (all registered commands)
+│   │   ├── add.py                 ← add handler
+│   │   ├── analyze.py             ← analyze handler
+│   │   ├── config.py              ← config handler (theme, init, show)
+│   │   ├── data_cmd.py            ← data handler (import/export/assign)
+│   │   ├── delete_cmd.py          ← delete handler
+│   │   ├── edit_cmd.py            ← edit handler
+│   │   ├── eis.py                 ← EIS fitting helpers
+│   │   ├── fit.py                 ← fit handler
+│   │   ├── ls_cmd.py              ← ls handler
+│   │   ├── metadata.py            ← metadata handler
+│   │   ├── open_cmd.py            ← open handler
+│   │   ├── parse.py               ← parse handler
+│   │   ├── plot.py                ← plot handler
+│   │   ├── protocol.py            ← protocol handler
+│   │   ├── results.py             ← results handler
+│   │   ├── close.py               ← close handler
+│   │   ├── status.py              ← status handler
+│   │   ├── ext.py                 ← extension handler
+│   │   └── techniques.py          ← techniques handler
     │   └── help.py                    ← Help text rendering
     │
     ├── core/                          ← Core library — no CLI coupling
