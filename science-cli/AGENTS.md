@@ -1,5 +1,23 @@
 # AGENTS.md — science-cli Developer Reference
 
+## CRITICAL: NEVER Delete User Code
+- **NEVER delete any `.py`, `.js`, `.ts`, or source code files** — even if they appear unused, dead, or duplicated
+- **NEVER delete directories** containing user code — even if they appear empty (may have `__pycache__` or hidden files)
+- **NEVER remove imports, functions, or classes** without explicit user approval
+- If code appears dead: flag it in the PLAN, do NOT delete it
+- If user asks to clean up dead code: confirm exactly which files, get explicit approval before any deletion
+- **TUI code is sacred** — the `tui/` directory and all Textual/App code must NEVER be touched without explicit instruction
+- **Recovery is not guaranteed** — `.pyc` files cannot be fully decompiled. Once source is gone, it's gone forever
+
+## CRITICAL: Always Commit and Update
+- **After EVERY code change, commit immediately** — never leave uncommitted changes
+- **After EVERY commit, update the relevant PLAN** — mark progress, note what changed
+- **After EVERY session, update README.md** — reflect new features, changed behavior
+- **After EVERY session, update AGENTS.md** — update directory map, guardrails if structure changed
+- **Apply to ALL modes**: plan mode, build mode, default mode — no exceptions
+- Commit message must be descriptive and reference the PLAN if one exists
+- If no PLAN exists for the change, create one first (Phase 1 of workflow)
+
 ## Session Workflow (Read This First)
 
 Every session follows this loop. **Do not skip steps.**
