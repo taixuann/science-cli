@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed `project` command. Use `ls -m project`, `open -m project`, `add -m project`, `status -m project` instead
 - Removed `project migrate` subcommand. Nested protocol layout is now the default
 - Session state format changed to support 3-level memory (step, protocol, project)
-- Removed `memristor` top-level command. Use `ext memristor <subcommand>` instead
+- Removed `memristor` alias. Use `memristor <subcommand>` directly
 - Removed `extensions` top-level command. Use `ext list` instead
 - Removed all `--filter` CLI flags. Use `--fzf` for interactive selection
 - `config` command now uses `set technique` instead of inline technique config
@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Textual TUI**: Interactive terminal UI with SCI banner, matcha green theme, command echo with timestamps, slash commands (/help, /clear, /history, /version)
 - **Plotly Interactive Dashboard**: Self-contained `dashboard.html` with zoom, pan, hover tooltips, click-to-expand cells, filter by material/sweep/cycle, PNG export — no server required
-- **Cross-Protocol Dashboard**: `ext memristor dashboard --all` aggregates IV data from ALL protocols with per-protocol stacked heatmaps, material filter, toggleable Vset/Vreset markers
+- **Cross-Protocol Dashboard**: `memristor dashboard --all` aggregates IV data from ALL protocols with per-protocol stacked heatmaps, material filter, toggleable Vset/Vreset markers
 - **Analysis Cache**: `analysis_data.json` with mtime tracking for incremental re-analysis
 - **Extension Integration**: science-memristor merged into core (`src/science_cli/memristor/`), science-iv recovered from .pyc (`src/science_cli/iv/`), science-electrochem recovered from .pyc (`src/science_cli/electrochem/`)
 - **CSV/TXT Format Support**: Reader for Keithley 2400 tab-separated format and Clarius+ CSV
@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `project` command and all subcommands
 - `project migrate` subcommand
-- `memristor` top-level command (use `ext memristor`)
+- `memristor` alias removed (use `memristor` directly)
 - `extensions` top-level command (use `ext list`)
 - All `--filter` CLI flags across all commands
 - Dead code: `image.py`, `general.py`, `functions/` directory

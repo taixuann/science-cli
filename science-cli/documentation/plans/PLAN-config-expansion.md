@@ -106,7 +106,6 @@ config list devices <technique>        # List devices for a technique
 
 - **`core/technique.py`**: `detect_technique()` reads patterns from technique config files, falls back to hardcoded `PATTERNS`
 - **`core/data_loader.py`**: `load_data_file()` reads device config from technique config, falls back to auto-detection
-- **`extensions.py`**: At discovery time, technique configs are registered into `ExtensionRegistry` alongside Python extensions
 
 ### Backward Compatibility
 
@@ -119,7 +118,7 @@ config list devices <technique>        # List devices for a technique
 
 ## Cross-PLAN Impact
 - **PLAN-command-restructure**: This PLAN adds subcommands to `config` handler. No conflict — command restructuring only changes `project` → `-m` modes.
-- **PLAN-extension-interface**: Technique configs and extension interface both register into `ExtensionRegistry`. Need to ensure no duplicate registration.
+- **PLAN-integrate-extensions**: Technique configs and the old extension interface both registered into `ExtensionRegistry`. With extensions now integrated as built-ins, technique configs register directly in `core/technique.py`.
 
 ## Test Strategy
 1. Verify technique config loading from `~/.config/science-cli/techniques/*.yaml`

@@ -148,10 +148,13 @@ Update `extensions.py` to support:
 ### 3.5 Command Interface
 ```bash
 # Unified extension dispatch
-ext memristor init
-ext memristor ls
-ext memristor dashboard
-ext memristor plot --all
+memristor init
+  
+memristor ls
+  
+memristor dashboard
+
+memristor plot --all
 
 # Backward compat (deprecated, still works)
 memristor init
@@ -253,7 +256,7 @@ User opens dashboard.html in browser (file://)
 - `close -m step|protocol|project` — close context with auto-save
 - `open -m step <step_id>` — open specific step
 - `ext <name> <subcommand>` — unified extension interface
-- `memristor` — alias for `ext memristor` (deprecated, still works)
+- `memristor` — direct command (integrated as built-in)
 
 ### 5.3 3-Level State Memory
 Session state expanded with `project_state` and `protocol_state` for auto-save/restore.
@@ -288,9 +291,9 @@ protocol/<name>/<step>/
 | `src/science_cli/__init__.py` | Version → `"2.0.0"` |
 | `pyproject.toml` | Version → `"2.0.0"`, add plotly/textual/pyarrow deps |
 | `src/science_cli/app.py` | Bare `sci` launches TUI, `sci --repl` still works |
-| `src/science_cli/extensions.py` | Add `short_name`, `subcommands`, core technique registration |
+| `src/science_cli/core/technique.py` | Add `BUILTIN_TECHNIQUES`, `TechniqueDef`, `ColumnMap` (moved from extensions.py) |
 | `src/science_cli/cli/commands/__init__.py` | Add `ext`, `close`, `status`; deprecate `memristor` |
-| `src/science_cli/cli/commands/memristor_cmd.py` | Wrap as alias to `ext memristor` |
+| `src/science_cli/cli/commands/memristor.py` | Direct memristor command handler |
 | `src/science_cli/core/session.py` | 3-level state memory |
 | `src/science_cli/cli/commands/open_cmd.py` | Add `-m project`, `-m step` modes |
 | `src/science_cli/cli/commands/ls_cmd.py` | Add `-m project` mode |
@@ -342,9 +345,9 @@ protocol/<name>/<step>/
 1. `sci --version` → `2.0.0`
 2. `sci` (no args) → launches TUI
 3. `sci --repl` → still works
-4. `ext memristor ls` → works
-5. `memristor ls` → backward compat works
-6. `ext memristor dashboard --open` → generates dashboard.html, opens in browser
+4. `memristor ls` → works
+
+6. `memristor dashboard --open` → generates dashboard.html, opens in browser
 7. dashboard.html opens with `file://` protocol, Plotly plots interactive
 8. `close -m project` → auto-saves state
 9. `open -m project <name>` → restores state
@@ -420,7 +423,7 @@ ADDITIONAL
 ```
 
 ## Cross-PLAN Update (2026-05-13)
-- **Sprint 2 Complete**: Help menu restructured (4 groups), `project`/`extensions`/`memristor` top-level commands removed, `ext` command implemented. PLAN-command-restructure and PLAN-extension-interface marked superseded.
+- **Sprint 2 Complete**: Help menu restructured (4 groups), `project`/`extensions`/`memristor` top-level commands removed, memristor now direct command. PLAN-command-restructure and PLAN-extension-interface marked superseded.
 - **Sprint 3 Complete**: Cross-protocol dashboard implemented (`dashboard --all`, stacked heatmaps, material filter, `analysis_data.json` cache). See [[PLAN-enhanced-dashboard]] for details.
 - **PLAN-2 (Config Expansion)**: Completed — technique config files in `~/.config/science-cli/techniques/*.yaml`, `config set technique`, `config edit`, `config list techniques`, `config list devices` subcommands.
 - **PLAN-4 (Version Bump)**: Completed — version 2.0.0 already set, CHANGELOG.md created.

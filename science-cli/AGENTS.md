@@ -486,6 +486,7 @@ from science_cli.core.config import (
 | PLAN-3: Extension Interface | extension | **Superseded** — `ext` command implemented | — | PLAN-1 |
 | PLAN-4: Version Bump to 2.0.0 | cleanup | **Completed** — v2.0.0, CHANGELOG.md created | — | PLAN-1, PLAN-2, PLAN-3 |
 | PLAN-enhanced-dashboard: Sprint 3 | feature | **Completed** — cross-protocol dashboard | — | — |
+| PLAN-integrate-extensions | refactor | **Completed** — extensions merged, direct memristor commands | — | — |
 
 **Execution order**: All original PLANs (1-4) are now completed or superseded.
 

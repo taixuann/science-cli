@@ -259,7 +259,8 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - Material selector filter dropdown
 
 **Implementation approach:**
-- New command: `sci dashboard --all` or restructure existing `ext memristor dashboard` to accept `--all`
+- New command: `sci dashboard --all` or restructure existing `memristor dashboard` to accept `--all`
+
 - Cross-protocol data collector scanning all `devices.yaml` in all protocol dirs
 - Analysis data file writer (JSON) saved to `project/results/`
 - Updated Plotly dashboard HTML consuming aggregated JSON data
@@ -277,7 +278,7 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 ## Gaps & Flaws Analysis
 
 ### 1. Data Flow: CSV → Analysis → JSON → Dashboard
-- **Risk**: LOW. Clean flow exists: `read_iv_csv()`/`read_iv_csv()` → `extract_iv_parameters()` → dict → JSON serialization. The JSON intermediate file is new but follows the existing pattern.
+- **Risk**: LOW. Clean flow exists: `read_iv_csv()`/`read_iv_lvm()` → `extract_iv_parameters()` → dict → JSON serialization. The JSON intermediate file is new but follows the existing pattern.
 - **Mitigation**: Validate JSON schema against analysis_data.json structure before dashboard loading.
 
 ### 2. Performance with Large Datasets (100-1000+ files)
@@ -286,11 +287,10 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 
 ### 3. devices.yaml Role (RESOLVED)
 - **Decision**: devices.yaml = matrix MAP only with sweep direction + sweep rate. No Vset/Vreset/ratio in YAML. Analysis goes to `analysis_data.json`. Filenames follow `DDMMYY_material_type_matrix_suffix` only — non-matching files get a rename reminder.
-- **Mitigation**: Documented in Sprint 3 spec above.
 
 ### 4. JSON Cache Invalidation Strategy
 - **Risk**: MEDIUM. analysis_data.json becomes stale when new data files are added or existing ones modified.
-- **Mitigation**: Store file modification timestamps in JSON. On dashboard regenerate, compare timestamps — only re-analyze changed files. Add `--force` flag for full re-analysis. Per-file recalc via `ext memristor analyze --row 0 --col 0 --file X.csv` updates the JSON in-place.
+- **Mitigation**: Store file modification timestamps in JSON. On dashboard regenerate, compare timestamps — only re-analyze changed files. Add `--force` flag for full re-analysis. Per-file recalc via `memristor analyze --row 0 --col 0 --file X.csv` updates the JSON in-place.
 
 ### 5. Cross-Protocol Matrix Heterogeneity (ACCEPTED)
 - **Risk**: MEDIUM-HIGH. Different protocols use different matrix sizes/labels. This is expected — not a bug.

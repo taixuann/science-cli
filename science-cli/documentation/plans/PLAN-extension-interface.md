@@ -10,8 +10,8 @@ extension
 
 ## Status
 - **Created**: 2026-05-12
-- **Status**: superseded (fully implemented; GROUP 4 further refined in Sprint 2)
-- **Branch**: mysci-tui_update
+- **Status**: **superseded** — refactor/2.1.0 integrated extensions as built-in modules; `ext` command removed, `memristor` is now a direct command
+- **Branch**: `refactor/2.1.0`
 
 ## Objective
 Create unified `ext <name> <subcommand>` interface for extension commands. Replace direct extension commands (like `memristor`) with central dispatch. Extensions register subcommands via `ExtensionRegistry`. Keep extensions as separate packages but expose through unified interface.

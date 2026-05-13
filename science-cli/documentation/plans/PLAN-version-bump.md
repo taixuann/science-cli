@@ -50,7 +50,7 @@ This warrants a major version bump. Resetting to 2.0.0 (not 8.0.0) because the p
 3. **`close` command added** — use `close -m project`, `close -m protocol`, `close -m step`
 4. **`open -m step` added** — open specific step within protocol
 5. **Session state format changed** — 3-level state memory (step, protocol, project)
-6. **`ext` interface added** — use `ext memristor <subcommand>` instead of `memristor <subcommand>`
+6. **`ext` interface removed** — use `memristor <subcommand>` directly (no indirection)
 7. **`memristor` command deprecated** — still works as alias, will be removed in 3.0.0
 
 ### Files to Modify
@@ -73,7 +73,7 @@ This warrants a major version bump. Resetting to 2.0.0 (not 8.0.0) because the p
 - Removed `project` command. Use `ls -m project`, `open -m project`, `add -m project`, `status -m project` instead
 - Removed `project migrate` subcommand. Nested protocol layout is now the default
 - Session state format changed to support 3-level memory (step, protocol, project)
-- `memristor` command deprecated. Use `ext memristor <subcommand>` instead
+- `memristor` alias removed (use `memristor` directly)
 
 ### Added
 - `close -m project|protocol|step` — close context with auto-save

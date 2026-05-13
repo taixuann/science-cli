@@ -53,7 +53,7 @@ sci add -m data --fzf
 sci plot protocol/1_iv-test/1_set/IV_data.csv
 
 # Launch the dashboard
-sci ext memristor dashboard --open
+sci memristor dashboard --open
 ```
 
 ## Command Reference
@@ -77,29 +77,29 @@ GROUP 3: DATA ANALYSIS
   results   List saved results by protocol and step
 
 GROUP 4: EXTENSIONS & TECHNIQUES
-  ext       Unified extension interface (e.g. ext memristor)
+  memristor   Launch cross-protocol dashboard, manage device matrices
   techniques  List available techniques and usage guide
 ```
 
-## Memristor Extension
+## Memristor Device Management
 
 For crossbar device characterization:
 
 ```bash
 # Initialize a device matrix
-sci ext memristor init --rows 4 --cols 4 --label "My Device"
+sci memristor init --rows 4 --cols 4 --label "My Device"
 
 # Add data files to matrix points
-sci ext memristor add --fzf
+sci memristor add --fzf
 
 # Sync sweep metadata from data files
-sci ext memristor sync
+sci memristor sync
 
 # Generate per-protocol dashboard
-sci ext memristor dashboard --open
+sci memristor dashboard --open
 
 # Generate cross-protocol project dashboard
-sci ext memristor dashboard --all --open
+sci memristor dashboard --all --open
 ```
 
 ### Vset/Vreset Extraction
