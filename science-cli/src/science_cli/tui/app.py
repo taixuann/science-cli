@@ -204,11 +204,12 @@ class SCIApp(App):
         color: #55ee77;
         width: 2;
         content-align: right middle;
+        height: 1;
     }
     CommandInput {
         height: 1;
     }
-    #input-prompt {
+    #input-row {
         height: 1;
     }
     #sep-input-top, #sep-input-bottom {
@@ -248,6 +249,7 @@ class SCIApp(App):
         yield Horizontal(
             Static("\u276f ", id="input-prompt"),
             CommandInput(),
+            id="input-row",
         )
         yield Static(id="sep-input-bottom")
 
