@@ -369,7 +369,7 @@ protocol/<name>/<step>/
 - [x] extensions.py: silent skip of non-callable entry points ✅ (`72f2e8a`)
 - [x] _TeeWriter class for fzf output capture during TUI suspend ✅ (this commit)
 - [x] plot.py fzf: step/protocol display + raw_dir preview path ✅ (this commit)
-- [ ] Phase 6: Parquet support
+- [x] Phase 6: Parquet support ✅ (`8708b9a`)
 - [x] TEST passed: 16/16 guardrails ✅
 - [x] DOCS updated ✅
 - [x] COMMIT done ✅

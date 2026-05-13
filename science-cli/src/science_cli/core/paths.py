@@ -154,6 +154,11 @@ class ProjectPaths:
         return self.root / "results"
 
 
+def get_techniques_config_dir() -> Path:
+    """Return the directory for per-technique YAML config files."""
+    return Path.home() / ".config" / "science-cli" / "techniques"
+
+
 def get_project_paths() -> Optional[ProjectPaths]:
     """Get ProjectPaths for the currently open project."""
     from science_cli.core.project import get_current_project_path
