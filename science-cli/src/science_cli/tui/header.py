@@ -9,17 +9,17 @@ from textual.app import ComposeResult
 from textual.widgets import Static
 from textual.containers import Horizontal
 from textual.reactive import reactive
+from rich.text import Text as RichText
 
 from science_cli import __version__
 from science_cli.core.session import load_session
-from science_cli.tui.theme import MATCHA_COLORS
 
 
 class TuiHeader(Static):
     """A two-column header widget showing context and workflow.
 
-    Left column: current context — `(sci project/protocol) v2.0.0`
-    Right column: workflow steps — `1.project 2.protocol 3.data 4.plot`
+    Left column: current context — ``(sci project/protocol) v2.0.0``
+    Right column: workflow steps — ``1.project 2.protocol 3.data 4.plot``
 
     The header reads session state on mount and updates reactively
     when the parent app signals a context change via `context_project`
@@ -45,13 +45,13 @@ class TuiHeader(Static):
     TuiHeader .header-left {
         width: 1fr;
         content-align: left middle;
-        color: #8BAA89;
+        color: #cccccc;
         text-style: bold;
     }
     TuiHeader .header-right {
         width: auto;
         content-align: right middle;
-        color: #6a7a6a;
+        color: #888888;
         text-style: italic;
     }
     """
@@ -80,7 +80,6 @@ class TuiHeader(Static):
 
     def refresh_header(self) -> None:
         """Update the header display with current context and workflow."""
-        # Build left-side context string
         proj = self.context_project
         proto = self.context_protocol
 
@@ -96,11 +95,33 @@ class TuiHeader(Static):
         # Workflow reminder on the right
         workflow = "1.project 2.protocol 3.data 4.plot"
 
+        # Build multi-color Rich Text for left column
+        # (sci project/protocol) with amber project and cyan protocol
+        if proj and proto:
+            left_text = RichText()
+            left_text.append("(sci ", "bold")       # default text color
+            left_text.append(proj, "bold #d4a853")  # amber project
+            left_text.append("/", "dim")
+            left_text.append(proto, "bold #5ea8b5")  # cyan protocol
+            left_text.append(f") v{__version__}", "dim")
+        elif proj:
+            left_text = RichText()
+            left_text.append("(sci ", "bold")
+            left_text.append(proj, "bold #d4a853")
+            left_text.append(f") v{__version__}", "dim")
+        elif proto:
+            left_text = RichText()
+            left_text.append("(sci */", "bold")
+            left_text.append(proto, "bold #5ea8b5")
+            left_text.append(f") v{__version__}", "dim")
+        else:
+            left_text = RichText(f"(sci) v{__version__}", "dim")
+
         left = self.query_one("#header-left", Static)
         right = self.query_one("#header-right", Static)
 
         if left and right:
-            left.update(context)
+            left.update(left_text)
             right.update(workflow)
 
     def set_context(self, project: str = "", protocol: str = "") -> None:

@@ -30,14 +30,18 @@ class OutputPanel(RichLog):
     OutputPanel {
         height: 1fr;
         width: 100%;
-        border: solid #4A7A4A;
-        background: #1a1f1a;
-        color: #e0e8e0;
+        border: solid #55AA55;
+        background: transparent;
+        color: #cccccc;
         padding: 0 1;
         overflow-y: scroll;
+        scrollbar-size-vertical: 1;
+        scrollbar-size-horizontal: 0;
+        scrollbar-color: #55AA55;
+        scrollbar-background: transparent;
     }
     OutputPanel:focus {
-        border: solid #8BAA89;
+        border: solid #55ee77;
     }
     """
 
@@ -45,10 +49,10 @@ class OutputPanel(RichLog):
         """Display a welcome message when the output panel first mounts."""
         self.write("")
         self.write(
-            "[bold #8BAA89]SCI TUI[/] — Scientific Data Analysis CLI\n"
+            "[bold #55ee77]SCI TUI[/] — Scientific Data Analysis CLI\n"
             "[dim]Type commands below. [/dim]"
-            "[dim #6aaa9a]/help[/] [dim]for slash commands, [/dim]"
-            "[dim #6aaa9a]/clear[/] [dim]to clear output.[/dim]\n"
+            "[dim #5ea8b5]/help[/] [dim]for slash commands, [/dim]"
+            "[dim #5ea8b5]/clear[/] [dim]to clear output.[/dim]\n"
         )
 
     def add_separator(self, command: str = "") -> None:
@@ -63,9 +67,9 @@ class OutputPanel(RichLog):
         """
         ts = datetime.now().strftime("%H:%M:%S")
         if command:
-            separator = f"[dim #4A7A4A]--- {ts} [dim #6a7a6a]{command}[/] ---[/]"
+            separator = f"[dim #55AA55]--- {ts} [dim #666666]{command}[/] ---[/]"
         else:
-            separator = f"[dim #4A7A4A]--- {ts} ---[/]"
+            separator = f"[dim #55AA55]--- {ts} ---[/]"
         self.write(separator)
 
     def write_command_output(self, command: str, output: str) -> None:

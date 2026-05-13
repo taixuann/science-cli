@@ -6,46 +6,49 @@ Used by Textual CSS and widget styling throughout the TUI.
 
 #: Primary color palette for the matcha green theme.
 MATCHA_COLORS: dict[str, str] = {
-    "background": "#1a1f1a",       # Very dark green-black — main screen background
-    "surface": "#1e241e",           # Slightly lighter background — panels, inputs
-    "accent": "#8BAA89",            # Muted sage green — highlights, active elements
-    "accent_bright": "#a3c2a1",    # Brighter accent — hover states
-    "border": "#4A7A4A",           # Medium green — borders, dividers
-    "border_dim": "#3a5a3a",       # Dimmer border — inactive borders
-    "text": "#e0e8e0",             # Off-white with green tint — primary text
-    "text_dim": "#8a9a8a",         # Muted text — secondary info
-    "dim": "#6a7a6a",              # Dim green-gray — tertiary text, placeholders
-    "success": "#7aba7a",          # Soft green — success messages
-    "error": "#d47a7a",            # Muted red — errors (green-adjacent, not jarring)
-    "warning": "#c4a86a",          # Muted gold — warnings
-    "info": "#6aaa9a",             # Teal-green — info messages
+    "background": "#0d0d0d",       # Dark, not visible anyway (transparent)
+    "surface": "#0d0d0d",
+    "accent": "#55ee77",            # Bright vibrant green (was #8BAA89 muted sage)
+    "accent_bright": "#77ff99",     # Even brighter (was #a3c2a1)
+    "border": "#55AA55",            # Vibrant medium green (was #4A7A4A dark green)
+    "border_dim": "#3a7a3a",        # (was #3a5a3a)
+    "text": "#cccccc",
+    "text_dim": "#888888",
+    "dim": "#666666",
+    "success": "#55ee77",
+    "error": "#d47a7a",
+    "warning": "#c4a86a",
+    "info": "#5ea8b5",              # Soft cyan for protocol names
+    "project": "#d4a853",           # Amber/gold for project names (NEW)
 }
 
 #: Textual CSS variable definitions using the matcha color palette.
 CSS_VARIABLES: str = """
-$background: #1a1f1a;
-$surface: #1e241e;
-$accent: #8BAA89;
-$accent-bright: #a3c2a1;
-$border: #4A7A4A;
-$border-dim: #3a5a3a;
-$text: #e0e8e0;
-$text-dim: #8a9a8a;
-$dim: #6a7a6a;
-$success: #7aba7a;
+$background: #0d0d0d;
+$surface: #0d0d0d;
+$accent: #55ee77;
+$accent-bright: #77ff99;
+$border: #55AA55;
+$border-dim: #3a7a3a;
+$text: #cccccc;
+$text-dim: #888888;
+$dim: #666666;
+$success: #55ee77;
 $error: #d47a7a;
 $warning: #c4a86a;
-$info: #6aaa9a;
+$info: #5ea8b5;
+$project: #d4a853;
 """
 
 #: Rich-compatible style mapping for use with Rich renderables.
 RICH_STYLES: dict[str, str] = {
-    "accent": "bold #8BAA89",
-    "dim": "#6a7a6a",
+    "accent": "bold #55ee77",
+    "dim": "#666666",
     "error": "#d47a7a",
     "warning": "#c4a86a",
-    "info": "#6aaa9a",
-    "success": "#7aba7a",
-    "border": "#4A7A4A",
-    "text": "#e0e8e0",
+    "info": "#5ea8b5",
+    "success": "#55ee77",
+    "border": "#55AA55",
+    "text": "#cccccc",
+    "project": "#d4a853",
 }
