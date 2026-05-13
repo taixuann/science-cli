@@ -205,7 +205,11 @@ class SCIApp(App):
         width: 2;
         content-align: right middle;
     }
-    Horizontal {
+    # Input row only — SCIBanner has its own height: auto
+    CommandInput {
+        height: 1;
+    }
+    #input-prompt {
         height: 1;
     }
     """

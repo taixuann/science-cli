@@ -36,6 +36,9 @@ class SCIBanner(Static):
         width: 100%;
         padding: 1 0;
     }
+    SCIBanner > Horizontal {
+        height: auto;
+    }
     #banner-art {
         color: #55dd77;
         text-style: bold;
