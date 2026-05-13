@@ -283,6 +283,18 @@ science-cli/
     │   └── templates/                 ← Per-technique defaults (*.yaml)
     │
     ├── tui/                           ← Textual TUI
+    │
+    ├── memristor/                     ← Memristor characterization
+    │   ├── __init__.py                ← Extension registration
+    │   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
+    │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard)
+    │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard **
+    │   ├── plotting.py                ← IV CSV reading + SVG generation
+    │   ├── endurance.py               ← Endurance analysis
+    │   ├── retention.py               ← Retention analysis
+    │   ├── switching.py               ← Switching analysis
+    │   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
+    │
     └── extensions.py                  ← ExtensionRegistry + entry-point discovery
 ```
 
