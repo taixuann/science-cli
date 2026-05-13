@@ -191,12 +191,92 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 
 ## Sprint 2 Results
 
-- **Items 1-5 implemented and committed**: All specification subsections A-E have been implemented and committed to the `mysci-tui_update` branch.
+- **Items 1, 2, 4, 5 implemented and committed**: Help menu restructured (4 groups, removed project/extensions/memristor), TUI banner with TechniquesBox, TuiHeader removed, REPL prompt simplified, `--filter` CLI flags removed (fzf only), `add -m data` already uses symlinks.
 - **Test status**: 16/16 tests passing, GREEN status.
+- **Item 5 (add symlink)**: Already implemented — `add.py:386-388` uses `link.symlink_to(src)`.
 - **Open items for discussion**: 
-  - Item 3: config unification
-  - Item 6: YAML routing  
-  - Item 7: distribution
+  - Item 3: config unification (deferred)
+  - Item 6: devices.yaml routing (see Sprint 3)
+  - Item 7: distribution (keep simple — pip install)
+
+## Sprint 3: Cross-Protocol Dashboard
+
+**Goal:** Create a single project-level dashboard at `project/results/dashboard.html` that aggregates data from ALL protocols instead of per-protocol dashboards.
+
+**Key design decisions:**
+- Single main dashboard at `project/results/dashboard.html`
+- Scans all protocols' `devices.yaml` files
+- Material-based filtering for analysis (only analyze files matching selected materials via `extract_material_batch()`)
+- Heatmap rendered from each protocol's `devices.yaml` matrix definition (rows, cols, row_labels, col_labels)
+- Saves intermediate `project/results/analysis_data.json` with per-file extracted parameters for fast loading
+
+**Analysis data structure (analysis_data.json):**
+```json
+{
+  "files": [
+    {
+      "filepath": "protocol/<name>/<step>/results/iv_r0c0_set.svg",
+      "material": "Ta-PDA-ITO",
+      "v_set": 0.857,
+      "v_reset": -0.534,
+      "i_set": 1.2e-4,
+      "i_reset": 8.5e-5,
+      "on_off_ratio": 1.37,
+      "row": 0, "col": 0,
+      "protocol": "<protocol_name>"
+    }
+  ]
+}
+```
+
+**Dashboard features:**
+- Histogram distribution of Vset, Vreset, ON/OFF ratio (filterable by material)
+- Matrix heatmap showing per-cell switching yield and median Vset values
+- IV curve overlay panels with toggleable Vset/Vreset markers and read-point dots
+- KPI cards (total files, devices with switching, yield %, median Vset/Vreset)
+- Material selector filter dropdown
+
+**Implementation approach:**
+- New command: `sci dashboard --all` or restructure existing `ext memristor dashboard` to accept `--all`
+- Cross-protocol data collector scanning all `devices.yaml` in all protocol dirs
+- Analysis data file writer (JSON) saved to `project/results/`
+- Updated Plotly dashboard HTML consuming aggregated JSON data
+
+**Known limitations from earlier sprints:**
+- iv_reset files produce inverted ON/OFF ratios (WONTFIX — data organization issue)
+- analyze_all_devices' per_device dict overwrites on each file (only stores last file's params per device)
+
+## Gaps & Flaws Analysis
+
+### 1. Data Flow: CSV → Analysis → JSON → Dashboard
+- **Risk**: LOW. Clean flow exists: `read_iv_csv()`/`read_iv_lvm()` → `extract_iv_parameters()` → dict → JSON serialization. The JSON intermediate file is new but follows the existing pattern.
+- **Mitigation**: Validate JSON schema against analysis_data.json structure before dashboard loading.
+
+### 2. Performance with Large Datasets (100-1000+ files)
+- **Risk**: MEDIUM. Re-analyzing all IV files on every dashboard regeneration could be slow for 1000+ files (each file requires full IV curve parsing + derivative computation).
+- **Mitigation**: JSON intermediate file enables incremental updates — only re-analyze files whose modification time has changed. Add `--force` flag to force full re-analysis.
+
+### 3. Missing Features
+- **Risk**: LOW. Current spec covers histograms, heatmap, KPI cards, IV overlay. Consider adding:
+  - Per-protocol filter (dropdown to select which protocols to include)
+  - Time-series view (Vset drift over measurement date)
+  - Export filtered data as CSV
+- **Mitigation**: These can be added incrementally; not blockers for v1.
+
+### 4. Backward Compatibility
+- **Risk**: LOW. Existing per-protocol dashboard at `protocol/<name>/<step>/results/dashboard.html` remains unchanged. The new `--all` flag is additive. The `_get_results_dir()` logic in dashboard command ensures per-protocol dashboards still work when `--all` is not specified.
+
+### 5. Device YAML Coverage
+- **Risk**: MEDIUM. The cross-protocol collector needs to know where all protocol dirs are. Currently each protocol has its own `devices.yaml`. The collector must iterate `<project>/protocol/*/devices.yaml`.
+- **Mitigation**: Use `Path(proj / "protocol").glob("*/devices.yaml")` to discover all protocols. Handle missing/empty devices.yaml gracefully.
+
+### 6. User Workflow
+- **Risk**: LOW. Suggested command sequence:
+  1. `sci add -m protocol -n <name>` or use existing protocols
+  2. `ext memristor init --rows N --cols N` (per protocol)
+  3. `ext memristor sync` (per protocol, populates sweep metadata)
+  4. `sci dashboard --all` (generates project-level dashboard)
+- **Mitigation**: The `--all` flag should auto-discover protocols without requiring explicit registration.
 
 ## Files to Modify
 
@@ -207,6 +287,8 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 | `src/science_cli/memristor/switching.py` | **Add** `detect_vset()`, `detect_vreset()`, `compute_on_off_ratio()`, `detect_read_voltage()`, `analyze_all_devices()` | IV parameter extraction for dashboard |
 | `src/science_cli/core/config.py` | **Add** keithley-2400 hardcoded device defaults, `.lvm` pattern to iv-sweep | Auto-detection of LabVIEW Measurement format |
 | `documentation/plans/PLAN-enhanced-dashboard.md` | **Create** | This plan |
+| `src/science_cli/memristor/dashboard.py` | **Modify** | Add `--all` flag, cross-protocol collector, JSON writer |
+| `src/science_cli/memristor/device_cli.py` | **Modify** | Add `dashboard --all` CLI handler |
 
 ## Dependencies
 - Existing `memristor/device.py` (DeviceConfig, FileEntry, MatrixPoint)
@@ -226,19 +308,41 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 6. **Interactivity**: Click heatmap cell → verify all panels update, tabs switch
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT: `read_iv_lvm()` in plotting.py + auto-detection
-- [ ] IMPLEMENT: Keithley 2400 config in core/config.py
-- [ ] IMPLEMENT: `detect_vset()`, `detect_vreset()`, `compute_on_off_ratio()`, `detect_read_voltage()` in switching.py
-- [ ] IMPLEMENT: `analyze_all_devices()` in switching.py
-- [ ] IMPLEMENT: Dashboard data collection (per-device metrics)
-- [ ] IMPLEMENT: Dashboard Plotly figure generators (heatmap, IV overlay, histograms, sparklines)
-- [ ] IMPLEMENT: Dashboard HTML layout (sidebar, header, KPI row, panels, review table)
-- [ ] IMPLEMENT: Dashboard CSS (dark theme from mockup)
-- [ ] IMPLEMENT: Dashboard JavaScript (click-to-select, tabs, filters, search)
-- [ ] TEST: LVM reader with real Keithley 2400 data
-- [ ] TEST: Vset/Vreset detection with known test data
-- [ ] TEST: Dashboard generation on real project
-- [ ] TEST: All guardrail tests pass
-- [ ] COMMIT to `mysci-tui_mem-advanced` branch
+
+### Sprint 1: Initial Implementation (Completed)
+- [x] IMPLEMENT: `read_iv_lvm()` in plotting.py + auto-detection
+- [x] IMPLEMENT: Keithley 2400 config in core/config.py
+- [x] IMPLEMENT: `detect_vset()`, `detect_vreset()`, `compute_on_off_ratio()`, `detect_read_voltage()` in switching.py
+- [x] IMPLEMENT: `analyze_all_devices()` in switching.py
+- [x] IMPLEMENT: Dashboard data collection (per-device metrics)
+- [x] IMPLEMENT: Dashboard Plotly figure generators (heatmap, IV overlay, histograms, sparklines)
+- [x] IMPLEMENT: Dashboard HTML layout (sidebar, header, KPI row, panels, review table)
+- [x] IMPLEMENT: Dashboard CSS (dark theme from mockup)
+- [x] IMPLEMENT: Dashboard JavaScript (click-to-select, tabs, filters, search)
+- [x] TEST: LVM reader with real Keithley 2400 data
+- [x] TEST: Vset/Vreset detection with known test data
+- [x] TEST: Dashboard generation on real project
+- [x] TEST: All guardrail tests pass
+- [x] COMMIT to `mysci-tui_update` branch
+
+### Sprint 2: Help Menu, TUI, --filter removal (Completed)
+- [x] Restructure COMMAND_TREE into 4 groups, remove project/extensions/memristor
+- [x] Update help.py with new groupings, descriptions
+- [x] Add TechniquesBox to TUI banner
+- [x] Remove TuiHeader, simplify REPL prompt
+- [x] Remove --filter CLI flags from device_cli.py and add.py
+- [x] Verify add -m data uses symlinks
+- [x] Update guardrail tests for 13 commands
+- [x] All 16 tests pass, commit + push
+
+### Sprint 3: Cross-Protocol Dashboard (Pending)
+- [ ] DESIGN: Full architecture review (gaps analysis above)
+- [ ] IMPLEMENT: Cross-protocol data collector (scan all devices.yaml)
+- [ ] IMPLEMENT: Analysis data file writer (JSON)
+- [ ] IMPLEMENT: Dashboard `--all` flag and routing
+- [ ] IMPLEMENT: Material filter in dashboard UI
+- [ ] IMPLEMENT: Toggleable Vset/Vreset markers on IV overlay
+- [ ] IMPLEMENT: Matrix heatmap from devices.yaml grid definition
+- [ ] TEST: Project with multiple protocols and 100+ files
+- [ ] TEST: Backward compatibility (per-protocol dashboard still works)
+- [ ] COMMIT to `mysci-tui_update` branch
