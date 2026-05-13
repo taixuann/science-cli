@@ -276,15 +276,23 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "config": {
         "usage": "config <subcommand> [args]",
-        "desc": "Configure themes and settings (Group 3).",
+        "desc": "Configure themes, techniques, and devices (Group 3).",
         "subcommands": {
-            "config theme list": {"desc": "List available themes", "usage": "config theme list"},
-            "config theme set":  {"desc": "Set active theme", "usage": "config theme set <name>"},
+            "config theme list":                        {"desc": "List available themes", "usage": "config theme list"},
+            "config theme set <name>":                  {"desc": "Set active theme", "usage": "config theme set <name>"},
+            "config list techniques":                   {"desc": "List all configured techniques", "usage": "config list techniques"},
+            "config list devices <technique>":           {"desc": "List devices for a technique", "usage": "config list devices iv-sweep"},
+            "config set technique <name> <device>":      {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
+            "config edit <technique>":                   {"desc": "Open technique config in $EDITOR", "usage": "config edit iv-sweep"},
         },
         "examples": [
             "config theme list",
             "config theme set tufte",
             "config theme set dark",
+            "config list techniques",
+            "config list devices iv-sweep",
+            "config set technique iv-sweep keithley-2400",
+            "config edit iv-sweep",
         ],
     },
     "techniques": {
