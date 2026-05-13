@@ -184,10 +184,10 @@ class SCIApp(App):
         # Show a welcome message in the output panel.
         output = self.query_one(OutputPanel)
         output.write(
-            f"\n[bold $accent]SCI TUI v{__version__}[/bold $accent]\n"
+            f"\n[bold #8BAA89]SCI TUI v{__version__}[/]\n"
             f"[dim]Type commands below. [/dim]"
-            f"[dim $info]/help[/dim $info] [dim]for slash commands, [/dim]"
-            f"[dim $info]/clear[/dim $info] [dim]to clear output.[/dim]\n"
+            f"[dim #6aaa9a]/help[/] [dim]for slash commands, [/dim]"
+            f"[dim #6aaa9a]/clear[/] [dim]to clear output.[/dim]\n"
             f"[dim]Ctrl+C or Ctrl+D to quit.[/dim]\n"
         )
 
@@ -267,7 +267,7 @@ class SCIApp(App):
         elif cmd_name == "/history":
             self._slash_history(output)
         elif cmd_name == "/version":
-            output.write(f"[bold $accent]sci[/bold $accent] version [bold]{__version__}[/bold]")
+            output.write(f"[bold #8BAA89]sci[/] version [bold]{__version__}[/]")
         else:
             output.write_error(f"Unknown slash command: {cmd_name}")
             output.write("[dim]Available: /help, /clear, /history, /version[/dim]")
@@ -286,7 +286,7 @@ class SCIApp(App):
             self._slash_help(output)
         elif cmd_name == "version":
             output.add_separator("version")
-            output.write(f"[bold $accent]sci[/bold $accent] version [bold]{__version__}[/bold]")
+            output.write(f"[bold #8BAA89]sci[/] version [bold]{__version__}[/]")
         elif cmd_name == "history":
             self._slash_history(output)
         elif cmd_name in ("clear", "cls"):
@@ -303,18 +303,18 @@ class SCIApp(App):
         """
         output.add_separator("/help")
 
-        output.write("[bold $accent]SCI Commands[/bold $accent]\n")
+        output.write("[bold #8BAA89]SCI Commands[/]\n")
         output.write("[dim]Command  │  Description[/dim]")
-        output.write("[dim $border]──────────┼──────────────────────────────────────────────[/dim $border]")
+        output.write("[dim #4A7A4A]──────────┼──────────────────────────────────────────────[/]")
 
         for cmd_name, info in sorted(COMMAND_TREE.items()):
             desc = info.get("desc", "")
             output.write(f"[bold]{cmd_name:<10}[/bold]│ {desc}")
 
         output.write("")
-        output.write("[bold $accent]Slash Commands[/bold $accent]\n")
+        output.write("[bold #8BAA89]Slash Commands[/]\n")
         output.write("[dim]Command     │  Description[/dim]")
-        output.write("[dim $border]─────────────┼──────────────────────────────────────────────[/dim $border]")
+        output.write("[dim #4A7A4A]─────────────┼──────────────────────────────────────────────[/]")
 
         for slash_cmd, desc in sorted(SLASH_COMMANDS.items()):
             output.write(f"[bold]{slash_cmd:<13}[/bold]│ {desc}")

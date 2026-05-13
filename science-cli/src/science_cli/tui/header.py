@@ -45,13 +45,13 @@ class TuiHeader(Static):
     TuiHeader .header-left {
         width: 1fr;
         content-align: left middle;
-        color: $accent;
+        color: #8BAA89;
         text-style: bold;
     }
     TuiHeader .header-right {
         width: auto;
         content-align: right middle;
-        color: $dim;
+        color: #6a7a6a;
         text-style: italic;
     }
     """

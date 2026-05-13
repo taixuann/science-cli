@@ -30,14 +30,14 @@ class OutputPanel(RichLog):
     OutputPanel {
         height: 1fr;
         width: 100%;
-        border: solid $border;
-        background: $background;
-        color: $text;
+        border: solid #4A7A4A;
+        background: #1a1f1a;
+        color: #e0e8e0;
         padding: 0 1;
         overflow-y: scroll;
     }
     OutputPanel:focus {
-        border: solid $accent;
+        border: solid #8BAA89;
     }
     """
 
@@ -45,10 +45,10 @@ class OutputPanel(RichLog):
         """Display a welcome message when the output panel first mounts."""
         self.write("")
         self.write(
-            "[bold $accent]SCI TUI[/bold $accent] — Scientific Data Analysis CLI\n"
+            "[bold #8BAA89]SCI TUI[/] — Scientific Data Analysis CLI\n"
             "[dim]Type commands below. [/dim]"
-            "[dim $info]/help[/dim $info] [dim]for slash commands, [/dim]"
-            "[dim $info]/clear[/dim $info] [dim]to clear output.[/dim]\n"
+            "[dim #6aaa9a]/help[/] [dim]for slash commands, [/dim]"
+            "[dim #6aaa9a]/clear[/] [dim]to clear output.[/dim]\n"
         )
 
     def add_separator(self, command: str = "") -> None:
@@ -63,9 +63,9 @@ class OutputPanel(RichLog):
         """
         ts = datetime.now().strftime("%H:%M:%S")
         if command:
-            separator = f"[dim $border]--- {ts} [bold $dim]{command}[/bold $dim] ---[/dim $border]"
+            separator = f"[dim #4A7A4A]--- {ts} [dim #6a7a6a]{command}[/] ---[/]"
         else:
-            separator = f"[dim $border]--- {ts} ---[/dim $border]"
+            separator = f"[dim #4A7A4A]--- {ts} ---[/]"
         self.write(separator)
 
     def write_command_output(self, command: str, output: str) -> None:
@@ -100,7 +100,7 @@ class OutputPanel(RichLog):
         Args:
             message: The error message to display (supports Rich markup).
         """
-        self.write(f"[bold $error]{message}[/bold $error]")
+        self.write(f"[bold #d47a7a]{message}[/]")
 
     def clear_output(self) -> None:
         """Clear all output from the panel and show a fresh welcome message."""

@@ -48,16 +48,16 @@ class CommandInput(Input):
     CommandInput {
         height: 3;
         width: 100%;
-        border: solid $border;
-        background: $surface;
-        color: $text;
+        border: solid #4A7A4A;
+        background: #1e241e;
+        color: #e0e8e0;
         padding: 0 1;
     }
     CommandInput:focus {
-        border: solid $accent;
+        border: solid #8BAA89;
     }
     CommandInput > .input--placeholder {
-        color: $dim;
+        color: #6a7a6a;
     }
     """
 

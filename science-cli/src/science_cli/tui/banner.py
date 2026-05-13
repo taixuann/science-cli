@@ -36,7 +36,7 @@ class SCIBanner(Static):
         width: 100%;
         padding: 1 0;
         text-style: bold;
-        color: $accent;
+        color: #8BAA89;
     }
     """
 
