@@ -1,4 +1,4 @@
-"""config command handler — plot, theme, init, show."""
+"""config command handler — plot, theme, init, show, list techniques, set technique."""
 
 import os
 import subprocess
@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.console import Console
 from rich import print as rprint
 from rich.table import Table
+from rich.panel import Panel
 import yaml
 
 from science_cli.cli.help import show_command_help
@@ -54,10 +55,16 @@ def config_handler(args: list) -> None:
         _cmd_show(sub_args)
 
     elif sub == "set":
-        if len(sub_args) >= 2 and sub_args[0] == "technique":
+        if not sub_args:
+            console.print("[yellow]Usage: config set technique <name> <device>[/yellow]")
+            console.print("[yellow]       config set techniques <technique> <device>[/yellow]")
+        elif sub_args[0] == "technique" and len(sub_args) >= 3:
             _cmd_set_technique(sub_args[1:])
+        elif sub_args[0] == "techniques" and len(sub_args) >= 3:
+            _cmd_set_techniques(sub_args[1:])
         else:
             console.print("[yellow]Usage: config set technique <name> <device>[/yellow]")
+            console.print("[yellow]       config set techniques <technique> <device>[/yellow]")
 
     elif sub == "edit":
         force = "--force" in sub_args
@@ -230,6 +237,16 @@ def _cmd_set_technique(args: list) -> None:
     console.print(f"[green]✓[/green] Default device for '{technique}' set to '{device}'")
 
 
+def _cmd_set_techniques(args: list) -> None:
+    """Set the default device for a technique (plural alias).
+
+    Usage: sci config set techniques <name> <device>
+    Alias for: config set technique <name> <device>
+    """
+    # Delegate to singular version
+    _cmd_set_technique(args)
+
+
 def _cmd_edit_technique(technique: str, force: bool = False) -> None:
     """Open technique config in $EDITOR (or nvim as fallback).
 
@@ -381,33 +398,96 @@ patterns:
 
 
 def _cmd_list_techniques() -> None:
-    """List all configured techniques from all sources."""
-    from science_cli.core.config import list_technique_names, load_technique_configs
+    """List all configured techniques from all sources with per-device config display."""
+    from science_cli.core.config import (
+        list_technique_names,
+        list_technique_devices,
+        get_technique_patterns,
+        get_default_device,
+        get_device_config_detail,
+    )
 
     names = list_technique_names()
 
     if not names:
         console.print("[dim]No techniques configured.[/dim]")
+        console.print("[dim]Use 'sci config set technique <name> <device>' to add one.[/dim]")
         return
 
-    # Check which have standalone config files
-    tech_configs = load_technique_configs()
+    # Build the enhanced 4-column table with per-device rows
+    table = Table(
+        title="Configured Techniques",
+        show_lines=True,
+        border_style="cyan",
+        header_style="bold white",
+    )
+    table.add_column("Technique ID", style="bold cyan")
+    table.add_column("Filename Patterns", style="dim")
+    table.add_column("Device Config", style="white")
+    table.add_column("Default Device", style="green")
 
-    table = Table(title="Configured Techniques")
-    table.add_column("Technique", style="cyan")
-    table.add_column("Config File", style="green")
-    table.add_column("Devices", style="yellow")
+    for tech_name in sorted(names):
+        patterns = get_technique_patterns(tech_name)
+        patterns_str = "\n".join(f"• {p}" for p in patterns) if patterns else "—"
+        default_device = get_default_device(tech_name)
+        default_str = default_device if default_device else "—"
+        devices = list_technique_devices(tech_name)
 
-    for name in names:
-        has_config = "yes" if name in tech_configs else "—"
-        from science_cli.core.config import list_technique_devices
-        devices = list_technique_devices(name)
-        devices_str = ", ".join(devices[:5])
-        if len(devices) > 5:
-            devices_str += f" … and {len(devices)-5} more"
-        table.add_row(name, has_config, devices_str or "—")
+        if not devices:
+            # Technique has no devices configured — show one row with placeholder
+            table.add_row(tech_name, patterns_str, "[dim]—[/dim]", default_str)
+        else:
+            for device_name in devices:
+                device_cfg = get_device_config_detail(tech_name, device_name)
+                # Build device config display cell
+                config_parts = [f"[bold]{device_name}[/bold]"]
+                if device_cfg:
+                    delimiter = device_cfg.get("delimiter", "")
+                    decimal = device_cfg.get("decimal", ".")
+                    header_lines = device_cfg.get("header_lines", 0)
+                    encoding = device_cfg.get("encoding", "utf-8")
+                    columns = device_cfg.get("columns", {})
+
+                    meta_parts = []
+                    if delimiter:
+                        display_delim = repr(delimiter)[1:-1]  # strip quotes
+                        meta_parts.append(f"delimiter: [dim]{display_delim}[/dim]")
+                    if decimal is not None:
+                        meta_parts.append(f"decimal: [dim]{decimal}[/dim]")
+                    if header_lines:
+                        meta_parts.append(f"header_lines: [dim]{header_lines}[/dim]")
+                    if encoding:
+                        meta_parts.append(f"encoding: [dim]{encoding}[/dim]")
+
+                    if meta_parts:
+                        config_parts.append(" | ".join(meta_parts))
+
+                    if columns:
+                        col_strs = [f"[green]{k}[/green]→[dim]{v}[/dim]" for k, v in sorted(columns.items())]
+                        config_parts.append("columns: " + ", ".join(col_strs))
+                else:
+                    config_parts.append("[dim]no config[/dim]")
+
+                config_str = "\n".join(config_parts)
+                # Show default only on first row for this technique
+                row_default = default_str if device_name == devices[0] else ""
+                table.add_row(tech_name, patterns_str, config_str, row_default)
 
     console.print(table)
+
+    # Workflow guidance panel
+    console.print()
+    console.print(Panel(
+        "[bold]How to use techniques[/bold]\n"
+        "  1. [bold]create[/bold] a protocol:  add -m protocol -n my-protocol --step 1_dep,2_dope -t ec-cv,ec-ca\n"
+        "  2. [bold]open[/bold] the protocol:   open -m protocol -n my-protocol\n"
+        "  3. [bold]assign[/bold] data files:   add -m data --fzf\n"
+        "     (technique is auto-detected from filenames)\n"
+        "  4. [bold]plot[/bold] the data:       plot --fzf",
+        title="Workflow Guide",
+        border_style="cyan",
+    ))
+    console.print()
 
 
 def _cmd_list_devices(technique: str) -> None:

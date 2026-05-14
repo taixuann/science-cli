@@ -34,7 +34,7 @@ COMMAND_DESCRIPTIONS = {
     "status":  "Show current context status",
     "results": "List saved results by protocol and step",
     "memristor": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check, plot, dashboard)",
-    "techniques": "List available techniques and usage guide",
+    "techniques": "List techniques (deprecated, use config list techniques)",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -282,7 +282,8 @@ COMMAND_HELP: Dict[str, dict] = {
             "config theme set <name>":                  {"desc": "Set active theme", "usage": "config theme set <name>"},
             "config list techniques":                   {"desc": "List all configured techniques", "usage": "config list techniques"},
             "config list devices <technique>":           {"desc": "List devices for a technique", "usage": "config list devices iv-sweep"},
-            "config set technique <name> <device>":      {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
+            "config set technique <name> <device>":       {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
+            "config set techniques <technique> <device>": {"desc": "Set technique default device (alias for config set technique)", "usage": "config set techniques iv-sweep keithley-2400"},
             "config edit <technique>":                   {"desc": "Open technique config in $EDITOR (--force to regenerate template)", "usage": "config edit iv-sweep [--force]"},
         },
         "examples": [
@@ -292,12 +293,13 @@ COMMAND_HELP: Dict[str, dict] = {
             "config list techniques",
             "config list devices iv-sweep",
             "config set technique iv-sweep keithley-2400",
+            "config set techniques iv-sweep keithley-2400",
             "config edit iv-sweep",
         ],
     },
     "techniques": {
         "usage": "techniques",
-        "desc": "List available techniques and usage guide (Group 4).",
+        "desc": "List techniques (deprecated — use 'config list techniques')",
         "subcommands": {},
         "examples": [
             "techniques",

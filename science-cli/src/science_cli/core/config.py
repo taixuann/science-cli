@@ -319,6 +319,56 @@ def get_header_marker(
     return tech_section.get("header_marker", "")
 
 
+def get_technique_config(
+    technique: str,
+    project_root: Path | None = None,
+) -> dict | None:
+    """Return the full technique config dict from merged config, or None if not found.
+
+    Includes patterns, devices, header_marker, etc. from all config layers.
+    Does NOT include technique-specific defaults (use get_default_device for that).
+    """
+    config = get_merged_config(project_root)
+    tech_section = config.get("techniques", {}).get(technique, {})
+    if not tech_section:
+        return None
+    return dict(tech_section)
+
+
+def get_device_config_detail(
+    technique: str,
+    device_name: str,
+    project_root: Path | None = None,
+) -> dict | None:
+    """Return the RAW device config dict with ALL details, NOT merged with defaults.
+
+    Unlike get_device_config(), this returns the config exactly as specified
+    in YAML or hardcoded defaults — no _DEFAULT_DEVICE fallback fill-in.
+    Use this when displaying config to users so they see only what's configured.
+    """
+    config = get_merged_config(project_root)
+    tech_section = config.get("techniques", {}).get(technique, {})
+    devices = tech_section.get("devices", {})
+
+    device_cfg = devices.get(device_name, None)
+    if device_cfg is None:
+        # Fallback to hardcoded built-in device configs (raw, no defaults merged)
+        builtin_devices = _DEFAULT_TECHNIQUE_DEVICES.get(technique, {})
+        device_cfg = builtin_devices.get(device_name, None)
+        if device_cfg is None:
+            return None
+
+    # Check per-project devices.yaml for overrides
+    if project_root is not None and device_cfg is not None:
+        project_devices_path = project_root / "devices.yaml"
+        if project_devices_path.exists():
+            project_devices = _load_yaml(project_devices_path)
+            if device_name in project_devices:
+                device_cfg = _merge_dicts(device_cfg, project_devices[device_name])
+
+    return dict(device_cfg)
+
+
 # ── Config generation (for config init) ────────────────────────────────
 
 def generate_default_config_yaml() -> str:
