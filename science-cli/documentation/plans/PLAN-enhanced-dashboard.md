@@ -11,8 +11,8 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: draft
-- **Branch**: `mysci-tui_update`
+- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed)
+- **Branch**: `refactor/2.1.0`
 
 ## Objective
 Replace `dashboard.py` with the dark-themed interactive Plotly dashboard design from `documentation/memristor_dashboard_layout.html`, wired to real IV data from `devices.yaml`. Add Keithley 2400 / tab-separated data format support, Vset/Vreset extraction (both abrupt and gradual switching detection), user-configurable V_read parameter, and ON/OFF ratio computation for the dashboard.
@@ -387,3 +387,90 @@ This feeds directly into the dashboard's KPI cards, heatmap, and histograms.
 - [x] TEST: All guardrail tests pass
 - [x] Delete orphan project.py handler
 - [x] COMMIT to `mysci-tui_update` branch
+
+## Sprint 4: UX Enhancements & Workflow Polish
+
+**Goal:** Improve the CLI user experience with smarter context-aware listing, polished output formatting, and streamlined file assignment workflow.
+
+**Status**: Proposed (features approved, not yet implemented)
+
+### Feature F1: Context Awareness — `open protocol` clears step, `ls` filters by level
+
+**Problem:** After navigating between protocols, the lingering step context causes confusion. `ls` does not adapt its output to the current context level, forcing users to always specify `-m` flags.
+
+**Solution:**
+
+1. **`open -m protocol -n <name>` clears step context** — when opening a new protocol, set `last_step` to `null` in session state. If a step was previously open, it is reset so the user starts fresh in the protocol context.
+
+2. **`ls` adapts to the current context level:**
+   - **No project open**: list projects (equivalent to `ls -m project`)
+   - **Project open, no protocol**: list protocols in current project
+   - **Protocol open, no step**: list steps in current protocol
+   - **Step open**: list files in current step
+   - `ls -m project` / `-m protocol` / `-m step` remain available for explicit level selection overriding the default behavior
+
+**Files affected:**
+- `src/science_cli/cli/commands/open_cmd.py` — clear `last_step` on protocol open
+- `src/science_cli/cli/commands/ls_cmd.py` — context-aware level detection
+- `src/science_cli/core/session.py` — verify session clear works
+
+### Feature F2: `add -m data` FZF Sorted File Display
+
+**Problem:** When running `add -m data --fzf`, the FZF selector shows all files in the step directory without distinguishing already-assigned files from unassigned ones. Users must remember which files they've already added.
+
+**Solution:**
+
+When displaying the FZF file selection for `add -m data --fzf`:
+1. **Unassigned files listed first** — sorted alphabetically, clearly separated
+2. **Already-assigned files listed below**, grouped by step with step headers
+   - Format: `── Step Name ──` header, followed by indented file list
+   - Makes it easy to see where each file is already assigned
+3. Selected files that are already assigned should be skipped or warned about
+
+**Files affected:**
+- `src/science_cli/cli/commands/add.py` — FZF input generation logic
+- `src/science_cli/core/manifest.py` — query assigned files per step
+
+### Feature F3: Rich Table Format for All `ls` Commands
+
+**Problem:** `ls` output uses plain text formatting, making it hard to scan. Section titles, descriptions, and file counts lack visual distinction.
+
+**Solution:**
+
+All `ls` subcommands (`ls -m project`, `-m protocol`, `-m step`, `ls files`) use Rich table format with consistent styling:
+- **Bold title row** for each section (e.g., "Projects", "Protocols", "Steps")
+- **Grey/italic descriptions** underneath each entry
+- **File count badges** (e.g., "3 files", "12 files") in dim style, right-aligned
+- Consistent color scheme across all list types
+- Works in both CLI mode and TUI mode
+
+**Files affected:**
+- `src/science_cli/cli/commands/ls_cmd.py` — Rich table rendering
+- `src/science_cli/core/` — may need helper for file counting per protocol/step
+
+### Feature F4: No Global File Search (`ls -m file` removed)
+
+**Problem:** `ls -m file` attempts to scan the entire project tree for data files, which is slow and meaningless outside a protocol context. Files only make sense within a specific protocol+step.
+
+**Solution:**
+- `ls -m file` is **removed** — no global file-level listing
+- Files are only listed within a protocol context:
+  - `ls` when a step is open (context-aware from F1)
+  - `ls files` (if such a subcommand exists, scoped to current context)
+- If a user tries to list files without an open step, show a helpful message:
+  - *"No step open. Use `open -m step -n <name>` to select a step, or `ls` to see available steps."*
+
+**Files affected:**
+- `src/science_cli/cli/commands/ls_cmd.py` — remove `-m file` handler
+- Help text / `help.py` — remove `ls -m file` from documentation
+
+### Sprint 4 Progress
+
+- [ ] PLAN: Sprint 4 section created (this document)
+- [ ] Feature F1: `open` clears step context, `ls` context-aware filtering
+- [ ] Feature F2: `add -m data` sorted FZF display
+- [ ] Feature F3: Rich table formatting for `ls`
+- [ ] Feature F4: Remove global `ls -m file`
+- [ ] Feature F5: Docs update (this entry)
+- [ ] TEST: All guardrail tests pass
+- [ ] COMMIT to `refactor/2.1.0` branch
