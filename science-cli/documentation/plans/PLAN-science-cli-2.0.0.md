@@ -432,3 +432,8 @@ ADDITIONAL
 ## Cross-PLAN Update (2026-05-14)
 - **Sprint 5 Proposed**: Techniques → Config Integration added to [[PLAN-enhanced-dashboard]] as Sprint 5. Features F6 (`config set techniques`) and F7 (enhanced `config list techniques` with per-cell device config display) are proposed to reduce the standalone `techniques` command. See Sprint 5 in PLAN-enhanced-dashboard.md for details.
 - **GROUP 4 impact**: The `techniques` command in GROUP 4 (Extensions & Techniques) may be deprecated or reduced once Sprint 5 is implemented. This affects the command listing in this PLAN's "Current Command Groups" section.
+
+## Cross-PLAN Update (2026-05-14) — Sprint 6
+- **Sprint 6 Proposed**: SQLite Query Cache added to [[PLAN-enhanced-dashboard]] as Sprint 6. New `db.py` module for SQLite schema/CRUD, dual-write on `memristor sync` (YAML + SQLite), SQLite read path in dashboard. New file: `src/science_cli/memristor/db.py`. See Sprint 6 in PLAN-enhanced-dashboard.md for details.
+- **Data flow impact**: `analysis_data.json` (Sprint 3) remains the analysis cache with mtime tracking; SQLite becomes the read-optimized query cache. Both populated during sync.
+- **No command group changes**: Sprint 6 adds no new CLI commands — all behavior is internal to `memristor sync` and `dashboard`.

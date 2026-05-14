@@ -11,7 +11,7 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed, Sprint 5 proposed)
+- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed, Sprint 5 proposed, Sprint 6 proposed)
 - **Branch**: `refactor/2.1.0`
 
 ## Objective
@@ -594,3 +594,198 @@ Redesign `config list techniques` output as a Rich table with four columns:
 - [ ] DOCS: Help text updated for `techniques` and `config list`
 - [ ] TEST: All guardrail tests pass
 - [ ] COMMIT to `refactor/2.1.0` branch
+
+## Sprint 6: SQLite Query Cache
+
+**Goal:** Add a SQLite query cache layer for fast dashboard/analysis reads. Dual-write on `memristor sync`: YAML remains the human-editable source of truth; SQLite provides a read-optimized machine-readable cache.
+
+**Status**: Proposed (features approved, not yet implemented)
+
+### Architecture
+
+- **Dual-write on `memristor sync`**: YAML (human-editable) + SQLite (machine-readable)
+- **SQLite file**: `<project_name>.db` at project root (e.g., `test-project.db` next to `sci-config.yaml`)
+- **YAML stays** the source of truth for human editing
+- **SQLite** is the read-optimized query cache for dashboard and analysis
+
+### Schema
+
+```sql
+CREATE TABLE files (
+    id INTEGER PRIMARY KEY,
+    protocol TEXT NOT NULL,                -- "1_protocol-1"
+    step TEXT NOT NULL,                    -- "step-4"
+    filename TEXT NOT NULL,                 -- full basename
+    technique TEXT NOT NULL,                -- "iv", "endurance", "retention", "switching"
+    date_code TEXT,                         -- DDMMYY extracted from filename
+    material TEXT NOT NULL,                 -- from filename pattern
+    row INTEGER,                            -- from matrix part ("r0c1" → 0, 1)
+    col INTEGER,
+    cycle_index INTEGER,                    -- suffix number (only for iv-sweep technique)
+    timestamp_first REAL,                   -- first timestamp from Keithley column
+    timestamp_last REAL,                    -- last timestamp from Keithley column
+    v_set REAL,                             -- analyzed (nullable until analysis run)
+    v_reset REAL,
+    on_off_ratio REAL,
+    current_compliance_1sf TEXT,            -- e.g. "5e-2" (1 sig fig)
+    compliance_confidence TEXT,
+    plot_figure_path TEXT,                  -- e.g. "step-4/results/iv_r0c0_material_01.svg"
+    file_size INTEGER,
+    mtime TEXT,
+    UNIQUE(protocol, step, filename)
+);
+
+CREATE TABLE cells (
+    id INTEGER PRIMARY KEY,
+    protocol TEXT NOT NULL,
+    material TEXT NOT NULL,                  -- each material = separate matrix
+    row INTEGER NOT NULL,
+    col INTEGER NOT NULL,
+    n_files INTEGER DEFAULT 0,
+    median_v_set REAL,
+    median_v_reset REAL,
+    median_on_off_ratio REAL,
+    UNIQUE(protocol, material, row, col)
+);
+
+CREATE TABLE protocols (
+    name TEXT PRIMARY KEY,
+    label TEXT,
+    rows INTEGER,
+    cols INTEGER,
+    materials TEXT,                          -- JSON list
+    last_sync TEXT
+);
+```
+
+### Sync Flow in `memristor sync`
+
+1. Read each IV CSV (as today)
+2. Extract from filename: date_code (DDMMYY), material (from pattern), row, col (from matrix), cycle_index (suffix)
+3. Read first and last values of Timestamp column from Keithley data
+4. Run analysis: Vset, Vreset, ON/OFF, compliance detection
+5. Write to devices.yaml (as today)
+6. Write/update SQLite: `INSERT OR REPLACE INTO files`, upsert `cells` aggregates, upsert `protocols`
+
+### Key Design Notes
+
+- `cycle_index` only applies to iv-sweep technique (not endurance/retention)
+- No batch field
+- Temperature column excluded for now (future improvement)
+- Material determines matrix classification (not row/col alone)
+- `on_off_ratio` in `cells` is the median across files — files without switching contribute NULL (excluded from median)
+- No sweep direction or sweep rate in SQLite — these remain YAML-only (per devices.yaml role from Sprint 3)
+
+### Files Affected
+
+| File | Action | Reason |
+|------|--------|--------|
+| `src/science_cli/memristor/db.py` | **NEW** | SQLite schema, create/read/write helpers |
+| `src/science_cli/memristor/device_cli.py` | **Modify** | Add SQLite write to `cmd_sync()` |
+| `src/science_cli/memristor/dashboard.py` | **Modify** | Add SQLite read path (optional, YAML fallback) |
+| `src/science_cli/memristor/plotting.py` | **Modify** | Expose first/last timestamp in info dict |
+| `test_guardrails.py` | **Modify** | Add SQLite-related guardrail tests |
+
+### Sprint 6 Progress
+
+- [ ] PLAN: Sprint 6 section created (this document)
+- [ ] IMPLEMENT: `src/science_cli/memristor/db.py` — SQLite schema + CRUD helpers
+- [ ] IMPLEMENT: SQLite write in `cmd_sync()` — dual-write after YAML
+- [ ] IMPLEMENT: Analysis results (Vset/Vreset/ratio) written to SQLite during sync
+- [ ] IMPLEMENT: SQLite read path in `dashboard.py` — fallback to YAML if no DB
+- [ ] IMPLEMENT: `plotting.py` exposes `timestamp_first`, `timestamp_last` in info dict
+- [ ] TEST: SQLite created after `memristor sync` on real project
+- [ ] TEST: Dashboard reads from SQLite when available
+- [ ] TEST: YAML-only workflow still works (no DB = no crash)
+- [ ] TEST: Dual-write consistency — YAML and SQLite agree on file listing
+- [ ] TEST: All guardrail tests pass
+- [ ] DOCS: Help text updated for sync flow
+- [ ] COMMIT to `refactor/2.1.0` branch
+
+## Gaps & Flaws Analysis (Sprint 6)
+
+### 1. `analysis_data.json` vs SQLite Overlap
+
+**Risk**: MEDIUM. Both `analysis_data.json` (Sprint 3) and the SQLite `files` table store per-file Vset/Vreset/ratio. The JSON also stores file mtimes for incremental cache invalidation. Without alignment, two sources of truth can drift apart.
+
+**Mitigation**: Clarify roles:
+- `analysis_data.json` = **analysis cache** (tracks file mtimes for incremental re-analysis, stores intermediate analysis state)
+- SQLite = **query cache** (fast indexed reads for dashboard/analysis panels)
+- Both are populated from the same analysis pipeline during `sync`
+- When SQLite is present and current, the dashboard reads from SQLite. When absent, it falls back to YAML + JSON.
+- The `--force` flag (Sprint 3) should rebuild both caches.
+
+### 2. Missing Indexes — Performance at Scale
+
+**Risk**: MEDIUM. The `files` table has no indexes on `material`, `protocol`, `technique`, or `mtime`. Dashboard filters (material selector) would scan the entire table. Incremental sync would scan all rows to find stale mtimes.
+
+**Mitigation**: Add indexes to the schema:
+
+```sql
+CREATE INDEX idx_files_material ON files(material);
+CREATE INDEX idx_files_protocol ON files(protocol);
+CREATE INDEX idx_files_mtime ON files(mtime);
+CREATE INDEX idx_files_technique ON files(technique);
+CREATE INDEX idx_cells_protocol_material ON cells(protocol, material);
+```
+
+### 3. Dual-Write Not Atomic
+
+**Risk**: MEDIUM. `sync` writes to `devices.yaml` first, then to SQLite. If SQLite write fails (disk full, permission error, DB locked), YAML is updated but SQLite is stale. On next dashboard render, SQLite would have missing data while YAML is correct. Reverse failure (YAML fails, SQLite succeeds) is less likely but possible.
+
+**Mitigation**:
+- Wrap SQLite write in a transaction
+- If SQLite write fails, log a warning and dashboard falls back to YAML
+- Consider using WAL (Write-Ahead Log) mode for SQLite to improve concurrent read reliability
+- A future enhancement could make writes atomic by using SQLite as the write target and deriving YAML from it
+
+### 4. `protocols.materials` as JSON String
+
+**Risk**: LOW-MEDIUM. `materials TEXT` stores a JSON list (e.g., `["Ta-PDA-ITO", "Pt-STO"]`). SQLite has no native JSON array type — querying individual materials requires `json_each()` or LIKE patterns. This makes protocol-level material queries slower.
+
+**Mitigation**: Keep JSON for simplicity (single-row metadata per protocol). The `files` and `cells` tables already have a plain `material TEXT` column with proper indexing (see item 2). Protocol-level material queries are rare (only on project init/summary).
+
+### 5. `on_off_ratio` Median in `cells` — NULL Handling
+
+**Risk**: LOW. `median_on_off_ratio` in the `cells` table aggregates across all files for that cell. Devices without switching contribute NULL, which SQLite's `median()` aggregate handles inconsistently (no native median function — requires custom aggregate or subquery).
+
+**Mitigation**:
+- Exclude files with `v_set IS NULL` from the median computation
+- Document that `median_on_off_ratio` reflects only switching files, not all files
+- Implement median in Python before upsert, or use SQL window functions: `AVG(on_off_ratio) OVER(...)` with NULL exclusion
+
+### 6. No Schema Migration Strategy
+
+**Risk**: LOW. SQLite schema is created on first `sync`. Future changes (adding temperature column, batch field, new technique columns) require `ALTER TABLE` or version tracking. Existing `.db` files would be incompatible with a new schema.
+
+**Mitigation**:
+- Add a `schema_version` INTEGER pragma or version row in the `protocols` table
+- On startup, check version and run migration SQL if needed
+- Start at version 1 for the initial schema
+
+### 7. Sweep Direction / Sweep Rate Missing (Deferred)
+
+**Risk**: LOW. Sprint 3's `devices.yaml` stores sweep direction + sweep rate per file. These are not in SQLite. If the dashboard ever needs to filter or facet by sweep direction, it still requires parsing YAML.
+
+**Mitigation**: Document as a deferred enhancement. Add sweep direction and sweep rate columns to `files` table in a future sprint when dashboard filtering requires them.
+
+### 8. `cells` Table is Derived Data
+
+**Risk**: LOW. The `cells` table stores aggregates (median Vset, n_files) that can always be recomputed from `files`. This is a classic denormalization — it speeds up dashboard cell queries but can drift if `files` is updated without updating `cells`.
+
+**Mitigation**:
+- Always upsert `cells` in the same transaction as `files` during sync
+- Consider making `cells` a SQL view in a future iteration if consistency proves problematic
+- Add a `memristor sync --rebuild-cells` flag to recompute cells from files
+
+### 9. No `db rebuild` Command
+
+**Risk**: LOW. Existing projects need a way to recreate the SQLite database from scratch (e.g., if DB is corrupted, deleted, or schema changes during development).
+
+**Mitigation**: Add `memristor sync --rebuild-db` flag that drops and recreates the SQLite file, then re-syncs all files. Document in the Sprint 6 plan.
+
+### 10. Temperature Column Excluded
+
+**Risk**: LOW. Temperature is a relevant parameter for memristor characterization (SET/RESET voltage drift with temperature). Excluded per current spec as a future improvement.
+
+**Mitigation**: Document in schema comments. When adding temperature, add `temperature` REAL column to `files` table. The parsing logic would need to extract temperature from filename pattern or metadata headers (neither currently supports it).
