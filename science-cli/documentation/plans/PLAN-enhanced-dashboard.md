@@ -587,13 +587,23 @@ Redesign `config list techniques` output as a Rich table with four columns:
 
 ### Sprint 5 Progress
 
-- [ ] PLAN: Sprint 5 section created (this document)
-- [ ] Feature F6: `config set techniques` — technique management under config
-- [ ] Feature F7: Enhanced `config list techniques` with per-cell device config display
-- [ ] DEPRECATE: standalone `techniques` command functions absorbed into config
-- [ ] DOCS: Help text updated for `techniques` and `config list`
-- [ ] TEST: All guardrail tests pass
-- [ ] COMMIT to `refactor/2.1.0` branch
+- [x] PLAN: Sprint 5 section created (this document)
+- [x] Feature F6: `config set techniques` — technique management under config
+- [x] Feature F7: Enhanced `config list techniques` with per-cell device config display
+- [x] DEPRECATE: standalone `techniques` command functions absorbed into config
+- [x] DOCS: Help text updated for `techniques` and `config list`
+- [x] TEST: All guardrail tests pass
+- [x] COMMIT to `refactor/2.1.0` branch
+
+**Sprint 5 Results:**
+- `config list techniques` now shows 4-column Rich table (Technique ID, Patterns, Device Config per-device rows, Default Device)
+- Workflow guidance Panel added below table
+- `config set techniques` added as alias for `config set technique`
+- `techniques` command converted to thin wrapper with deprecation notice → delegates to `config list techniques`
+- `core/config.py` added `get_technique_config()`, `get_device_config_detail()` helpers
+- Help text updated for both `config` and `techniques` throughout
+- All imports verified working
+- Commit: `7a77772`
 
 ## Sprint 6: SQLite Query Cache
 

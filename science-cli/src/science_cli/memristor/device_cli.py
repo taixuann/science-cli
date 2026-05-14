@@ -109,12 +109,13 @@ def _resolve_step_context(proto_dir: Path) -> tuple:
 # ── Technique inference ─────────────────────────────────────
 
 
-def _infer_technique(filename: str) -> str:
-    """Infer technique from filename alone."""
-    from science_cli.core.technique import detect_technique
+def _build_tech_map(project_root=None) -> dict[str, str]:
+    """Build technique name → short name mapping from config.
 
-    ft = detect_technique(filename)
-    TECH_MAP = {
+    Reads from config ``techniques.<name>.short_name`` first.
+    Falls back to hardcoded TECH_MAP if config doesn't define a mapping.
+    """
+    HARDCODED_TECH_MAP = {
         "iv-sweep": "iv",
         "iv-breakdown": "iv",
         "iv-leakage": "iv",
@@ -122,7 +123,27 @@ def _infer_technique(filename: str) -> str:
         "mem-retention": "retention",
         "mem-switching": "switching",
     }
-    return TECH_MAP.get(ft, "")
+    try:
+        from science_cli.core.config import get_technique_config
+        result: dict[str, str] = {}
+        for tech, fallback in HARDCODED_TECH_MAP.items():
+            tconfig = get_technique_config(tech, project_root)
+            if tconfig and "short_name" in tconfig:
+                result[tech] = tconfig["short_name"]
+            else:
+                result[tech] = fallback
+        return result
+    except ImportError:
+        return dict(HARDCODED_TECH_MAP)
+
+
+def _infer_technique(filename: str) -> str:
+    """Infer technique from filename alone."""
+    from science_cli.core.technique import detect_technique
+
+    ft = detect_technique(filename)
+    tech_map = _build_tech_map()
+    return tech_map.get(ft, "")
 
 
 # ── Filename parsing ────────────────────────────────────────
@@ -172,7 +193,10 @@ def parse_canonical_filename(filename: str) -> dict | None:
 
 
 def _parse_filename_metadata(filename: str) -> dict:
-    """Parse row, col, technique, sweep_type from filename convention."""
+    """Parse row, col, technique, sweep_type from filename convention.
+
+    Tries grammar-based parsing first, falls back to hardcoded patterns.
+    """
     meta = {
         "row": None,
         "col": None,
@@ -180,6 +204,33 @@ def _parse_filename_metadata(filename: str) -> dict:
         "sweep_type": None,
         "sweep_order": None,
     }
+
+    # Try grammar-based parsing first
+    try:
+        from science_cli.core.technique import parse_filename_grammar
+        grammar_result = parse_filename_grammar(filename)
+        if "parse_error" not in grammar_result:
+            # Extract row/col from grammar result if available
+            if "row" in grammar_result:
+                try:
+                    meta["row"] = int(grammar_result["row"])
+                except (ValueError, TypeError):
+                    pass
+            if "col" in grammar_result:
+                try:
+                    meta["col"] = int(grammar_result["col"])
+                except (ValueError, TypeError):
+                    pass
+            if "technique" in grammar_result:
+                meta["technique"] = grammar_result["technique"]
+            if "sweep_type" in grammar_result:
+                meta["sweep_type"] = grammar_result["sweep_type"]
+            if meta["row"] is not None or meta["col"] is not None or meta["technique"]:
+                return meta
+    except ImportError:
+        pass
+
+    # Fall back to hardcoded patterns
     m = re.search(r'r(\d+)c(\d+)', filename, re.IGNORECASE)
     if m:
         meta["row"] = int(m.group(1))
@@ -265,11 +316,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     from science_cli.core.technique import detect_technique
-    TECH_MAP = {
-        "iv-sweep": "iv", "iv-breakdown": "iv", "iv-leakage": "iv",
-        "mem-endurance": "endurance", "mem-retention": "retention",
-        "mem-switching": "switching",
-    }
+    tech_map = _build_tech_map()
 
     steps: dict[str, str] = {}
     raw = getattr(args, "steps", "") or ""
@@ -283,7 +330,7 @@ def cmd_init(args: argparse.Namespace) -> None:
                 steps[tech.strip()] = step_dir_name.strip()
             else:
                 ft = detect_technique(part)
-                tech = TECH_MAP.get(ft, "")
+                tech = tech_map.get(ft, "")
                 if tech:
                     steps[tech] = part
                 else:

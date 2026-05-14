@@ -1015,6 +1015,13 @@ def collect_iv_files(
 
     results: list[dict] = []
 
+    # Try to get project root for grammar-based parsing
+    try:
+        from science_cli.core.project import get_current_project_path
+        project_root = get_current_project_path()
+    except ImportError:
+        project_root = None
+
     for pt, fe in config.get_all_files("iv"):
         # Apply position filter
         if row is not None and pt.row != row:
@@ -1022,13 +1029,23 @@ def collect_iv_files(
         if col is not None and pt.col != col:
             continue
 
-        # Extract material
-        mb_result = extract_material_batch(fe.file)
+        # Extract material — try grammar-based parsing first
+        mat_key = "unknown"
+        mb_result = extract_material_batch(fe.file, project_root=project_root)
         if mb_result:
             mat_name, batch = mb_result
             mat_key = f"{mat_name}({batch})" if batch else mat_name
         else:
-            mat_key = "unknown"
+            # Fallback: try grammar-based parser directly
+            try:
+                from science_cli.core.technique import parse_filename_grammar
+                grammar_result = parse_filename_grammar(fe.file, project_root)
+                if "parse_error" not in grammar_result and "material" in grammar_result:
+                    mat_name = grammar_result["material"]
+                    batch = grammar_result.get("batch", "") or ""
+                    mat_key = f"{mat_name}({batch})" if batch else mat_name
+            except ImportError:
+                pass
 
         # Apply material filter
         if material and mat_key != material:

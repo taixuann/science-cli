@@ -335,6 +335,33 @@ def get_technique_config(
     return dict(tech_section)
 
 
+def get_file_naming_patterns(project_root: Path | None = None) -> list[dict]:
+    """Return file naming pattern configs from merged config.
+
+    Returns list of pattern dicts with keys: template, description, regex, fields.
+    Falls back to empty list if no naming grammar configured.
+    """
+    config = get_merged_config(project_root)
+    naming = config.get("file_naming", {})
+    patterns = naming.get("patterns", [])
+    return patterns
+
+
+def get_file_naming_grammar(project_root: Path | None = None) -> dict:
+    """Return the file naming grammar configuration.
+
+    Returns dict with keys: separator, patterns (list of pattern dicts).
+    Each pattern dict has: template, description, regex, fields.
+    Falls back to empty dict with no patterns if not configured.
+    """
+    config = get_merged_config(project_root)
+    naming = config.get("file_naming", {})
+    return {
+        "separator": naming.get("separator", "_"),
+        "patterns": naming.get("patterns", []),
+    }
+
+
 def get_device_config_detail(
     technique: str,
     device_name: str,

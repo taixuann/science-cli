@@ -85,11 +85,13 @@ BUILTIN_TECHNIQUES: dict[str, TechniqueDef] = {
 def _config_patterns() -> dict[str, list[str]]:
     """Try loading technique patterns from the config system.
 
-    Config patterns are prepended (take priority) before hardcoded ones.
+    Tries get_technique_config() first (complete dict), falling back to
+    get_technique_patterns() (patterns only). Config patterns are prepended
+    (take priority) before hardcoded ones.
     Returns a dict of technique → patterns, or empty dict on failure.
     """
     try:
-        from science_cli.core.config import get_technique_patterns
+        from science_cli.core.config import get_technique_config, get_technique_patterns
         from science_cli.core.project import get_current_project_path
         proj = get_current_project_path()
         project_root = proj if proj else None
@@ -97,9 +99,15 @@ def _config_patterns() -> dict[str, list[str]]:
         # Get patterns for all known techniques (config may add new ones)
         all_techs = set(PATTERNS.keys())
         for tech in all_techs:
-            patterns = get_technique_patterns(tech, project_root)
-            if patterns != PATTERNS.get(tech, []):
-                result[tech] = patterns
+            # Try full technique config first (may have patterns + more)
+            tconfig = get_technique_config(tech, project_root)
+            if tconfig and "patterns" in tconfig:
+                result[tech] = tconfig["patterns"]
+            else:
+                # Fall back to get_technique_patterns()
+                patterns = get_technique_patterns(tech, project_root)
+                if patterns != PATTERNS.get(tech, []):
+                    result[tech] = patterns
         return result
     except ImportError:
         return {}
@@ -152,3 +160,63 @@ def technique_label(tech: str) -> str:
         "mem-switching": "Switching",
     }
     return labels.get(tech, tech.upper())
+
+
+def get_technique_label(technique: str, project_root=None) -> str:
+    """Return a human-readable label for a technique, checking config first.
+
+    Checks get_technique_config() for a ``label`` field first,
+    then falls back to the hardcoded technique_label() function.
+    """
+    try:
+        from science_cli.core.config import get_technique_config
+        tconfig = get_technique_config(technique, project_root)
+        if tconfig and "label" in tconfig:
+            return tconfig["label"]
+    except ImportError:
+        pass
+    return technique_label(technique)
+
+
+def parse_filename_grammar(filename: str, project_root=None) -> dict:
+    """Parse a filename using the configured naming grammar patterns.
+
+    Tries each pattern's regex in order. Returns dict with extracted fields
+    (date_code, material, batch, row, col, technique, type, suffix, etc.)
+    on first match, or dict with ``parse_error`` key if no pattern matches.
+
+    Also extracts row/col from matrix field using extract sub-regexes
+    specified in the pattern config.
+    """
+    from science_cli.core.config import get_file_naming_grammar
+
+    grammar = get_file_naming_grammar(project_root)
+    patterns = grammar.get("patterns", [])
+
+    if not patterns:
+        return {"parse_error": "no naming patterns configured"}
+
+    for pattern in patterns:
+        regex = pattern.get("regex")
+        if not regex:
+            continue
+        try:
+            m = re.search(regex, filename, re.IGNORECASE)
+        except re.error:
+            continue
+
+        if m:
+            result = m.groupdict()
+            # Process extract sub-regexes for matrix fields
+            if "extract" in pattern:
+                for field, extract_spec in pattern["extract"].items():
+                    if field in result and result[field]:
+                        try:
+                            em = re.search(extract_spec, result[field])
+                            if em:
+                                result.update(em.groupdict())
+                        except re.error:
+                            pass
+            return result
+
+    return {"parse_error": "no matching pattern"}

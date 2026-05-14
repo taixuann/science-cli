@@ -300,13 +300,15 @@ _MATERIAL_BATCH_RE = re.compile(
 )
 
 
-def extract_material_batch(filename: str) -> tuple[str, str] | None:
+def extract_material_batch(filename: str, project_root=None) -> tuple[str, str] | None:
     """Extract (material_name, batch_number) from a canonical memristor filename.
 
-    Parses the ``DDMM_MaterialName(Batch)_b#-t#_...`` naming convention.
+    Tries grammar-based parsing first if project_root is provided,
+    falls back to hardcoded regex.
 
     Args:
         filename: e.g. ``"0505_Ta-PDA-ITO(1)_b1-t1_IV-DC_uc_01.csv"``
+        project_root: Optional project root path for grammar-based config lookup.
 
     Returns:
         ``("Ta-PDA-ITO", "1")`` or ``None`` if not parseable.
@@ -320,6 +322,19 @@ def extract_material_batch(filename: str) -> tuple[str, str] | None:
         >>> extract_material_batch("0505_Ta-PDA-ITO_b1-t1_IV-DC_uc_01.csv")
         ('Ta-PDA-ITO', '')
     """
+    # Try grammar-based parsing first if project_root is provided
+    if project_root is not None:
+        try:
+            from science_cli.core.technique import parse_filename_grammar
+            grammar_result = parse_filename_grammar(filename, project_root)
+            if "parse_error" not in grammar_result and "material" in grammar_result:
+                material = grammar_result["material"]
+                batch = grammar_result.get("batch", "") or ""
+                return (material, batch)
+        except ImportError:
+            pass
+
+    # Fall back to hardcoded regex
     m = _MATERIAL_BATCH_RE.match(filename)
     if not m:
         return None
