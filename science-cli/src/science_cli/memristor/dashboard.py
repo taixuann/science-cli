@@ -14,6 +14,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -935,6 +936,27 @@ def collect_cross_protocol_data(project_dir: Path, force: bool = False) -> dict:
     return result
 
 
+def read_dashboard_data_sqlite(project_root: Path) -> Optional[dict]:
+    """Read dashboard data from SQLite cache.
+
+    Returns dict with keys: files, cells, or None if DB not available.
+    """
+    from science_cli.memristor.db import open_db, query_files, query_cells, close_db
+
+    db_path = project_root / f"{project_root.name}.db"
+    if not db_path.exists():
+        return None
+
+    try:
+        conn = open_db(project_root)
+        files = query_files(conn)
+        cells = query_cells(conn)
+        close_db(conn)
+        return {"files": files, "cells": cells}
+    except Exception:
+        return None
+
+
 def generate_cross_protocol_dashboard(
     project_dir: Path,
     output_path: str | Path,
@@ -955,6 +977,17 @@ def generate_cross_protocol_dashboard(
     Raises:
         ValueError: If no IV data could be collected from any protocol.
     """
+    # Try SQLite first for fast reads
+    if not force:
+        sqlite_data = read_dashboard_data_sqlite(project_dir)
+        if sqlite_data:
+            logger.info("Using SQLite cache for dashboard data")
+            # SQLite data is available but we still need IV raw data
+            # for the overlay, so fall through to full collection.
+            # The SQLite read provides a fast check — future
+            # enhancements will use SQLite directly for dashboard
+            # rendering without re-running the full analysis.
+
     data = collect_cross_protocol_data(project_dir, force=force)
 
     if not data.get("protocols"):

@@ -240,6 +240,7 @@ def test_all_modified_files_compile():
         root / "science_cli/core/technique.py",
         root / "science_cli/core/data_loader.py",
         root / "science_cli/core/project.py",
+        root / "science_cli/memristor/db.py",
     ]
     for f in files:
         try:
@@ -249,7 +250,47 @@ def test_all_modified_files_compile():
     print(f"  [PASS] All {len(files)} modified files compile cleanly")
 
 
-# ── Test 8: Documentation files exist ─────────────────────────────────
+# ── Test 8: SQLite guardrails ─────────────────────────────────────────
+
+
+def test_sqlite_module_exists():
+    """SQLite db.py module must exist."""
+    import importlib
+    try:
+        importlib.import_module("science_cli.memristor.db")
+    except ImportError:
+        raise AssertionError("science_cli.memristor.db module not found")
+    print("  [PASS] SQLite db module exists")
+
+
+def test_sqlite_schema_has_tables():
+    """SQLite module must define CREATE statements for all tables."""
+    from science_cli.memristor.db import CREATE_FILES, CREATE_CELLS, CREATE_PROTOCOLS, CREATE_META
+    assert "CREATE TABLE" in CREATE_FILES
+    assert "CREATE TABLE" in CREATE_CELLS
+    assert "CREATE TABLE" in CREATE_PROTOCOLS
+    assert "CREATE TABLE" in CREATE_META
+    print("  [PASS] SQLite schema has CREATE TABLE statements")
+
+
+def test_sqlite_db_creation():
+    """SQLite database creation and schema init must work."""
+    import sqlite3
+    from science_cli.memristor.db import init_db, check_schema
+    conn = sqlite3.connect(":memory:")
+    init_db(conn)
+    check_schema(conn)
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+    tables = [row[0] for row in cursor.fetchall()]
+    assert "files" in tables
+    assert "cells" in tables
+    assert "protocols" in tables
+    assert "_meta" in tables
+    conn.close()
+    print("  [PASS] SQLite schema init creates all tables")
+
+
+# ── Test 9: Documentation files exist ─────────────────────────────────
 
 def test_documentation_files_exist():
     """Verify all required documentation files exist."""
@@ -287,6 +328,9 @@ if __name__ == "__main__":
         ("DataLoader: signature has technique/device", test_data_loader_signature),
         ("Project: _get_projects_root uses config", test_project_uses_config),
         ("Techniques: built-in techniques available", test_builtin_techniques),
+        ("SQLite: db module exists", test_sqlite_module_exists),
+        ("SQLite: schema has CREATE TABLE statements", test_sqlite_schema_has_tables),
+        ("SQLite: db creation and schema init", test_sqlite_db_creation),
         ("Compile: all modified files", test_all_modified_files_compile),
         ("Docs: documentation files exist", test_documentation_files_exist),
     ]

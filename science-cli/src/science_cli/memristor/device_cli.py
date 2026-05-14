@@ -22,9 +22,11 @@ In the sci REPL, use 'memristor' instead of 'mem-device'.
 """
 
 import argparse
+import json
 import logging
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from science_cli.memristor.device import (
@@ -792,6 +794,12 @@ def cmd_sync(args: argparse.Namespace) -> None:
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
+
+    # ── Reindex mode: YAML → SQLite only, no CSV re-read ──
+    if getattr(args, "reindex", False):
+        _sqlite_reindex(pdir)
+        return
+
     report = sync_devices(pdir)
     print(
         f"Sync complete: {report['synced']} synced, "
@@ -800,6 +808,190 @@ def cmd_sync(args: argparse.Namespace) -> None:
         f"{report['type_mismatches']} type mismatches, "
         f"{report['total']} total IV files"
     )
+
+    # ── SQLite dual-write ──
+    _sqlite_sync_from_yaml(pdir)
+
+
+# ── SQLite sync helpers ─────────────────────────────────────
+
+
+def _sqlite_sync_from_yaml(pdir: Path) -> None:
+    """Write current devices.yaml contents into the SQLite cache."""
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import (
+        open_db, insert_file, upsert_cells, upsert_protocol, close_db, rebuild_cells,
+    )
+    from science_cli.memristor.device import read_devices, extract_material_batch
+
+    proj = get_current_project_path()
+    if not proj:
+        return
+
+    config = read_devices(pdir)
+    if not config:
+        return
+
+    conn = open_db(proj)
+    protocol_name = pdir.name
+    try:
+        # Upsert protocol info
+        upsert_protocol(
+            conn, protocol_name,
+            label=config.device.label,
+            rows=config.device.rows,
+            cols=config.device.cols,
+            materials=json.dumps(
+                sorted(set(
+                    extract_material_batch(fe.file)[0] if extract_material_batch(fe.file) else "unknown"
+                    for pt in config.points
+                    for tg in pt.techniques.values()
+                    for fe in tg.files
+                ))
+            ),
+        )
+
+        # For each point+file, insert into files table
+        for pt in config.points:
+            for tech_name, tg in pt.techniques.items():
+                step_name = config.steps.get(tech_name, "")
+                for fe in tg.files:
+                    # Parse material from filename
+                    mb = extract_material_batch(fe.file)
+                    material = mb[0] if mb else "unknown"
+
+                    # Extract row/col from point
+                    row = pt.row
+                    col = pt.col
+
+                    # Extract plot filename from extra
+                    plot_figure_path = fe.extra.get("plot", None)
+
+                    # Determine mtime from filesystem
+                    try:
+                        fpath = config.resolve_file_path(pdir, tech_name, fe.file)
+                        mtime_str = (
+                            datetime.fromtimestamp(
+                                fpath.stat().st_mtime, tz=timezone.utc
+                            ).isoformat()
+                        )
+                        file_size = fpath.stat().st_size
+                    except OSError:
+                        mtime_str = ""
+                        file_size = 0
+
+                    insert_file(
+                        conn,
+                        protocol=protocol_name,
+                        step=step_name,
+                        filename=fe.file,
+                        technique=tech_name,
+                        material=material,
+                        row=row,
+                        col=col,
+                        cycle_index=fe.sweep_order,
+                        file_size=file_size,
+                        mtime=mtime_str,
+                        plot_figure_path=plot_figure_path,
+                    )
+
+        # Rebuild cells from files
+        rebuild_cells(conn)
+        conn.commit()
+        print(f"  SQLite cache updated: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"  SQLite cache write failed: {e}", file=sys.stderr)
+    finally:
+        close_db(conn)
+
+
+def _sqlite_reindex(pdir: Path) -> None:
+    """Reindex SQLite from YAML only (no CSV re-read).
+
+    Reads devices.yaml and repopulates the SQLite database.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import (
+        open_db, insert_file, upsert_cells, upsert_protocol, close_db, rebuild_cells,
+    )
+    from science_cli.memristor.device import read_devices, extract_material_batch
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    config = read_devices(pdir)
+    if not config:
+        print(f"No devices.yaml found in {pdir}")
+        sys.exit(1)
+
+    conn = open_db(proj)
+    protocol_name = pdir.name
+    try:
+        # Upsert protocol info
+        upsert_protocol(
+            conn, protocol_name,
+            label=config.device.label,
+            rows=config.device.rows,
+            cols=config.device.cols,
+            materials=json.dumps(
+                sorted(set(
+                    extract_material_batch(fe.file)[0] if extract_material_batch(fe.file) else "unknown"
+                    for pt in config.points
+                    for tg in pt.techniques.values()
+                    for fe in tg.files
+                ))
+            ),
+        )
+
+        # For each point+file, insert into files table
+        for pt in config.points:
+            for tech_name, tg in pt.techniques.items():
+                step_name = config.steps.get(tech_name, "")
+                for fe in tg.files:
+                    mb = extract_material_batch(fe.file)
+                    material = mb[0] if mb else "unknown"
+
+                    plot_figure_path = fe.extra.get("plot", None)
+
+                    try:
+                        fpath = config.resolve_file_path(pdir, tech_name, fe.file)
+                        mtime_str = (
+                            datetime.fromtimestamp(
+                                fpath.stat().st_mtime, tz=timezone.utc
+                            ).isoformat()
+                        )
+                        file_size = fpath.stat().st_size
+                    except OSError:
+                        mtime_str = ""
+                        file_size = 0
+
+                    insert_file(
+                        conn,
+                        protocol=protocol_name,
+                        step=step_name,
+                        filename=fe.file,
+                        technique=tech_name,
+                        material=material,
+                        row=pt.row,
+                        col=pt.col,
+                        cycle_index=fe.sweep_order,
+                        file_size=file_size,
+                        mtime=mtime_str,
+                        plot_figure_path=plot_figure_path,
+                    )
+
+        rebuild_cells(conn)
+        conn.commit()
+        print(f"SQLite reindex complete: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"SQLite reindex failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
 
 
 # ── Command: validate ───────────────────────────────────────
@@ -1180,6 +1372,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_sync = sub.add_parser("sync", help="Sync sweep metadata")
     p_sync.add_argument("--step-dir", default="")
+    p_sync.add_argument("--reindex", action="store_true", help="Reindex SQLite from YAML only (no CSV re-read)")
     p_sync.set_defaults(func=cmd_sync)
 
     p_val = sub.add_parser("validate", help="Validate device config")

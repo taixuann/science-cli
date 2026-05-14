@@ -155,6 +155,13 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     # Parse Clarius+ metadata from collected non-numeric rows
     clarius_meta = _parse_clarius_metadata(metadata_rows)
 
+    # ── Expose first and last timestamps ──
+    timestamp_first: Optional[float] = None
+    timestamp_last: Optional[float] = None
+    if time_arr is not None and len(time_arr) > 0:
+        timestamp_first = float(time_arr[0])
+        timestamp_last = float(time_arr[-1])
+
     info = {
         "voltage_col": header[voltage_col],
         "current_col": header[current_col],
@@ -163,6 +170,8 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         "skipped_lines": skipped_lines,
         "clarius_metadata": clarius_meta,
         "time": time_arr,
+        "timestamp_first": timestamp_first,
+        "timestamp_last": timestamp_last,
     }
     return voltage, current, info
 
@@ -265,6 +274,7 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
 
     # ── Read tab-separated numeric data rows ──
     numeric_rows: list[list[float]] = []
+    ts_values: list[float] = []
 
     for raw_line in lines[data_start + 1 :]:
         stripped_line = raw_line.strip()
@@ -283,6 +293,13 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
             # non-numeric strings.
             _ = [float(fields[1]), float(fields[2])]  # validate parseable
             numeric_rows.append([float(fields[1]), float(fields[2])])
+
+            # Attempt to parse timestamp from col3 if available
+            if len(fields) >= 4:
+                try:
+                    ts_values.append(float(fields[3]))
+                except ValueError:
+                    ts_values.append(0.0)
         except (ValueError, IndexError):
             continue
 
@@ -301,6 +318,12 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     current = current[mask]
 
     # ── Build result metadata map ──
+    timestamp_first: Optional[float] = None
+    timestamp_last: Optional[float] = None
+    if ts_values:
+        timestamp_first = ts_values[0]
+        timestamp_last = ts_values[-1]
+
     lvm_info = {
         "source": "LabVIEW Measurement",
         "date": metadata.get("Date", ""),
@@ -314,6 +337,8 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         "skipped_lines": 0,
         "clarius_metadata": {},
         "time_col": None,
+        "timestamp_first": timestamp_first,
+        "timestamp_last": timestamp_last,
     }
     return voltage, current, lvm_info
 
