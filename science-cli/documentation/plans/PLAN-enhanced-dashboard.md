@@ -11,7 +11,7 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed)
+- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed, Sprint 5 proposed)
 - **Branch**: `refactor/2.1.0`
 
 ## Objective
@@ -472,5 +472,78 @@ All `ls` subcommands (`ls -m project`, `-m protocol`, `-m step`, `ls files`) use
 - [ ] Feature F3: Rich table formatting for `ls`
 - [ ] Feature F4: Remove global `ls -m file`
 - [ ] Feature F5: Docs update (this entry)
+- [ ] TEST: All guardrail tests pass
+- [ ] COMMIT to `refactor/2.1.0` branch
+
+## Sprint 5: Techniques → Config Integration
+
+**Goal:** Reduce the standalone `techniques` command by integrating techniques management into the `config` command. This consolidates technique listing, configuration, and device display under a single command namespace, eliminating the need for a separate command.
+
+**Status**: Proposed (features approved, not yet implemented)
+
+### Feature F6: `config set techniques` — Technique Configuration Under Config
+
+**Problem:** The standalone `techniques` command provides listing and workflow guidance, but technique configuration (patterns, devices, defaults) is managed via separate `config set technique` and `config edit` subcommands. Users must use two different commands to understand and configure techniques. The standalone `techniques` command duplicates listing functionality that could live under `config list`.
+
+**Solution:**
+
+1. **`config set techniques`** — unified subcommand for setting technique configuration, aligned with the current `techniques` command's purpose. Accepts technique name and device arguments to set defaults, mirroring the existing `config set technique` behavior but positioned as the primary way to configure techniques.
+2. **Standalone `techniques` command** — retains the same top-level listing (technique ID, label, description, filename patterns) but workflow guidance moves into `config`'s enhanced listing output
+3. **Workflow guidance** — the step-by-step usage guide (steps 1-4) from the current `techniques` command moves into `config list techniques` output as a help section
+
+**Files affected:**
+- `src/science_cli/cli/commands/config.py` — enhance technique display, add workflow guidance to `config list techniques`
+- `src/science_cli/cli/commands/techniques.py` — reduce to a thin wrapper/delegator or retain standalone listing with deprecation note
+- `src/science_cli/cli/commands/__init__.py` — update COMMAND_TREE if needed
+- `src/science_cli/cli/help.py` — update help text for both config and techniques
+
+### Feature F7: `config list techniques` — Enhanced Tabular Display with Per-Cell Device Config
+
+**Problem:** Current `config list techniques` (via `_cmd_list_techniques()`) shows only Technique, Config File, and Devices columns — devices are comma-separated in one field, making it hard to scan. It does not show filename patterns (glob/regex) or per-device config details (delimiter, column mappings). Users must run `config list devices <technique>` separately to see device details.
+
+**Solution:**
+
+Redesign `config list techniques` output as a Rich table with four columns:
+
+1. **Technique ID** — the technique name (bold cyan)
+2. **Filename Pattern** — glob/regex patterns for auto-detection, shown as a bulleted list per technique
+3. **Device Config** — each device config entry displayed as a structured cell (one row per device per technique, or multiline cell), NOT comma-separated:
+   - Device name in **bold**
+   - Key config fields in dim style: delimiter, decimal separator, header_lines, encoding
+   - Column mappings in green: `voltage → Untitled`, `current → Untitled 1`, etc.
+   
+   Example formatted cell:
+   ```
+   ┌─ keithley-2400 ─────────────────────────┐
+   │ delimiter: \t | decimal: .              │
+   │ header_lines: 23 | encoding: utf-8      │
+   │ columns: voltage→Untitled               │
+   │          current→Untitled 1             │
+   │          time→Untitled 2                │
+   └─────────────────────────────────────────┘
+   ```
+   
+4. **Default Device** — which device is configured as default for the technique
+
+**Layout option (per-device row):** If multiline cells are too wide, each device can be rendered as its own row with Technique ID repeated (or merged via row span), with a separate sub-column for "Device Name" to keep cells compact.
+
+**Files affected:**
+- `src/science_cli/cli/commands/config.py` — rewrite `_cmd_list_techniques()` with four-column design and per-cell device rendering
+- `src/science_cli/core/config.py` — may need new helpers: `get_technique_patterns()`, `get_device_config_detail()` to return full device config dict for a technique
+- `src/science_cli/core/technique.py` — ensure `BUILTIN_TECHNIQUES` patterns are accessible via core/config helpers
+
+**Implementation notes:**
+- Use Rich `Table` with `show_lines=True` and `header_style` for clear cell boundaries
+- Device config cells should use Rich `Panel` or custom string formatting with consistent indentation
+- Handle techniques with 0 devices gracefully (show empty cell)
+- Handle techniques with 5+ devices (may need scrollable or expandable format — start with sorted alphabetical, add `… and N more` for >5)
+
+### Sprint 5 Progress
+
+- [ ] PLAN: Sprint 5 section created (this document)
+- [ ] Feature F6: `config set techniques` — technique management under config
+- [ ] Feature F7: Enhanced `config list techniques` with per-cell device config display
+- [ ] DEPRECATE: standalone `techniques` command functions absorbed into config
+- [ ] DOCS: Help text updated for `techniques` and `config list`
 - [ ] TEST: All guardrail tests pass
 - [ ] COMMIT to `refactor/2.1.0` branch

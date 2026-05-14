@@ -428,3 +428,7 @@ ADDITIONAL
 - **PLAN-2 (Config Expansion)**: Completed — technique config files in `~/.config/science-cli/techniques/*.yaml`, `config set technique`, `config edit`, `config list techniques`, `config list devices` subcommands.
 - **PLAN-4 (Version Bump)**: Completed — version 2.0.0 already set, CHANGELOG.md created.
 - **Phase 6 (Parquet)**: Completed — `core/parquet_store.py` with `write_features()`, `read_features()`, `append_features()`, `list_feature_files()`, `feature_metadata()`.
+
+## Cross-PLAN Update (2026-05-14)
+- **Sprint 5 Proposed**: Techniques → Config Integration added to [[PLAN-enhanced-dashboard]] as Sprint 5. Features F6 (`config set techniques`) and F7 (enhanced `config list techniques` with per-cell device config display) are proposed to reduce the standalone `techniques` command. See Sprint 5 in PLAN-enhanced-dashboard.md for details.
+- **GROUP 4 impact**: The `techniques` command in GROUP 4 (Extensions & Techniques) may be deprecated or reduced once Sprint 5 is implemented. This affects the command listing in this PLAN's "Current Command Groups" section.
