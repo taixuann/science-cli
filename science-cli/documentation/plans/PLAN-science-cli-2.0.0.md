@@ -437,3 +437,8 @@ ADDITIONAL
 - **Sprint 6 Proposed**: SQLite Query Cache added to [[PLAN-enhanced-dashboard]] as Sprint 6. New `db.py` module for SQLite schema/CRUD, dual-write on `memristor sync` (YAML + SQLite), SQLite read path in dashboard. New file: `src/science_cli/memristor/db.py`. See Sprint 6 in PLAN-enhanced-dashboard.md for details.
 - **Data flow impact**: `analysis_data.json` (Sprint 3) remains the analysis cache with mtime tracking; SQLite becomes the read-optimized query cache. Both populated during sync.
 - **No command group changes**: Sprint 6 adds no new CLI commands — all behavior is internal to `memristor sync` and `dashboard`.
+
+## Cross-PLAN Update (2026-05-14) — Sprint 7
+- **Sprint 7 Proposed**: Config-Driven Technique Registry added to [[PLAN-enhanced-dashboard]] as Sprint 7. Replaces hardcoded `BUILTIN_TECHNIQUES` patterns in `core/technique.py` with config-driven patterns from `sci-config.yaml`. Adds `get_technique_config()` to `core/config.py`.
+- **Config system impact**: The 4-tier config system (hardcoded ← global ← project) now includes technique pattern definitions. This extends the config expansion from Sprint 5 with concrete file-pattern-to-device-mapping data.
+- **File impact**: `core/technique.py`, `core/config.py`, `memristor/device_cli.py`, `memristor/db.py` — all modified to read from config rather than hardcoded dicts.
