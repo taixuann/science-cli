@@ -464,6 +464,52 @@ All `ls` subcommands (`ls -m project`, `-m protocol`, `-m step`, `ls files`) use
 - `src/science_cli/cli/commands/ls_cmd.py` — remove `-m file` handler
 - Help text / `help.py` — remove `ls -m file` from documentation
 
+### Feature F8: `results --fzf` — Open Results Files via FZF
+
+**Problem:** `results` lists output files (plots, dashboards, CSVs) but users must manually navigate to and open them. No quick way to open a specific file from the list.
+
+**Solution:**
+
+1. **`results --fzf`** — pipe the results file list through FZF for interactive selection
+2. On selecting a file, open it with the system default application (`open` on macOS, `xdg-open` on Linux)
+3. Show file metadata in FZF preview (file size, last modified, type badge)
+4. When `results` is called without a specific step filter (showing many files), default to `--fzf` mode automatically
+
+**Files affected:**
+- `src/science_cli/cli/commands/results.py` — add `--fzf` flag and FZF invocation logic
+- `src/science_cli/core/fzf_utils.py` — may need helper for preview window config
+
+### Feature F9: `results` Grouped Rich Display
+
+**Problem:** `results` output is plain text — protocol/step boundaries are hard to scan. Files from different steps blend together.
+
+**Solution:**
+
+Display `results` output as a **grouped Rich table**:
+
+1. **Protocol header** — bold cyan, shows protocol name
+2. **Step subheaders** — bold yellow, beneath each protocol grouping
+3. **Files indented under each step** — dimmed descriptions with file size badges
+4. Consistent with F3 (`ls` table format) for visual uniformity
+
+**Example output:**
+```
+📁 protocol/1_protocol-1
+  ┌─ step-4 ──────────────────────────────────────────┐
+  │  iv_r0c0_Ta-PDA-ITO_forming_01.svg      12.3 KB   │
+  │  iv_r0c1_Ta-PDA-ITO_set_01.svg          14.1 KB   │
+  │  iv_overlay.pdf                          89.2 KB   │
+  │  dashboard.html                         132.5 KB   │
+  └───────────────────────────────────────────────────┘
+  ┌─ 5_end ───────────────────────────────────────────┐
+  │  endurance_r0c0.svg                      45.6 KB   │
+  └───────────────────────────────────────────────────┘
+```
+
+**Files affected:**
+- `src/science_cli/cli/commands/results.py` — Rich table rendering with nested grouping
+- `src/science_cli/core/` — may need helper for collecting results by protocol/step
+
 ### Sprint 4 Progress
 
 - [ ] PLAN: Sprint 4 section created (this document)
@@ -471,7 +517,8 @@ All `ls` subcommands (`ls -m project`, `-m protocol`, `-m step`, `ls files`) use
 - [ ] Feature F2: `add -m data` sorted FZF display
 - [ ] Feature F3: Rich table formatting for `ls`
 - [ ] Feature F4: Remove global `ls -m file`
-- [ ] Feature F5: Docs update (this entry)
+- [ ] Feature F8: `results --fzf` — FZF file opening
+- [ ] Feature F9: `results` grouped rich display
 - [ ] TEST: All guardrail tests pass
 - [ ] COMMIT to `refactor/2.1.0` branch
 
