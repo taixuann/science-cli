@@ -126,7 +126,6 @@ COMMAND_HELP: Dict[str, dict] = {
             "ls -m protocol":       {"desc": "List all protocols (summary)", "usage": "ls -m protocol"},
             "ls -m protocol --step":{"desc": "Show protocol steps only", "usage": "ls -m protocol --step"},
             "ls -m protocol --all": {"desc": "Show steps + files (full view)", "usage": "ls -m protocol --all"},
-            "ls -m protocol --files":{"desc": "Show files only", "usage": "ls -m protocol --files"},
             "ls <step>":            {"desc": "List files in specific step", "usage": "ls 1_deposition"},
         },
         "examples": [

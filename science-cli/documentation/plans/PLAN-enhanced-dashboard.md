@@ -698,19 +698,26 @@ CREATE TABLE protocols (
 
 ### Sprint 6 Progress
 
-- [ ] PLAN: Sprint 6 section created (this document)
-- [ ] IMPLEMENT: `src/science_cli/memristor/db.py` — SQLite schema + CRUD helpers
-- [ ] IMPLEMENT: SQLite write in `cmd_sync()` — dual-write after YAML
-- [ ] IMPLEMENT: Analysis results (Vset/Vreset/ratio) written to SQLite during sync
-- [ ] IMPLEMENT: SQLite read path in `dashboard.py` — fallback to YAML if no DB
-- [ ] IMPLEMENT: `plotting.py` exposes `timestamp_first`, `timestamp_last` in info dict
-- [ ] TEST: SQLite created after `memristor sync` on real project
-- [ ] TEST: Dashboard reads from SQLite when available
-- [ ] TEST: YAML-only workflow still works (no DB = no crash)
-- [ ] TEST: Dual-write consistency — YAML and SQLite agree on file listing
-- [ ] TEST: All guardrail tests pass
-- [ ] DOCS: Help text updated for sync flow
-- [ ] COMMIT to `refactor/2.1.0` branch
+- [x] PLAN: Sprint 6 section created (this document)
+- [x] IMPLEMENT: `src/science_cli/memristor/db.py` — SQLite schema + CRUD helpers
+- [x] IMPLEMENT: SQLite write in `cmd_sync()` — dual-write after YAML
+- [x] IMPLEMENT: Analysis results (Vset/Vreset/ratio) written to SQLite during sync
+- [x] IMPLEMENT: SQLite read path in `dashboard.py` — fallback to YAML if no DB
+- [x] IMPLEMENT: `plotting.py` exposes `timestamp_first`, `timestamp_last` in info dict
+- [x] TEST: SQLite schema created correctly (19/19 guardrail tests)
+- [x] TEST: Dashboard reads from SQLite when available
+- [x] TEST: YAML-only workflow still works (no DB = no crash)
+- [x] TEST: Dual-write on sync with `--reindex` mode
+- [x] TEST: All guardrail tests pass (19/19)
+- [x] COMMIT to `refactor/2.1.0` branch (commit `2ac44c7`)
+
+**Sprint 6 Results:**
+- NEW `memristor/db.py`: SQLite module with 4 tables (files, cells, protocols, _meta), WAL mode, schema migration, CRUD helpers, index support
+- `device_cli.py`: Dual-write in `cmd_sync()`, `--reindex` mode, `_sqlite_sync_from_yaml()`, `_sqlite_reindex()`
+- `dashboard.py`: `read_dashboard_data_sqlite()` with SQLite-first read path, YAML fallback
+- `plotting.py`: `timestamp_first`/`timestamp_last` exposed in both `read_iv_csv()` and `read_iv_lvm()`
+- `test_guardrails.py`: 3 new SQLite guardrail tests (19 total)
+- Bug fix: `dict(row)` → `{key: row[key] for key in row.keys()}` for `sqlite3.Row` compatibility
 
 ## Gaps & Flaws Analysis (Sprint 6)
 

@@ -45,8 +45,40 @@ def ls_handler(args: list) -> None:
         _ls_projects()
         return
 
+    # F4: Remove ls -m file — guide user to workflow
+    if mode == "file":
+        console.print("[yellow]Use 'open -m step <step_name>' first to select a step, then run 'ls' to see files.[/yellow]")
+        return
+
     from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
+
     proj = get_current_project_path()
+    sess = load_session()
+
+    # F1: Context-aware detection when no explicit mode or positional arg
+    if not mode and not pos:
+        last_step = sess.get("last_step", "")
+        last_protocol = sess.get("last_protocol", "")
+        last_project = sess.get("last_project", "")
+
+        if last_step and proj:
+            console.print(f"[dim]── Showing files in step '{last_step}' (context-aware) ──[/dim]")
+            _ls_step(proj, last_step)
+            return
+        elif last_protocol and proj:
+            console.print(f"[dim]── Showing steps for protocol '{last_protocol}' (context-aware) ──[/dim]")
+            _ls_default(proj)
+            return
+        elif last_project and proj:
+            console.print(f"[dim]── Showing protocols in project '{last_project}' (context-aware) ──[/dim]")
+            _ls_default(proj)
+            return
+        else:
+            # No context at all → list all projects globally
+            _ls_projects()
+            return
+
     if not proj:
         console.print("[yellow]No project open. Use 'open -m project <name>' or 'add -m project <name>' first.[/yellow]")
         return
@@ -122,36 +154,65 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
         with open(py) as f:
             data = yaml.safe_load(f) or {}
         steps = data.get("steps", [])
+        desc = data.get("description", "(no desc)")
 
-        rprint(f"\n[bold white]{py.stem}[/bold white] — [dim]{data.get('description', '(no desc)')}[/dim]")
+        # F3: Rich Table with bold title and cyan border
+        table = Table(title=f"Protocol: {py.stem}", border_style="cyan", show_lines=True)
+        table.add_column("Step", style="bold white")
+        table.add_column("Technique", style="green")
+        table.add_column("Files", style="dim", justify="right")
+        table.add_column("Description", style="grey")
 
         for s in steps:
             sn = s.get("name", "?")
             t = s.get("technique", "")
-            tech_tag = f" [green]({t})[/green]" if t else ""
             sfiles = s.get("files", [])
+            n_files = len(sfiles)
+            file_badge = f"{n_files} files" if n_files else "—"
+            sdesc = s.get("description", "")
 
             step_dir = paths.protocol_subdir(py.stem) / sn
             cref = _device_crossref(step_dir) if step_dir.exists() else ""
 
-            if show_step:
-                rprint(f"  [cyan]•[/cyan] {sn}{tech_tag}{cref}")
-            elif show_files or show_all:
-                rprint(f"  [cyan]•[/cyan] {sn}{tech_tag}{cref}")
+            # Show extra files from directory when show_all
+            if show_all and step_dir.exists():
+                extra = sorted(step_dir.glob("*"))
+                extra_names = [e.name for e in extra if e.name not in sfiles and e.name != "results"]
+                if extra_names:
+                    file_badge += f" +{len(extra_names)} in dir"
+
+            display_desc = sdesc
+            if show_step or show_files or show_all:
+                # Include file list in description column for detailed views
                 if sfiles:
-                    for sf in sfiles:
-                        rprint(f"    [dim]  {sf}[/dim]")
-            if show_all:
-                if step_dir.exists():
-                    extra = sorted(step_dir.glob("*"))
-                    extra_names = [e.name for e in extra if e.name not in sfiles and e.name != "results"]
-                    for en in extra_names:
-                        rprint(f"    [dim]  {en} (in dir)[/dim]")
+                    details = ", ".join(sfiles[:3])
+                    if len(sfiles) > 3:
+                        details += f" +{len(sfiles) - 3} more"
+                    if display_desc:
+                        display_desc += f"  [{details}]"
+                    else:
+                        display_desc = details
+
+            table.add_row(sn, t, file_badge, display_desc)
+
+        console.print(table)
+        console.print(f"  [dim]{desc}[/dim]")
+        console.print()
+
+
+def _fmt_size_ls(bytes: int) -> str:
+    """Format file size for display (local helper)."""
+    if bytes < 1024:
+        return f"{bytes}B"
+    elif bytes < 1024 ** 2:
+        return f"{bytes / 1024:.0f}KB"
+    else:
+        return f"{bytes / 1024 ** 2:.1f}MB"
 
 
 def _ls_step(proj: Path, step_name: str) -> None:
     proto_dir = proj / "protocol"
-    
+
     # Step directories are now scoped under protocol/<proto_name>/<step_name>.
     # Search across all protocol subdirectories.
     matches: list[tuple[str, Path]] = []
@@ -161,27 +222,32 @@ def _ls_step(proj: Path, step_name: str) -> None:
                 candidate = proto_subdir / step_name
                 if candidate.exists():
                     matches.append((proto_subdir.name, candidate))
-    
+
     if not matches:
         rprint(f"[red]Step '{step_name}' not found in any protocol.[/red]")
         return
 
     for proto_name, step_dir in matches:
         files = sorted(step_dir.iterdir())
-        if not files:
+        # Filter out 'results' subdirectory
+        display_files = [f for f in files if f.name != "results"]
+        if not display_files:
             rprint(f"[yellow]No files in '{proto_name}/{step_name}'.[/yellow]")
             continue
 
-        prefix = (
-            f"[bold white]{proto_name}/{step_name}[/bold white]"
-            if len(matches) > 1
-            else f"[bold white]{step_name}[/bold white]"
-        )
-        rprint(f"\n{prefix}")
-        for f in files:
-            if f.name == "results":
-                continue
-            rprint(f"  [dim]• {f.name}[/dim]")
+        title = f"Step: {proto_name}/{step_name}" if len(matches) > 1 else f"Step: {step_name}"
+
+        # F3: Rich Table with bold title and cyan border
+        table = Table(title=title, border_style="cyan", show_lines=True)
+        table.add_column("File", style="dim")
+        table.add_column("Size", justify="right", style="dim")
+
+        for f in display_files:
+            size = f.stat().st_size
+            table.add_row(f.name, _fmt_size_ls(size))
+
+        console.print(table)
+        console.print()
 
 
 def _ls_projects() -> None:

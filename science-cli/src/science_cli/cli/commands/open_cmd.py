@@ -131,6 +131,10 @@ def _open_protocol(name: str) -> None:
 
     set_last_protocol(safe_name)
 
+    # ── Clear step context when opening a new protocol
+    from science_cli.core.session import set_last_step
+    set_last_step("")
+
     # Restore protocol-level state
     restore_context_state()
 

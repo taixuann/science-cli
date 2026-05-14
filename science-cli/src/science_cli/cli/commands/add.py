@@ -309,12 +309,23 @@ def _add_data(args: list) -> None:
 
     item_names = [f.name for f in files]
 
-    display_items = []
+    # F2: Group files — unassigned first, then per-step groups
+    unassigned = sorted([n for n in item_names if n not in assigned_files])
+    assigned_grouped: dict[str, list[str]] = {}
     for name in item_names:
         if name in assigned_files:
-            display_items.append(f"{name}  [\u2192 {assigned_files[name]}]")
-        else:
-            display_items.append(name)
+            step = assigned_files[name]
+            assigned_grouped.setdefault(step, []).append(name)
+
+    display_items: list[str] = []
+    # Unassigned section header
+    display_items.append("── Unassigned ──")
+    display_items.extend(unassigned)
+    # Per-step sections
+    for step in sorted(assigned_grouped.keys()):
+        display_items.append(f"── Step: {step} ──")
+        for fname in sorted(assigned_grouped[step]):
+            display_items.append(f"  {fname}")
 
     marker_re = re.compile(r"\s+\[→ .*?\]$")
     selected = fzf_select(
@@ -326,8 +337,14 @@ def _add_data(args: list) -> None:
         console.print("[yellow]No files selected.[/yellow]")
         return
 
-    # Strip markers to get clean filenames
-    selected = [marker_re.sub("", s) for s in selected]
+    # Strip markers and leading whitespace, filter out section headers
+    selected_stripped: list[str] = []
+    for s in selected:
+        s = marker_re.sub("", s).strip()
+        if s.startswith("──") or not s:
+            continue
+        selected_stripped.append(s)
+    selected = selected_stripped
 
     # Build step choices with file count indicators
     step_counts: dict[str, int] = {}

@@ -115,6 +115,7 @@ def open_db(project_root: Path) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     """Create tables and indexes if they do not exist."""
+    conn.row_factory = sqlite3.Row
     conn.execute(CREATE_FILES)
     conn.execute(CREATE_CELLS)
     conn.execute(CREATE_PROTOCOLS)
