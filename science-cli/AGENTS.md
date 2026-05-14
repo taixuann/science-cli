@@ -285,15 +285,16 @@ science-cli/
     ├── tui/                           ← Textual TUI
     │
     ├── memristor/                     ← Memristor characterization
-    │   ├── __init__.py                ← Public API + built-in data
-    │   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
-    │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard)
-    │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard **
-    │   ├── plotting.py                ← IV CSV reading + SVG generation
-    │   ├── endurance.py               ← Endurance analysis
-    │   ├── retention.py               ← Retention analysis
-    │   ├── switching.py               ← Switching analysis
-    │       └── models.py                  ← SwitchingData, EnduranceData, RetentionData
+│   ├── __init__.py                ← Public API + built-in data
+│   ├── db.py                      ← ** SQLite query cache ** (Sprint 6)
+│   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
+│   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard)
+│   ├── dashboard.py               ← ** Plotly interactive HTML dashboard **
+│   ├── plotting.py                ← IV CSV reading + SVG generation
+│   ├── endurance.py               ← Endurance analysis
+│   ├── retention.py               ← Retention analysis
+│   ├── switching.py               ← Switching analysis
+│   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
 ```
 
 ---
