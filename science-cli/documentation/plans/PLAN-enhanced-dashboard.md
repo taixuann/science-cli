@@ -814,6 +814,7 @@ CREATE INDEX idx_cells_protocol_material ON cells(protocol, material);
 **Role separation:**
 - **YAML**: Human editing, Git visibility, AI configurability, rich metadata
 - **SQLite**: Fast queries, aggregation, joins across protocols/steps/cells/materials
+- **Naming grammar:** Template-based YAML grammar (not position-based). Multiple patterns with fallback chain. Optional fields via `{field?}` syntax. Regex matching (not split-by-position) to handle field-internal separators.
 
 ## Sprint 7: Config-Driven Technique Registry &amp; Filename Naming Grammar
 
@@ -891,81 +892,72 @@ devices.yaml
 
 ---
 
-### Feature F7.6: Config-Driven Filename Naming Grammar
+### Feature F7.6: Template-Based Filename Naming Grammar
 
-**Problem:** Currently, filename parsing (extracting date, material, row, col, cycle from filenames like `140526_Ta-PDA-ITO_r0c0_iv_01.csv`) is hardcoded in regexes spread across `technique.py`, `plotting.py`, `device_cli.py`, and `device.py`. Adding a new naming convention requires Python code changes. The Sprint 6 SQLite schema depends on these fields (date_code, material, row, col, cycle_index), but there's no declarative way to tell SQLite construction which fields to populate from the filename.
+**Problem:** Currently, filename parsing (extracting date, material, row, col, cycle from filenames like `140526_Ta-PDA-ITO_r0c0_iv_01.csv`) uses hardcoded regexes spread across `technique.py`, `plotting.py`, and `device_cli.py`. The earlier design used position-based fields which break on optional segments (batch number, extra type codes).
 
-**Solution:** Define a declarative naming grammar in `sci-config.yaml` that describes the filename structure in terms of positional fields with regex patterns:
+**Solution:** Template-based naming grammar in `sci-config.yaml` with named groups, optional field markers, and multi-pattern fallback:
 
 ```yaml
-# In sci-config.yaml
 file_naming:
   separator: "_"
-  # Fields shared across ALL techniques — every file must match these
-  global:
-    - name: date_code
-      position: 0
-      regex: "\\d{6}"
-      meaning: "DDMMYY format"
-    - name: material
-      position: 1
-      regex: "[A-Za-z0-9\\-]+"
-    - name: matrix
-      position: 2
-      regex: "r(?P&lt;row&gt;\\d+)c(?P&lt;col&gt;\\d+)"
-      sql_columns: ["row", "col"]
-  # Technique-specific fields — tacked on after global fields
-  per_technique:
-    iv:
-      - name: type
-        position: 3
-        regex: "iv|forming|set|reset"
-        sql_column: technique_subtype
-      - name: cycle_index
-        position: 4
-        regex: "\\d+"
-        sql_column: cycle_index
-    endurance:
-      - name: type
-        position: 3
-        value: "endurance"
-        sql_column: technique_subtype
-      - name: cycle_range
-        position: 4
-        regex: "\\d+-\\d+"
+  patterns:
+    # Canonical: DDMMYY_Material[_batch]_rNcN_Technique[_Type][_Suffix].ext
+    - template: "{date_code}_{material}{batch?}_{matrix}_{technique}{type?}{suffix?}"
+      description: "Canonical memristor naming with optional batch, type, and cycle suffix"
+      regex: "^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:\((?P<batch>\d+)\))?_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$"
+      fields:
+        date_code: { sql_column: date_code, type: TEXT }
+        material: { sql_column: material, type: TEXT }
+        batch: { sql_column: batch, type: TEXT, nullable: true }
+        matrix: { sql_column: null, type: null, extract: { row: "r(?P<row>\d+)c\d+", col: "r\d+c(?P<col>\d+)" } }
+        technique: { sql_column: technique, type: TEXT }
+        type: { sql_column: sweep_type, type: TEXT, nullable: true }
+        suffix: { sql_column: cycle_index, type: INTEGER, nullable: true }
+    
+    # Fallback: bare minimum
+    - template: "{date_code}_{material}_{matrix}_{technique}"
+      description: "Minimal naming, no optional fields"
+      regex: "^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)\.\w+$"
+      fields:
+        date_code: { sql_column: date_code }
+        material: { sql_column: material }
+        matrix: { sql_column: null, extract: { row: "r(?P<row>\d+)c\d+", col: "r\d+c(?P<col>\d+)" } }
+        technique: { sql_column: technique }
 ```
 
-**Key concepts:**
+**Template conventions:**
+- `{field}` — required segment
+- `{field?}` — optional segment
+- `.ext` — any extension
 
-- **`global` fields** — every file must match (date_code, material, matrix). These define the shared prefix of all standardized filenames.
-- **`per_technique` fields** — technique-specific suffix fields. E.g., IV sweeps have a `cycle_index`; endurance files have a `cycle_range`.
-- **`position`** — zero-indexed position of the field within the split-by-separator filename parts. Enables positional parsing without a master regex.
-- **Regex named groups** — `r(?P&lt;row&gt;\\d+)c(?P&lt;col&gt;\\d+)` auto-extract `row` and `col` from the matrix field.
-- **`sql_columns` / `sql_column`** — maps parsed fields to SQLite column names in the `files` table (from Sprint 6 schema). This bridges grammar → SQLite construction.
-- **`value` field** — for constant fields that don't need regex matching (e.g., endurance `type` is always `"endurance"`).
-- **AI-editable** — add new techniques or filename conventions purely via YAML. No Python changes needed.
+**Template-based advantages over position-based:**
+- Handles optional fields (batch, type, suffix) — position-based would shift all indexes
+- Multi-pattern fallback — if first pattern fails, try second
+- Matrix fields auto-extracted via `extract` sub-regexes
+- AI-friendly: edit template string, named groups in regex are self-documenting
+- Separator agnostic: regex matching, not split-by-position
 
-**Benefits for SQLite (Sprint 6):**
-- The `db.py` module reads `file_naming.per_technique[*].sql_column` to know which columns to populate during INSERT/UPDATE
-- New techniques added to the grammar automatically get their fields populated in SQLite
-- The `global` fields map directly to `files.date_code`, `files.material`, `files.row`, `files.col`
-
-**Benefits for sync flow:**
-- `sync_devices()` in `device_cli.py` loads grammar from config, applies it to each filename, and produces a structured dict of extracted fields
-- No hardcoded regex in the sync path — the grammar IS the parsing spec
-- Fallback to BUILTIN regex patterns when no config grammar is defined
+**SQLite column mapping:**
+- `fields[*].sql_column` maps to Sprint 6's `files` table columns
+- `nullable: true` means the column accepts NULL when the field doesn't exist
+- `extract` secondary regex extracts row/col from matrix string (e.g., `r0c1` → row=0, col=1)
+- If no pattern matches, file is flagged with `parse_error: "no matching pattern"` in extra dict
 
 **Files affected:**
+- `src/science_cli/core/config.py` — add `get_file_naming_patterns()` returning list of pattern dicts
+- `src/science_cli/core/technique.py` — load patterns from config, match in order, fall back to BUILTIN_TECHNIQUES
+- `src/science_cli/memristor/plotting.py` — `_parse_filename_metadata()` uses template regexes
+- `src/science_cli/memristor/device_cli.py` — `sync_devices()` uses template grammar for filename parsing
+- `src/science_cli/memristor/db.py` — SQLite construction uses `fields.sql_column` to know which columns to populate
 
-| File | Action | Reason |
-|------|--------|--------|
-| `src/science_cli/core/config.py` | **Modify** | Add `get_file_naming_grammar()` returning global + per-technique patterns from `file_naming` config section |
-| `src/science_cli/core/technique.py` | **Modify** | Use config grammar for technique detection alongside file patterns; fall back to BUILTIN_TECHNIQUES |
-| `src/science_cli/memristor/plotting.py` | **Modify** | `_extract_info_from_filename()` or equivalent uses config grammar instead of hardcoded regex |
-| `src/science_cli/memristor/device_cli.py` | **Modify** | `sync_devices()` and `cmd_add_fzf()` use config grammar for filename parsing instead of `CANONICAL_RE` / `_parse_filename_metadata()` |
-| `src/science_cli/memristor/device.py` | **Modify** | `extract_material_batch()` delegates to config grammar; falls back to `_MATERIAL_BATCH_RE` when no grammar configured |
-| `src/science_cli/memristor/db.py` | **Modify** | SQLite `files` table INSERT/UPDATE reads `sql_column` mappings from grammar to know which fields to populate |
-
+**F7.6 Progress:**
+- [ ] F7.6 config: `get_file_naming_patterns()` in core/config.py
+- [ ] F7.6 parser: Template-based filename parser in core/technique.py
+- [ ] F7.6 sync: Integrate template parser into `sync_devices()`
+- [ ] F7.6 plotting: Replace hardcoded `_extract_info_from_filename()` with config-driven parser
+- [ ] F7.6 db: Map extracted fields to SQLite columns via `sql_column` config
+- [ ] F7.6 test: New naming convention added via config → all parse paths work correctly
 ---
 
 ### Cross-Plumbing Code Audit
@@ -1011,3 +1003,37 @@ The following table catalogues every location where filename parsing, technique 
 - [ ] TEST: Backward compatibility — no config.yaml = BUILTIN_TECHNIQUES + hardcoded regex fallback
 - [ ] TEST: All guardrail tests pass
 - [ ] COMMIT to `refactor/2.1.0` branch
+
+## Pipeline Overview
+
+**The complete data workflow tying all sprints together:**
+
+```
+Project root
+  ├── sci-config.yaml              ← naming grammar, techniques, devices (Sprint 7)
+  ├── protocol/<name>/
+  │   ├── devices.yaml             ← cell matrix, file assignments (YAML = human)
+  │   ├── step-4/
+  │   │   ├── <date>_<material>_<matrix>_<technique>_<cycle>.csv
+  │   │   └── results/
+  │   └── ...
+  ├── <project_name>.db            ← SQLite query cache (Sprint 6)
+  └── <project_name>_analysis-data.json  ← dashboard render cache
+```
+
+**Commands:**
+
+| Command | Reads | Writes | Sprint |
+|---------|-------|--------|--------|
+| `memristor init` | CSV files, sci-config.yaml | devices.yaml | existing |
+| `memristor sync` | CSV files, sci-config.yaml | devices.yaml + `<project>.db` | Sprint 6 |
+| `memristor sync --reindex` | devices.yaml, sci-config.yaml | `<project>.db` only (no CSV re-read) | Sprint 6 |
+| `memristor dashboard` | `<project>.db` (fast) or devices.yaml (fallback) | `<project>_analysis-data.json` + dashboard.html | Sprint 3 |
+| `config edit technique` | sci-config.yaml | sci-config.yaml (user edits) | Sprint 5 |
+
+**Data flow:**
+1. `sci-config.yaml` defines the naming grammar — how to parse date, material, row, col, cycle from filenames
+2. `memristor sync` reads grammar → parses all CSVs → extracts metadata → runs IV analysis → writes YAML + SQLite
+3. Dashboard reads from SQLite (fast) or YAML (fallback)
+4. `--reindex` rebuilds SQLite from YAML without re-reading CSV (recovery)
+5. All files belong to a specific protocol + step — assigned via devices.yaml, parsed via grammar
