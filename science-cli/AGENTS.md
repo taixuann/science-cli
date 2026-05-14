@@ -441,57 +441,45 @@ from science_cli.core.config import (
 
 ### Active Gaps (Need Execution)
 
-**PLANs are created but not yet executed. Each gap below has a corresponding PLAN.**
-
 #### Command & Session Gaps
 
-| Gap | Impact | Priority | PLAN | Status |
-|-----|--------|----------|------|--------|
-| **3-level state memory** | Session only tracks project + protocol, not step. Close doesn't save state per level | MEDIUM | PLAN-1 | Partially resolved — close/status implemented, step tracking pending |
+✅ **All gaps closed** — 3-level state memory (project → protocol → step) fully implemented in `session.py`. Close/status/step tracking all work.
 
 #### Config Gaps
 
-| Gap | Impact | Priority | PLAN | Status |
-|-----|--------|----------|------|--------|
-| **Technique-specific configs** | No per-technique YAML configs for patterns, devices, delimiters | HIGH | PLAN-2 | **COMPLETED** |
-| **Config command expansion** | `config` only handles themes, needs `set technique`, `edit` subcommands | MEDIUM | PLAN-2 | **COMPLETED** |
+✅ **All gaps closed** — technique configs, `config set technique`, `config edit`, `config list techniques/devices` all implemented. Sprint 7 added config-driven technique registry and filename naming grammar.
 
 #### Extension Gaps
 
-| Gap | Impact | Priority | PLAN | Status |
-|-----|--------|----------|------|--------|
-| **Extension docs missing** | science-* extensions not documented in AGENTS.md or README | LOW | — | **COMPLETED** — extensions integrated as built-in in refactor/2.1.0 |
-| **Extensions not merged into core** | science-iv, science-memristor, science-electrochem still external | LOW | — | **COMPLETED** — extensions integrated as built-in in refactor/2.1.0 |
+✅ **All gaps closed** — extensions integrated as built-in modules in `refactor/2.1.0`.
 
 #### Project Health Gaps
 
-| Gap | Impact | Priority | Notes |
-|-----|--------|----------|-------|
-| **No test suite** | No automated regression testing beyond 16 guardrail tests | HIGH | Need pytest structure with `tests/` directory, fixtures, parametrized tests |
-| **No CI/CD** | No automated testing on push | MEDIUM | Need GitHub Actions workflow: lint → test → build |
-| **No CHANGELOG** | Users can't track changes between versions | MEDIUM | Need `CHANGELOG.md` following Keep a Changelog format |
-| **No LICENSE** | Cannot be used as open-source | HIGH | Need to choose license (MIT? Apache 2.0?) |
-| **No lock file** | Reproducible installs not guaranteed | MEDIUM | Need `requirements.txt` or `poetry.lock` |
-| **No type checking** | Type hints exist but not enforced | LOW | Need `mypy` or `pyright` config + `py.typed` marker |
-| **No linting config** | Inconsistent code style possible | LOW | Need `ruff.toml` or `.flake8` |
-| **No CONTRIBUTING guide** | New contributors don't know how to help | LOW | Need `CONTRIBUTING.md` |
-| **No TUI README** | `tui/` module undocumented | LOW | Need `src/science_cli/tui/README.md` |
-| **No migration guide** | Users upgrading from v1 don't know what changed | MEDIUM | Need `MIGRATION.md` for version upgrades |
+✅ **All gaps now closed** (2026-05-14):
+- **Test suite**: `tests/` directory with pytest structure, fixtures (`conftest.py`), core/memristor/session/CLI tests
+- **CI/CD**: `.github/workflows/ci.yml` — GitHub Actions: lint → type-check → test (Python 3.9-3.11)
+- **CHANGELOG**: Exists at `CHANGELOG.md` following Keep a Changelog format
+- **LICENSE**: MIT License at `LICENSE`
+- **Lock file**: `requirements.txt` generated from `pyproject.toml`
+- **Type checking**: `[tool.mypy]` section in `pyproject.toml`
+- **Linting**: `ruff.toml` with E/F/I/N/W/UP rules
+- **CONTRIBUTING guide**: `CONTRIBUTING.md`
+- **TUI README**: `src/science_cli/tui/README.md`
+- **Migration guide**: `MIGRATION.md` (1.x → 2.0.0)
+
+#### Remaining Future Considerations (No PLANs Yet)
+
+| Item | Type | Notes |
+|------|------|-------|
+| Per-device `data/plot/analyze` device shortcuts | Feature | `sci data -d keithley-2400` |
+| SQLite integration with per-device device configs | Feature | `config set techniques` + SQLite v2 |
+| Plugin system for 3rd-party device configs | Feature | Auto-discover from pip-installed packages |
 
 ### Pending PLANs
 
-| PLAN | Classification | Status | Blocks | Blocked By |
-|------|----------------|--------|--------|------------|
-| PLAN-1: Command Restructuring | command-restructure | **Superseded** — Sprint 2 implemented most changes | PLAN-2, PLAN-3 | — |
-| PLAN-2: Config Expansion | config | **Completed** — technique configs, `config set technique`, `config edit` | — | PLAN-1 |
-| PLAN-3: Extension Interface | extension | **Superseded** — `ext` command implemented | — | PLAN-1 |
-| PLAN-4: Version Bump to 2.0.0 | cleanup | **Completed** — v2.0.0, CHANGELOG.md created | — | PLAN-1, PLAN-2, PLAN-3 |
-| PLAN-enhanced-dashboard: Sprint 3 | feature | **Completed** — cross-protocol dashboard | — | — |
-| PLAN-integrate-extensions | refactor | **Completed** — extensions merged, direct memristor commands | — | — |
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-7) in PLAN-enhanced-dashboard are completed. The `refactor/2.1.0` branch contains all implementations.
 
-**Execution order**: All original PLANs (1-4) are now completed or superseded.
-
-**When creating a new PLAN, check if it relates to any of these pending items.**
+**When creating a new PLAN, check if it relates to any future considerations above.**
 
 ---
 

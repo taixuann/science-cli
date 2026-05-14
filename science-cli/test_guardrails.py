@@ -297,9 +297,17 @@ def test_documentation_files_exist():
     root = Path(__file__).parent
     docs = [
         root / "AGENTS.md",
+        root / "README.md",
+        root / "CHANGELOG.md",
+        root / "CONTRIBUTING.md",
+        root / "LICENSE",
+        root / "MIGRATION.md",
+        root / "requirements.txt",
+        root / "ruff.toml",
         root / "src/science_cli/plot/README.md",
         root / "src/science_cli/core/README.md",
         root / "src/science_cli/theme/README.md",
+        root / "src/science_cli/tui/README.md",
     ]
     for d in docs:
         assert d.exists(), f"Missing documentation: {d}"

@@ -11,8 +11,9 @@ major-release
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: draft
-- **Branch**: mysci-tui
+- **Last Updated**: 2026-05-14
+- **Status**: completed
+- **Branch**: refactor/2.1.0
 
 ## Objective
 

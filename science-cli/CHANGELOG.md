@@ -69,15 +69,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - No authentication or network features — all operations are local filesystem
 
-## [Unreleased]
+## [2.1.0] - 2026-05-14
 
-### Planned
-- Type checking with mypy/pyright
-- Ruff linting configuration
-- pytest test suite with fixtures and parametrized tests
-- CI/CD pipeline (GitHub Actions: lint → test → build)
-- LICENSE selection (MIT/Apache 2.0)
-- Requirements lock file
-- CONTRIBUTING.md guide
-- TUI module README
-- Migration guide (1.x → 2.0.0)
+### Added
+- **Sprint 4: UX Enhancements** — context-aware `ls`, FZF sorted `add -m data`, Rich table output, `results --fzf`, grouped display
+- **Sprint 5: Techniques → Config Integration** — `config set techniques`, enhanced `config list techniques` with per-cell device config, `techniques` command deprecated as thin wrapper
+- **Sprint 6: SQLite Query Cache** — `memristor/db.py` (4 tables, WAL mode, schema migration), dual-write on `sync`, SQLite read path in dashboard
+- **Sprint 7: Config-Driven Technique Registry** — template-based filename naming grammar in `sci-config.yaml`, config-driven technique patterns, grammar-aware filename parsing
+- **Project Health**:
+  - MIT LICENSE file
+  - CI/CD pipeline (`.github/workflows/ci.yml`)
+  - `requirements.txt` from pyproject.toml
+  - Ruff linting configuration (`ruff.toml`)
+  - Mypy type checking config in `pyproject.toml`
+  - pytest test suite (`tests/`) with fixtures, core/memristor/session/CLI tests
+  - `CONTRIBUTING.md` developer guide
+  - `MIGRATION.md` (1.x → 2.0.0)
+  - TUI module README (`src/science_cli/tui/README.md`)
+
+### Changed
+- Commands reorganized to 4 groups (File Management, Context Navigation, Data Analysis, Extensions & Techniques)
+- `ext` command removed — `memristor` is now a direct command
+- `config list techniques` shows 4-column Rich table with per-cell device config
+- Filename parsing is now config-driven via `file_naming` in `sci-config.yaml`
+- All PLAN documentation statuses updated (Sprints 1-7 completed)
+
+### Fixed
+- Banner truncated by generic `Horizontal { height: 1 }` — now shows full SCI ASCII art
+- Input row gap restored with `#input-row { height: 1 }`
+- TUI separators restored and dimmed
