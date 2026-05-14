@@ -11,7 +11,7 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: draft (Sprint 1-3 completed, Sprint 4 proposed, Sprint 5 proposed, Sprint 6 proposed, Sprint 7 proposed)
+- **Status**: **COMPLETED** — All sprints (1-7) implemented and committed
 - **Branch**: `refactor/2.1.0`
 
 ## Objective
@@ -512,15 +512,22 @@ Display `results` output as a **grouped Rich table**:
 
 ### Sprint 4 Progress
 
-- [ ] PLAN: Sprint 4 section created (this document)
-- [ ] Feature F1: `open` clears step context, `ls` context-aware filtering
-- [ ] Feature F2: `add -m data` sorted FZF display
-- [ ] Feature F3: Rich table formatting for `ls`
-- [ ] Feature F4: Remove global `ls -m file`
-- [ ] Feature F8: `results --fzf` — FZF file opening
-- [ ] Feature F9: `results` grouped rich display
-- [ ] TEST: All guardrail tests pass
-- [ ] COMMIT to `refactor/2.1.0` branch
+- [x] PLAN: Sprint 4 section created (this document)
+- [x] Feature F1: `open` clears step context, `ls` context-aware filtering
+- [x] Feature F2: `add -m data` sorted FZF display (unassigned first, grouped by step)
+- [x] Feature F3: Rich table formatting for `ls` (protocols and steps)
+- [x] Feature F4: Remove global `ls -m file` with helpful redirect message
+- [x] Feature F8: `results --fzf` — FZF file selection + system open
+- [x] Feature F9: `results` grouped Rich display (protocol→step→files)
+- [x] TEST: All guardrail tests pass (19/19)
+- [x] COMMIT to `refactor/2.1.0` branch
+
+**Sprint 4 Results:**
+- `open_cmd.py`: `_open_protocol()` now clears step context via `set_last_step("")`
+- `ls_cmd.py`: Context-aware default level (step→protocol→project→global), Rich Table for `_ls_protocol()` and `_ls_step()`, `-m file` redirects to `open -m step`
+- `add.py`: FZF display shows unassigned files first (sorted), then files grouped by assigned step
+- `results.py`: `--fzf` flag for interactive file opening via system default; Rich grouped display with protocol headers, step subheaders, and file size badges
+- `help.py`: Removed `ls -m protocol --files` from docs
 
 ## Sprint 5: Techniques → Config Integration
 
