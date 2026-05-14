@@ -440,5 +440,7 @@ ADDITIONAL
 
 ## Cross-PLAN Update (2026-05-14) — Sprint 7
 - **Sprint 7 Proposed**: Config-Driven Technique Registry added to [[PLAN-enhanced-dashboard]] as Sprint 7. Replaces hardcoded `BUILTIN_TECHNIQUES` patterns in `core/technique.py` with config-driven patterns from `sci-config.yaml`. Adds `get_technique_config()` to `core/config.py`.
-- **Config system impact**: The 4-tier config system (hardcoded ← global ← project) now includes technique pattern definitions. This extends the config expansion from Sprint 5 with concrete file-pattern-to-device-mapping data.
-- **File impact**: `core/technique.py`, `core/config.py`, `memristor/device_cli.py`, `memristor/db.py` — all modified to read from config rather than hardcoded dicts.
+- **Expanded scoped — F7.6 added**: Sprint 7 now also includes **Config-Driven Filename Naming Grammar** (F7.6), which extends the config-driven approach to filename *parsing* (date, material, row, col, cycle extraction). A `file_naming` section in `sci-config.yaml` declares positional fields with regex patterns and SQLite column mappings. See `PLAN-enhanced-dashboard.md` Sprint 7 for the full spec.
+- **Code Audit added**: A cross-plumbing audit table catalogues all 11 hardcoded locations (regex in `technique.py`, `device_cli.py`, `device.py`, `plotting.py`) and maps them to config-driven futures with effort estimates.
+- **Config system impact**: The 4-tier config system (hardcoded ← global ← project) now includes technique pattern definitions AND filename naming grammar. This extends the config expansion from Sprint 5 with concrete file-pattern-to-device-mapping and file-parsing data.
+- **File impact**: `core/technique.py`, `core/config.py`, `memristor/device_cli.py`, `memristor/plotting.py`, `memristor/device.py`, `memristor/db.py` — all modified to read from config rather than hardcoded regex/dicts.

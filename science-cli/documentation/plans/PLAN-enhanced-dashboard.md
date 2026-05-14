@@ -815,9 +815,9 @@ CREATE INDEX idx_cells_protocol_material ON cells(protocol, material);
 - **YAML**: Human editing, Git visibility, AI configurability, rich metadata
 - **SQLite**: Fast queries, aggregation, joins across protocols/steps/cells/materials
 
-## Sprint 7: Config-Driven Technique Registry
+## Sprint 7: Config-Driven Technique Registry &amp; Filename Naming Grammar
 
-**Goal:** Replace hardcoded technique-to-filename-pattern mappings with a config-driven registry. Store technique patterns and device configs in `sci-config.yaml`, using `BUILTIN_TECHNIQUES` as fallback defaults.
+**Goal:** Replace hardcoded technique-to-filename-pattern mappings and filename parsing with a config-driven approach. Store technique patterns, device configs, and filename naming grammar in `sci-config.yaml`, using `BUILTIN_TECHNIQUES` and built-in regex patterns as fallback defaults.
 
 **Status**: Proposed (features approved, not yet implemented)
 
@@ -889,16 +889,125 @@ devices.yaml
 | `src/science_cli/memristor/device_cli.py` | **Modify** | `sync` uses config-driven pattern matching |
 | `src/science_cli/memristor/db.py` | **Modify** | SQLite construction reads from config |
 
-**Status:** Proposed
+---
+
+### Feature F7.6: Config-Driven Filename Naming Grammar
+
+**Problem:** Currently, filename parsing (extracting date, material, row, col, cycle from filenames like `140526_Ta-PDA-ITO_r0c0_iv_01.csv`) is hardcoded in regexes spread across `technique.py`, `plotting.py`, `device_cli.py`, and `device.py`. Adding a new naming convention requires Python code changes. The Sprint 6 SQLite schema depends on these fields (date_code, material, row, col, cycle_index), but there's no declarative way to tell SQLite construction which fields to populate from the filename.
+
+**Solution:** Define a declarative naming grammar in `sci-config.yaml` that describes the filename structure in terms of positional fields with regex patterns:
+
+```yaml
+# In sci-config.yaml
+file_naming:
+  separator: "_"
+  # Fields shared across ALL techniques — every file must match these
+  global:
+    - name: date_code
+      position: 0
+      regex: "\\d{6}"
+      meaning: "DDMMYY format"
+    - name: material
+      position: 1
+      regex: "[A-Za-z0-9\\-]+"
+    - name: matrix
+      position: 2
+      regex: "r(?P&lt;row&gt;\\d+)c(?P&lt;col&gt;\\d+)"
+      sql_columns: ["row", "col"]
+  # Technique-specific fields — tacked on after global fields
+  per_technique:
+    iv:
+      - name: type
+        position: 3
+        regex: "iv|forming|set|reset"
+        sql_column: technique_subtype
+      - name: cycle_index
+        position: 4
+        regex: "\\d+"
+        sql_column: cycle_index
+    endurance:
+      - name: type
+        position: 3
+        value: "endurance"
+        sql_column: technique_subtype
+      - name: cycle_range
+        position: 4
+        regex: "\\d+-\\d+"
+```
+
+**Key concepts:**
+
+- **`global` fields** — every file must match (date_code, material, matrix). These define the shared prefix of all standardized filenames.
+- **`per_technique` fields** — technique-specific suffix fields. E.g., IV sweeps have a `cycle_index`; endurance files have a `cycle_range`.
+- **`position`** — zero-indexed position of the field within the split-by-separator filename parts. Enables positional parsing without a master regex.
+- **Regex named groups** — `r(?P&lt;row&gt;\\d+)c(?P&lt;col&gt;\\d+)` auto-extract `row` and `col` from the matrix field.
+- **`sql_columns` / `sql_column`** — maps parsed fields to SQLite column names in the `files` table (from Sprint 6 schema). This bridges grammar → SQLite construction.
+- **`value` field** — for constant fields that don't need regex matching (e.g., endurance `type` is always `"endurance"`).
+- **AI-editable** — add new techniques or filename conventions purely via YAML. No Python changes needed.
+
+**Benefits for SQLite (Sprint 6):**
+- The `db.py` module reads `file_naming.per_technique[*].sql_column` to know which columns to populate during INSERT/UPDATE
+- New techniques added to the grammar automatically get their fields populated in SQLite
+- The `global` fields map directly to `files.date_code`, `files.material`, `files.row`, `files.col`
+
+**Benefits for sync flow:**
+- `sync_devices()` in `device_cli.py` loads grammar from config, applies it to each filename, and produces a structured dict of extracted fields
+- No hardcoded regex in the sync path — the grammar IS the parsing spec
+- Fallback to BUILTIN regex patterns when no config grammar is defined
+
+**Files affected:**
+
+| File | Action | Reason |
+|------|--------|--------|
+| `src/science_cli/core/config.py` | **Modify** | Add `get_file_naming_grammar()` returning global + per-technique patterns from `file_naming` config section |
+| `src/science_cli/core/technique.py` | **Modify** | Use config grammar for technique detection alongside file patterns; fall back to BUILTIN_TECHNIQUES |
+| `src/science_cli/memristor/plotting.py` | **Modify** | `_extract_info_from_filename()` or equivalent uses config grammar instead of hardcoded regex |
+| `src/science_cli/memristor/device_cli.py` | **Modify** | `sync_devices()` and `cmd_add_fzf()` use config grammar for filename parsing instead of `CANONICAL_RE` / `_parse_filename_metadata()` |
+| `src/science_cli/memristor/device.py` | **Modify** | `extract_material_batch()` delegates to config grammar; falls back to `_MATERIAL_BATCH_RE` when no grammar configured |
+| `src/science_cli/memristor/db.py` | **Modify** | SQLite `files` table INSERT/UPDATE reads `sql_column` mappings from grammar to know which fields to populate |
+
+---
+
+### Cross-Plumbing Code Audit
+
+The following table catalogues every location where filename parsing, technique detection, or column mapping is hardcoded, and maps it to the config-driven future.
+
+| Location | Current: Hardcoded | Future: Config-Driven | Effort |
+|----------|-------------------|----------------------|--------|
+| `technique.py`: `detect_technique()` (L123-136) | Iterates `_all_patterns()` dict built from `PATTERNS` + config merge | Load patterns from config grammar; fall back to `PATTERNS` dict | Small |
+| `technique.py`: `BUILTIN_TECHNIQUES` dict (L70-82) | `TechniqueDef` objects with hardcoded patterns + labels per technique | Config `techniques.<name>.patterns` + `file_naming.per_technique` define all fields | Small |
+| `technique.py`: `technique_label()` (L139-154) | Hardcoded `labels` dict maps technique IDs → display names | Derive labels from config `techniques.<name>.label` | Small |
+| `device_cli.py`: `CANONICAL_RE` + `parse_canonical_filename()` (L130-171) | Single hardcoded regex for `DDMM_Material_b#-t#_Technique_Type_#.ext` format | Grammar `global` fields (position 0-2) + `per_technique` fields replace the entire regex | Medium |
+| `device_cli.py`: `_parse_filename_metadata()` (L174-204) | Hardcoded regex patterns for `rNcN`, technique keywords, sweep_type extraction | Grammar `global.matrix` field provides `rNcN`; `per_technique` provides type/sweep_type | Medium |
+| `device_cli.py`: `_infer_technique()` + `cmd_init()` TECH_MAP (L117-125, L268-272) | Duplicated dict mapping `iv-sweep` → `"iv"`, `mem-endurance` → `"endurance"`, etc. | Single source from config `file_naming.per_technique` keys → short name mapping | Small |
+| `device.py`: `_MATERIAL_BATCH_RE` + `extract_material_batch()` (L295-328) | Hardcoded regex `^\\d{4}_Material(Batch)_b#-t#_` for material+batch extraction | Grammar `global.material` + `global.matrix` fields replace this entirely | Medium |
+| `plotting.py`: `read_iv_csv()` column detection (L71-94) | If-elif chain matching known column header keywords | Config-driven column mapping per device config (already partially done via `get_device_config()`) | Medium |
+| `plotting.py`: `collect_iv_files()` material extraction (L1014-1031) | Calls `extract_material_batch()` which uses hardcoded regex | Inherits from grammar-based `global.material` field | Small |
+| `device_cli.py`: `cmd_sync()` sweep extraction (L744-755) | Calls `sync_devices()` which only processes `"iv"` technique — hardcoded technique filter | Use config grammar to determine which techniques support sweep extraction | Large |
+| `device.py`: `read_devices()` (L334-402) | Hardcoded YAML field mapping to dataclass fields | **Should stay** — YAML model mapping is inherently static; not a candidate for config | None |
+
+**Effort notes:**
+- **Small**: Single-function refactor, no new module needed
+- **Medium**: Cross-file changes, new helper needed in config.py
+- **Large**: Changes affect sync flow, may need technique-agnostic sweep extraction
 
 ### Sprint 7 Progress
 
 - [ ] PLAN: Sprint 7 section created (this document)
-- [ ] IMPLEMENT: Config-driven technique pattern loading in `core/technique.py`
-- [ ] IMPLEMENT: `get_technique_config()` in `core/config.py`
-- [ ] IMPLEMENT: Config-driven sync in `device_cli.py`
-- [ ] IMPLEMENT: Config-driven SQLite construction in `db.py`
+- [ ] Feature F7.5: Config-driven technique pattern registration
+- [ ] IMPLEMENT F7.5: Config-driven technique pattern loading in `core/technique.py`
+- [ ] IMPLEMENT F7.5: `get_technique_config()` in `core/config.py`
+- [ ] IMPLEMENT F7.5: Config-driven sync in `device_cli.py`
+- [ ] IMPLEMENT F7.5: Config-driven SQLite construction in `db.py`
+- [ ] FEATURE F7.6: Config-driven filename naming grammar
+- [ ] IMPLEMENT F7.6: `get_file_naming_grammar()` in `core/config.py`
+- [ ] IMPLEMENT F7.6: Grammar-aware technique detection in `technique.py`
+- [ ] IMPLEMENT F7.6: Grammar-driven filename parsing in `plotting.py`
+- [ ] IMPLEMENT F7.6: Grammar-driven sync/filename parsing in `device_cli.py`
+- [ ] IMPLEMENT F7.6: Grammar-driven material extraction in `device.py`
+- [ ] IMPLEMENT F7.6: Grammar-aware SQLite column mapping in `db.py`
 - [ ] TEST: New technique added via config → `sync` detects files correctly
-- [ ] TEST: Backward compatibility — no config.yaml = BUILTIN_TECHNIQUES fallback
+- [ ] TEST: New naming convention added via config → all parse paths extract fields correctly
+- [ ] TEST: Backward compatibility — no config.yaml = BUILTIN_TECHNIQUES + hardcoded regex fallback
 - [ ] TEST: All guardrail tests pass
 - [ ] COMMIT to `refactor/2.1.0` branch
