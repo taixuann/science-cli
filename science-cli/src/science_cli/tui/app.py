@@ -10,6 +10,7 @@ legacy prompt_toolkit REPL.
 """
 
 import io
+import os
 import re
 import sys
 import inspect

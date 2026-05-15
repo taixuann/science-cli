@@ -361,9 +361,9 @@ def standardize_grammar_fields(parsed: dict) -> dict:
         if field not in result:
             result[field] = None
     
-    # Extract row/col from matrix field (e.g., "r0c0" -> row=0, col=0)
+    # Extract row/col from matrix field (e.g., "r0c0" or "r1-c1" -> row=0/1, col=0/1)
     if result.get("matrix") and ("row" not in result or result["row"] is None):
-        m = re.search(r'r(\d+)c(\d+)', str(result["matrix"]), re.IGNORECASE)
+        m = re.search(r'r(\d+)-?c(\d+)', str(result["matrix"]), re.IGNORECASE)
         if m:
             result["row"] = int(m.group(1))
             result["col"] = int(m.group(2))
