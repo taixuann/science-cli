@@ -47,10 +47,13 @@ def open_handler(args: list) -> None:
     mode = flags.get("m") or flags.get("mode", "")
 
     if mode == "project":
-        if not pos:
-            console.print("[yellow]Usage: open -m project <name>[/yellow]")
+        name = flags.get("n") or flags.get("name", "")
+        if not name and pos:
+            name = pos[0]
+        if not name:
+            console.print("[yellow]Usage: open -m project <name> (or -n <name>)[/yellow]")
             return
-        _open_project(pos[0])
+        _open_project(name)
     elif mode == "step":
         if not pos:
             console.print("[yellow]Usage: open -m step <step_id>[/yellow]")

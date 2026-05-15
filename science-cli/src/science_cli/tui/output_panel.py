@@ -42,6 +42,7 @@ class OutputPanel(RichLog):
         color: #cccccc;
         padding: 0 1;
         overflow-y: scroll;
+        overflow-x: hidden;
         scrollbar-size-vertical: 0;
         scrollbar-size-horizontal: 0;
         scrollbar-color: #55AA55;

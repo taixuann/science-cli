@@ -127,16 +127,40 @@ def sample_iv_csv(tmp_path):
 
 
 @pytest.fixture
-def sample_lvm_file(tmp_path):
-    """Create a sample Keithley 2400 LVM-style tab-separated file."""
+def sample_keithley_file(tmp_path):
+    """Create a sample Keithley 2400 CSV file with metadata header."""
+    header = "\\n".join([
+        "Keithley 2400 SourceMeter",
+        "Date: 2026-05-14",
+        "Time: 14:30:00",
+        "Mode: Voltage Sweep",
+        "Compliance: 1e-3 A",
+        "Start: 0 V",
+        "Stop: 5 V",
+        "Step: 0.1 V",
+        "Source: Voltage",
+        "Sense: Remote",
+        "NPLC: 1",
+        "Range: Auto",
+        "Filter: On",
+        "Speed: Normal",
+        "Terminals: Output",
+        "Channel: CH1",
+        "Output: ON",
+        "Hold: 0 s",
+        "Delay: 0.01 s",
+        "Sweep: Bipolar",
+        "Points: 101",
+        "Measurement: Resistance",
+        ""  # blank line before headers
+    ])
     content = (
-        "LabVIEW Measurement\\n"
-        "***End_of_Header***\\n"
-        "X_Value\\tUntitled\\tUntitled 1\\tUntitled 2\\tComment\\n"
-        "0\\t0.0\\t0.0\\t0.0\\t\\n"
-        "1\\t0.5\\t1e-6\\t0.1\\t\\n"
-        "2\\t1.0\\t2e-5\\t0.2\\t\\n"
+        header
+        + "Untitled\\tUntitled 1\\tUntitled 2\\n"
+        + "0.0\\t0.0\\t0.0\\n"
+        + "0.5\\t1.2e-8\\t0.05\\n"
+        + "1.0\\t5.6e-8\\t0.10\\n"
     )
-    path = tmp_path / "test_keithley.lvm"
+    path = tmp_path / "test_keithley.csv"
     path.write_text(content)
     return path

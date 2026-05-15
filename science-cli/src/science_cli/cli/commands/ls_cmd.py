@@ -33,7 +33,7 @@ def _parse_flags(args: list) -> tuple:
 
 
 def ls_handler(args: list) -> None:
-    if args and args[0] in ("--help", "-h"):
+    if any(a in ("--help", "-h") for a in args):
         show_command_help("ls")
         return
 
@@ -56,8 +56,21 @@ def ls_handler(args: list) -> None:
     proj = get_current_project_path()
     sess = load_session()
 
+    # Extract explicit step name (-n / --name or positional)
+    step_name = flags.get("n") or flags.get("name", "")
+    if not step_name and pos:
+        step_name = pos[0]
+
+    # If step name given, skip context-aware and go directly
+    if step_name and not mode:
+        if not proj:
+            console.print("[yellow]No project open. Use 'open -m project <name>' first.[/yellow]")
+            return
+        _ls_step(proj, step_name)
+        return
+
     # F1: Context-aware detection when no explicit mode or positional arg
-    if not mode and not pos:
+    if not mode and not step_name:
         last_step = sess.get("last_step", "")
         last_protocol = sess.get("last_protocol", "")
         last_project = sess.get("last_project", "")
@@ -87,10 +100,14 @@ def ls_handler(args: list) -> None:
     show_step = flags.get("step", False)
     show_files = flags.get("files", False)
 
+    step_name = flags.get("n") or flags.get("name", "")
+    if not step_name and pos:
+        step_name = pos[0]
+
     if mode == "protocol" or show_all or show_step or show_files:
         _ls_protocol(proj, show_all=show_all, show_step=show_step, show_files=show_files)
-    elif pos:
-        _ls_step(proj, pos[0])
+    elif step_name:
+        _ls_step(proj, step_name)
     else:
         _ls_default(proj)
 
@@ -161,7 +178,7 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
         table.add_column("Step", style="bold white")
         table.add_column("Technique", style="green")
         table.add_column("Files", style="dim", justify="right")
-        table.add_column("Description", style="grey")
+        table.add_column("Description", style="bright_black")
 
         for s in steps:
             sn = s.get("name", "?")

@@ -47,8 +47,14 @@ def detect_iv_columns(df, info):
     return time_col, voltage_col, current_col
 
 
-def extract_sweep_from_file(filepath, min_segment_points=5):
+def extract_sweep_from_file(filepath, min_segment_points=5, technique="", device=""):
     """Load a data file and detect IV sweep segments.
+
+    Args:
+        filepath: Path to the data file.
+        min_segment_points: Minimum points per segment.
+        technique: Technique key (e.g. 'iv-sweep') for device-aware loading.
+        device: Device name (e.g. 'keithley-2400') for device-aware loading.
 
     Returns list of segment dicts, or empty list if not an IV file.
     """
@@ -59,7 +65,7 @@ def extract_sweep_from_file(filepath, min_segment_points=5):
         return []
 
     try:
-        df, info = load_data_file(str(path))
+        df, info = load_data_file(str(path), technique=technique, device=device)
     except Exception:
         return []
 

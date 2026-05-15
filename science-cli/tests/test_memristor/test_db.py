@@ -80,7 +80,7 @@ class TestDbCrud:
             protocol="test-protocol",
             step="step-1",
             filename="data_iv.csv",
-            technique="iv",
+            technique_id="iv",
             material="PDA",
             row=0, col=0,
             file_size=1024,
@@ -99,12 +99,12 @@ class TestDbCrud:
         insert_file(
             self.conn,
             protocol="p", step="s", filename="f.csv",
-            technique="iv", material="M",
+            technique_id="iv", material="M",
         )
         insert_file(
             self.conn,
             protocol="p", step="s", filename="f.csv",
-            technique="iv", material="M",
+            technique_id="iv", material="M",
         )
         self.conn.commit()
         files = query_files(self.conn, protocol="p")
@@ -130,7 +130,7 @@ class TestDbCrud:
         insert_file(
             self.conn,
             protocol="p", step="s", filename="update_test.csv",
-            technique="iv", material="M",
+            technique_id="iv", material="M",
         )
         update_file_analysis(
             self.conn,
@@ -153,10 +153,10 @@ class TestDbRebuild:
         check_schema(conn)
 
         insert_file(conn, protocol="p", step="s", filename="a.csv",
-                    technique="iv", material="M", row=0, col=0,
+                    technique_id="iv", material="M", row=0, col=0,
                     v_set=0.8, on_off_ratio=1.5)
         insert_file(conn, protocol="p", step="s", filename="b.csv",
-                    technique="iv", material="M", row=0, col=0,
+                    technique_id="iv", material="M", row=0, col=0,
                     v_set=1.0, on_off_ratio=2.5)
         conn.commit()
 
