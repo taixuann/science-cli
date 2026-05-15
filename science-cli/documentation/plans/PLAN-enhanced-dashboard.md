@@ -11,7 +11,7 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: **COMPLETED** — All sprints (1-7) implemented and committed
+- **Status**: **COMPLETED (Sprint 1-7), Sprint 8 Proposed** — Global Config Registry planned
 - **Branch**: `refactor/2.1.0`
 
 ## Objective
@@ -1068,3 +1068,174 @@ Project root
 3. Dashboard reads from SQLite (fast) or YAML (fallback)
 4. `--reindex` rebuilds SQLite from YAML without re-reading CSV (recovery)
 5. All files belong to a specific protocol + step — assigned via devices.yaml, parsed via grammar
+
+## Sprint 8: Global Config Registry (Proposed)
+
+### Problem
+
+Currently grammar patterns, device configs, and technique templates live **per-project** in `sci-config.yaml`:
+
+```
+test-project/sci-config.yaml:     keithley-2400 device config
+another-project/sci-config.yaml:  (duplicated) keithley-2400 device config
+```
+
+This means:
+- Same Keithley 2400 config (23 header lines, tab delimiter, columns) duplicated across N projects
+- Same naming grammar patterns (`rNcN`, `bN-tN`) duplicated across N projects
+- `config edit techniques` modifies per-project config — cannot share improvements
+- No central registry of "how to parse instrument X"
+
+### Solution: 4-Tier Config (Upgraded)
+
+```
+Hardcoded defaults (core/config.py)
+       ↓ overridden by
+Global config (~/.config/science-cli/config.yaml)     ← NEW: grammar, devices, technique templates
+       ↓ overridden by
+Per-project config (<project>/sci-config.yaml)         ← LIGHTER: type→step mapping only
+       ↓
+Per-protocol metadata (protocol/<name>/...)
+```
+
+#### Global config role (the "library"):
+
+```yaml
+# ~/.config/science-cli/config.yaml
+
+file_naming:
+  separator: "_"
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}{batch?}_{matrix}_{technique}_{type}_{order}.{ext}"
+      description: "Standard rNcN convention"
+      ...
+    - id: bN-tN
+      template: "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type}_{order}.{ext}"
+      ...
+
+devices:
+  keithley-2400:
+    label: "Keithley 2400 SourceMeter"
+    delimiter: "\t"
+    decimal: "."
+    header_lines: 23
+    encoding: utf-8
+    columns:
+      voltage: Untitled
+      current: "Untitled 1"
+      time: "Untitled 2"
+  keysight-b1500:
+    label: "Keysight B1500A Semiconductor Analyzer"
+    delimiter: ","
+    header_lines: 48
+    columns:
+      voltage: "BV"
+      current: "BI"
+      time: "Time"
+
+techniques:
+  iv-sweep:
+    label: "IV Sweep"
+    grammar_codes: ["iv", "IV", "iv-sweep", "iv_dc"]
+    default_device: keithley-2400
+    types:
+      forming: { label: "Forming", step_type: forming }
+      set: { label: "Set", step_type: set }
+      reset: { label: "Reset", step_type: reset }
+    type_to_step:
+      forming: "1_forming"
+      set: "2_set"
+      reset: "3_reset"
+```
+
+#### Project config role (light selector):
+
+```yaml
+# <project>/sci-config.yaml
+description: "TaOx memristor characterization"
+
+techniques:
+  iv-sweep:
+    types:
+      forming: 1_forming       # override global default
+      set: 2_set
+      reset: 3_reset
+```
+
+The project config **inherits** device configs, grammar patterns, and technique defaults from the global config. It only specifies what's different (e.g., step names).
+
+### Benefits
+
+| Aspect | Before (Sprint 7) | After (Sprint 8) |
+|--------|-------------------|------------------|
+| New instrument support | Copy device config to each project | Add once to global config |
+| Grammar sharing | Duplicate per project | Single source of truth |
+| `config edit techniques` | Edits per-project | Edits global registry |
+| SQLite schema | Full device config in DB | Reference `technique_id` + `device_id` |
+| Adding new technique | Copy files, edit per-project | One `config edit techniques --global` |
+
+### Impact on SQLite
+
+With a global technique+device registry, SQLite can store normalized references:
+
+```sql
+-- Instead of storing full delimiter + column mapping per file:
+CREATE TABLE files (
+    protocol TEXT,
+    step TEXT,
+    filename TEXT,
+    technique_id TEXT,    -- references global techniques
+    device_id TEXT,       -- references global devices
+    material TEXT,
+    row INTEGER,
+    col INTEGER,
+    ...
+);
+```
+
+The dashboard reads `technique_id` from SQLite, looks up the global config to know:
+- How to interpret column names for plotting
+- What labels to display
+- Default v_read, color scheme, etc.
+
+### `config edit` Changes
+
+New commands:
+```bash
+config edit                     # Edits project sci-config.yaml (existing)
+config edit --global            # Edits ~/.config/science-cli/config.yaml (NEW)
+config edit techniques          # Edits project technique config (existing)
+config edit techniques --global # Edits global technique registry (NEW)
+config edit devices             # Lists + edits device configs (NEW)
+config edit grammar             # Lists + edits file naming patterns (NEW)
+```
+
+### Files to Modify
+
+| File | Action | Reason |
+|------|--------|--------|
+| `core/config.py` | Major update | Add `_load_global_config()`, merge order (global ← project), typed accessors for global |
+| `core/technique.py` | Update | `parse_filename_grammar()` tries global patterns first, project overrides |
+| `core/data_loader.py` | Update | `load_data_file()` resolves device config from global if not in project |
+| `cli/commands/config.py` | Major update | Add `--global` flag, `devices` subparser, `grammar` subparser |
+| `memristor/db.py` | Update | Schema normalization to reference technique_id/device_id |
+| `memristor/dashboard.py` | Update | `generate_dashboard()` resolves technique config from global registry |
+| `memristor/device_cli.py` | Update | `cmd_dashboard()` → `_collect_device_data()` resolves config globally |
+
+### Progress
+
+- [ ] Sprint 8 plan written
+- [ ] User approved
+- [ ] IMPLEMENT: Add `_load_global_config()` to `core/config.py`
+- [ ] IMPLEMENT: Add `--global` flag to `config edit`
+- [ ] IMPLEMENT: Add `config edit devices` and `config edit grammar`
+- [ ] IMPLEMENT: Update technique resolution chain (global → project → protocol)
+- [ ] IMPLEMENT: Update SQLite schema for technique_id/device_id references
+- [ ] IMPLEMENT: Update dashboard to resolve config from global registry
+- [ ] TEST: Global config loaded before project config
+- [ ] TEST: Project config overrides global config correctly
+- [ ] TEST: `config edit --global` writes to correct file
+- [ ] TEST: Dashboard resolves technique config globally if not in project
+- [ ] TEST: All existing tests still pass
+- [ ] COMMIT to `refactor/2.1.0`
