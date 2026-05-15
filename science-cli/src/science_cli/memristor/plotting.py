@@ -318,16 +318,18 @@ def read_iv_lvm(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
     current = current[mask]
 
     # ── Build result metadata map ──
+    time_arr: Optional[np.ndarray] = np.array(ts_values) if ts_values else None
+
     timestamp_first: Optional[float] = None
     timestamp_last: Optional[float] = None
-    if ts_values:
-        timestamp_first = ts_values[0]
-        timestamp_last = ts_values[-1]
+    if time_arr is not None and len(time_arr) > 0:
+        timestamp_first = float(time_arr[0])
+        timestamp_last = float(time_arr[-1])
 
     lvm_info = {
         "source": "LabVIEW Measurement",
         "date": metadata.get("Date", ""),
-        "time": metadata.get("Time", ""),
+        "time": time_arr,
         "operator": metadata.get("Operator", ""),
         "channels": metadata.get("Channels", ""),
         "samples": metadata.get("Samples", ""),
@@ -882,6 +884,40 @@ def _plot_bipolar_sweep(
         ax.set_ylabel("Current (A)", fontsize=10)
 
 
+def _plot_time_colored_iv(
+    ax,
+    voltage: np.ndarray,
+    current: np.ndarray,
+    time: np.ndarray,
+    use_log: bool,
+    order: int,
+) -> None:
+    """Plot V-I curve colored by relative time with Nature styling."""
+    from matplotlib.collections import LineCollection
+    import matplotlib.pyplot as plt
+
+    t_rel = time - time[0]
+    y_vals = np.abs(current) if use_log else current
+
+    points = np.array([voltage, y_vals]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+    norm = plt.Normalize(0, t_rel[-1])
+    lc = LineCollection(segments, cmap="turbo", norm=norm, linewidth=1.2)
+    lc.set_array(t_rel)
+    ax.add_collection(lc)
+    ax.autoscale()
+
+    ax.scatter(voltage[0], y_vals[0], c="lime", s=30, zorder=5, label="Start")
+    ax.scatter(voltage[-1], y_vals[-1], c="red", s=30, zorder=5, label="End")
+
+    cbar_label = "|Current| (A)" if use_log else "Current (A)"
+    ax.set_ylabel(cbar_label, fontsize=10)
+
+    cbar = ax.figure.colorbar(lc, ax=ax, label="Time (s)", pad=0.02)
+    cbar.ax.tick_params(labelsize=7)
+
+
 def generate_iv_svg(
     voltage: np.ndarray,
     current: np.ndarray,
@@ -889,7 +925,12 @@ def generate_iv_svg(
     output_path: str | Path,
     dpi: int = 150,
 ):
-    """Generate an ACS publication-style IV curve SVG.
+    """Generate a publication-style IV curve SVG.
+
+    When time data is available in ``metadata["time"]``, draws a
+    time-colored V-I curve with Nature styling (open spines, Helvetica,
+    turbo colormap).  Otherwise uses the standard ACS-style monochrome
+    plot (bipolar/simple sweep).
 
     ACS (American Chemical Society) style:
       - Sans-serif font (Arial/Helvetica/DejaVu Sans)
@@ -912,9 +953,11 @@ def generate_iv_svg(
             - title (str): Plot title.
             - sweep (list[dict]): Sweep segment metadata (may be empty).
             - sweep_type (str): Sweep type code (``f``, ``uc``, ``sp``, ``sn``).
-            - time (Optional[np.ndarray]): Time data for auto-detection fallback.
+            - time (Optional[np.ndarray]): Time data for coloring /
+              auto-detection fallback.
             - order (int): File sequence number for legend.
-            - file_index (int): 0-based index within the cell for line style cycling.
+            - file_index (int): 0-based index within the cell for line style
+              cycling.
             - row (int), col (int): Matrix position.
         output_path: Path to save the SVG.
         dpi: Resolution for SVG rendering.
@@ -928,6 +971,7 @@ def generate_iv_svg(
     sweep = metadata.get("sweep", [])
     order = metadata.get("order", 0)
     file_index = metadata.get("file_index", 0)
+    time_arr = metadata.get("time")
 
     # ── Bug 3: Auto-detect bipolar from voltage reversals ──
     segments = _split_at_reversals(voltage)[:2]
@@ -942,7 +986,6 @@ def generate_iv_svg(
         sweep and sweep[0].get("sweep_rate_v_s", 0) == 0
     )
     if need_auto:
-        time_arr = metadata.get("time")
         if time_arr is not None and len(time_arr) == len(voltage):
             derived_sweep = _build_sweep_from_data(voltage, time_arr)
         else:
@@ -959,6 +1002,7 @@ def generate_iv_svg(
             title = build_plot_title(order=order, sweep=sweep, sweep_type=sweep_type)
 
     use_log = _should_use_log_scale(current)
+    has_time = time_arr is not None and len(time_arr) == len(voltage)
 
     # ── ACS rcParams (local scope — does not pollute global) ──
     acs_rc = {
@@ -978,8 +1022,13 @@ def generate_iv_svg(
     with plt.rc_context(acs_rc):
         fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
 
-        # ── Plot based on sweep type ──
-        if sweep_type == "f":
+        # ── Time-colored V-I (when time data is available) ──
+        if has_time:
+            _plot_time_colored_iv(ax, voltage, current, time_arr, use_log, order)
+            # Nature-style: open spines for time-colored plots
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+        elif sweep_type == "f":
             _plot_bipolar_sweep(ax, voltage, current, use_log, order, file_index)
         else:
             _plot_simple_sweep(ax, voltage, current, use_log, order, file_index)
