@@ -1,5 +1,6 @@
 """fzf integration for interactive file selection with global styling."""
 
+import os
 import subprocess
 import shutil
 import re
@@ -83,6 +84,13 @@ def fzf_select(
     """
     if not items:
         return []
+
+    # Inside the Textual TUI, external fzf hangs because its subprocess
+    # can't properly take over the terminal during TUI suspend mode.
+    # Use the simple numeric fallback instead.
+    if os.environ.get("SCI_TUI_ACTIVE"):
+        return _fallback_select(items, prompt, multi)
+
     if not shutil.which("fzf"):
         return _fallback_select(items, prompt, multi)
 

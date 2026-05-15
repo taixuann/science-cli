@@ -262,6 +262,12 @@ class SCIApp(App):
 
         self.refresh_status_bar()
 
+        os.environ["SCI_TUI_ACTIVE"] = "1"
+
+    def on_unmount(self) -> None:
+        """Clean up TUI-specific state on exit."""
+        os.environ.pop("SCI_TUI_ACTIVE", None)
+
     def refresh_status_bar(self) -> None:
         """Called after a command changes session context to refresh the status bar."""
         try:
