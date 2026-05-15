@@ -1069,7 +1069,7 @@ Project root
 4. `--reindex` rebuilds SQLite from YAML without re-reading CSV (recovery)
 5. All files belong to a specific protocol + step — assigned via devices.yaml, parsed via grammar
 
-## Sprint 8: Global Config Registry (Proposed)
+## Sprint 8: Global Config Registry &amp; sync/analyze Split (Proposed)
 
 ### Problem
 
@@ -1098,21 +1098,56 @@ Per-project config (<project>/sci-config.yaml)         ← LIGHTER: type→step 
 Per-protocol metadata (protocol/<name>/...)
 ```
 
+### Universal Grammar Fields
+
+Every filename is parsed into a fixed set of universal fields. These names are standardized across all projects, all techniques, all devices:
+
+| Field | Description | Example Values | Required |
+|-------|-------------|----------------|----------|
+| `date_code` | Date in DDMMYY or YYYYMMDD format | `140526`, `20260514` | Yes |
+| `material` | Material/device name (primary). Also accepts `device` as alias. | `Ta-PDA-ITO`, `Pt-STO` | Yes |
+| `technique` | Measurement technique code | `iv-sweep`, `ca-doping`, `endurance` | Yes |
+| `matrix` | Crossbar addressing: rNcN for rectangular, bN-tN for bottom/top | `r0c0`, `b1-t1`, `r2c3` | Yes |
+| `suffix` | Order/cycle number (zero-padded integer) | `001`, `002`, `01` | No |
+
+**Design decisions:**
+- **Separator is hardcoded to `_` (underscore)** — not configurable. Every filename field is separated by `_`. This eliminates a source of config drift and keeps parsing deterministic.
+- **`material` is the primary field name**; `device` is accepted as a config alias for compatibility.
+- **`suffix` replaces the earlier `order`/`cycle_index` naming** — universal across all techniques.
+- All fields map directly to SQLite columns with matching names (see SQLite Auto-Construction below).
+
 #### Global config role (the "library"):
 
 ```yaml
 # ~/.config/science-cli/config.yaml
 
 file_naming:
-  separator: "_"
   patterns:
     - id: rNcN
-      template: "{date_code}_{material}{batch?}_{matrix}_{technique}_{type}_{order}.{ext}"
-      description: "Standard rNcN convention"
-      ...
+      template: "{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}"
+      description: "Standard rNcN convention (rectangular crossbar)"
+      regex: "^(?P&lt;date_code&gt;\\d{6})_(?P&lt;material&gt;[^_]+?)(?:_(?P&lt;batch&gt;\\d+))?_(?P&lt;matrix&gt;r\\d+c\\d+)_(?P&lt;technique&gt;[^_]+)(?:_(?P&lt;type&gt;[^_]+))?(?:_(?P&lt;suffix&gt;\\d+))?\\.\\w+$"
+      fields:
+        date_code: { sql_column: date_code, type: TEXT }
+        material: { sql_column: material, type: TEXT }
+        batch: { sql_column: batch, type: TEXT, nullable: true }
+        matrix: { sql_column: null, type: null, extract: { row: "r(?P&lt;row&gt;\\d+)c\\d+", col: "r\\d+c(?P&lt;col&gt;\\d+)" } }
+        technique: { sql_column: technique, type: TEXT }
+        type: { sql_column: sweep_type, type: TEXT, nullable: true }
+        suffix: { sql_column: suffix, type: INTEGER, nullable: true }
+
     - id: bN-tN
-      template: "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type}_{order}.{ext}"
-      ...
+      template: "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}"
+      description: "Bottom/top crossbar convention"
+      regex: "^(?P&lt;date_code&gt;\\d{6})_(?P&lt;material&gt;[^_]+?)(?:_(?P&lt;batch&gt;\\d+))?_b(?P&lt;bot&gt;\\d+)-t(?P&lt;top&gt;\\d+)_(?P&lt;technique&gt;[^_]+)(?:_(?P&lt;type&gt;[^_]+))?(?:_(?P&lt;suffix&gt;\\d+))?\\.\\w+$"
+      fields:
+        date_code: { sql_column: date_code, type: TEXT }
+        material: { sql_column: material, type: TEXT }
+        batch: { sql_column: batch, type: TEXT, nullable: true }
+        matrix: { sql_column: null, type: null, extract: { bot: "b(?P&lt;bot&gt;\\d+)", top: "t(?P&lt;top&gt;\\d+)" } }
+        technique: { sql_column: technique, type: TEXT }
+        type: { sql_column: sweep_type, type: TEXT, nullable: true }
+        suffix: { sql_column: suffix, type: INTEGER, nullable: true }
 
 devices:
   keithley-2400:
@@ -1149,6 +1184,8 @@ techniques:
       reset: "3_reset"
 ```
 
+Note: `separator` is **not** a config field — it is hardcoded to `_` everywhere. The `file_naming` level has no `separator` key.
+
 #### Project config role (light selector):
 
 ```yaml
@@ -1165,6 +1202,68 @@ techniques:
 
 The project config **inherits** device configs, grammar patterns, and technique defaults from the global config. It only specifies what's different (e.g., step names).
 
+### sync vs analyze — Clear Separation
+
+A key refinement in Sprint 8: `memristor sync` and `memristor analyze` are split into two distinct commands with separate responsibilities.
+
+#### `memristor sync` — Pure Filename Parsing
+
+`sync` does **not** read CSV content. It operates entirely on filenames:
+
+1. **Scan** step directories for files matching grammar patterns
+2. **Parse** filenames via grammar patterns from config (global → project)
+3. **Extract** universal fields: date_code, material, technique, matrix, suffix
+4. **Populate** SQLite metadata tables (`files`, `cells`, `protocols`) with extracted fields
+5. **Skip** any file that doesn't match any grammar pattern (flag for review)
+6. **No IV curve analysis** — no CSV reading, no Vset/Vreset computation
+
+Sync is fast and pure metadata: filenames only, no content.
+
+#### `memristor analyze` — CSV-Based Computation
+
+`analyze` is a new command that performs the actual data analysis:
+
+1. **Read** raw CSV files using device config for parsing (delimiter, columns, header_lines)
+2. **Compute** Vset, Vreset, ON/OFF ratio, compliance from IV curves
+3. **Update** SQLite rows with computed values via `update_file_analysis()`
+4. **Optionally** write human-readable YAML summary (not required for SQLite operation)
+
+Analyze is the heavy computation step. It depends on `sync` having already populated the metadata.
+
+**Workflow:**
+```bash
+memristor sync              # Fast: parse filenames → SQLite metadata
+memristor analyze           # Slow: read CSVs → compute params → update SQLite
+memristor analyze --force   # Re-analyze all files (ignore cached analysis)
+memristor analyze --file X.csv  # Single-file re-analysis
+```
+
+### SQLite Auto-Construction
+
+SQLite populates itself without requiring a YAML intermediate:
+
+1. **Read grammar** from config (global → project resolution chain)
+2. **Scan** step directories for files matching grammar patterns
+3. **Parse** filenames → extract universal fields → insert SQLite rows
+4. **YAML is optional** — `devices.yaml` is written only for human readability, not required by SQLite
+
+**Construction flow:**
+```
+Config grammar
+       ↓
+Scan step dirs → match filenames against patterns → extract universal fields
+       ↓
+SQLite INSERT OR REPLACE INTO files (...) VALUES (...)
+       ↓
+Optional: devices.yaml (human-readable snapshot, not required)
+```
+
+**SQLite is the canonical machine-readable store.** YAML is a view/debug aid:
+- `memristor sync` → always updates SQLite
+- `memristor sync --yaml` → also writes/updates devices.yaml (optional flag)
+- `memristor analyze` → updates SQLite analysis columns
+- Dashboard reads SQLite directly — no YAML needed
+
 ### Benefits
 
 | Aspect | Before (Sprint 7) | After (Sprint 8) |
@@ -1174,30 +1273,72 @@ The project config **inherits** device configs, grammar patterns, and technique 
 | `config edit techniques` | Edits per-project | Edits global registry |
 | SQLite schema | Full device config in DB | Reference `technique_id` + `device_id` |
 | Adding new technique | Copy files, edit per-project | One `config edit techniques --global` |
+| sync scope | CSV read + YAML + DB + analysis | **Pure filename parsing** (fast, no CSV) |
+| analyze scope | Mixed into sync | **Separate command** (CSV reading + computation) |
+| YAML role | Required intermediate | **Optional** (human-readable only) |
+| Separator config | Configurable (`separator` key) | **Hardcoded `_`** (no config drift) |
 
 ### Impact on SQLite
 
-With a global technique+device registry, SQLite can store normalized references:
+With a global technique+device registry, SQLite stores normalized references and is auto-populated:
 
 ```sql
--- Instead of storing full delimiter + column mapping per file:
+-- Files table: populated by sync (metadata) and analyze (computed values)
 CREATE TABLE files (
-    protocol TEXT,
-    step TEXT,
-    filename TEXT,
+    id INTEGER PRIMARY KEY,
+    protocol TEXT NOT NULL,
+    step TEXT NOT NULL,
+    filename TEXT NOT NULL,
     technique_id TEXT,    -- references global techniques
     device_id TEXT,       -- references global devices
-    material TEXT,
+    -- Universal grammar fields (populated by sync)
+    date_code TEXT,
+    material TEXT NOT NULL,
+    matrix TEXT,
     row INTEGER,
     col INTEGER,
-    ...
+    suffix INTEGER,
+    -- Computed analysis values (populated by analyze)
+    v_set REAL,
+    v_reset REAL,
+    on_off_ratio REAL,
+    current_compliance REAL,
+    compliance_confidence TEXT,
+    -- Metadata
+    file_size INTEGER,
+    mtime TEXT,
+    parse_error TEXT,     -- non-null if filename didn't match any grammar pattern
+    UNIQUE(protocol, step, filename)
+);
+
+CREATE TABLE cells (
+    id INTEGER PRIMARY KEY,
+    protocol TEXT NOT NULL,
+    material TEXT NOT NULL,
+    row INTEGER NOT NULL,
+    col INTEGER NOT NULL,
+    n_files INTEGER DEFAULT 0,
+    median_v_set REAL,
+    median_v_reset REAL,
+    median_on_off_ratio REAL,
+    UNIQUE(protocol, material, row, col)
+);
+
+CREATE TABLE protocols (
+    name TEXT PRIMARY KEY,
+    label TEXT,
+    rows INTEGER,
+    cols INTEGER,
+    materials TEXT,       -- JSON list
+    last_sync TEXT
 );
 ```
 
-The dashboard reads `technique_id` from SQLite, looks up the global config to know:
-- How to interpret column names for plotting
-- What labels to display
-- Default v_read, color scheme, etc.
+**Auto-population:**
+- `sync` fills: protocol, step, filename, technique_id, device_id, date_code, material, matrix, row, col, suffix, file_size, mtime
+- `analyze` fills: v_set, v_reset, on_off_ratio, current_compliance, compliance_confidence
+- `cells` table: upserted by both sync (metadata counts) and analyze (aggregated stats)
+- No YAML required — SQLite is self-constructing from filenames + grammar
 
 ### `config edit` Changes
 
@@ -1219,23 +1360,31 @@ config edit grammar             # Lists + edits file naming patterns (NEW)
 | `core/technique.py` | Update | `parse_filename_grammar()` tries global patterns first, project overrides |
 | `core/data_loader.py` | Update | `load_data_file()` resolves device config from global if not in project |
 | `cli/commands/config.py` | Major update | Add `--global` flag, `devices` subparser, `grammar` subparser |
-| `memristor/db.py` | Update | Schema normalization to reference technique_id/device_id |
+| `memristor/db.py` | Major update | Schema normalization, auto-construction from grammar, `update_file_analysis()` for analyze |
 | `memristor/dashboard.py` | Update | `generate_dashboard()` resolves technique config from global registry |
-| `memristor/device_cli.py` | Update | `cmd_dashboard()` → `_collect_device_data()` resolves config globally |
+| `memristor/device_cli.py` | Major update | Split `sync` into pure-filename-parsing; add `cmd_analyze()` handler |
+| `memristor/device_cli.py` | **New command** | `memristor analyze` CLI handler calling `analyze_all_devices()` |
 
 ### Progress
 
 - [ ] Sprint 8 plan written
 - [ ] User approved
+- [ ] IMPLEMENT: Universal Grammar Fields — hardcode `_` separator, standardize 5 field names
 - [ ] IMPLEMENT: Add `_load_global_config()` to `core/config.py`
 - [ ] IMPLEMENT: Add `--global` flag to `config edit`
 - [ ] IMPLEMENT: Add `config edit devices` and `config edit grammar`
 - [ ] IMPLEMENT: Update technique resolution chain (global → project → protocol)
-- [ ] IMPLEMENT: Update SQLite schema for technique_id/device_id references
+- [ ] IMPLEMENT: SQLite auto-construction — no YAML intermediate required
+- [ ] IMPLEMENT: `memristor sync` as pure filename parsing only
+- [ ] IMPLEMENT: `memristor analyze` — new command for CSV-based computation
+- [ ] IMPLEMENT: `update_file_analysis()` in `db.py` for SQLite analysis updates
 - [ ] IMPLEMENT: Update dashboard to resolve config from global registry
 - [ ] TEST: Global config loaded before project config
 - [ ] TEST: Project config overrides global config correctly
 - [ ] TEST: `config edit --global` writes to correct file
+- [ ] TEST: `memristor sync` populates SQLite metadata (no CSV read)
+- [ ] TEST: `memristor analyze` reads CSVs and updates SQLite analysis columns
 - [ ] TEST: Dashboard resolves technique config globally if not in project
+- [ ] TEST: YAML-free workflow (sync → analyze → dashboard, no devices.yaml needed)
 - [ ] TEST: All existing tests still pass
 - [ ] COMMIT to `refactor/2.1.0`
