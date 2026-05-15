@@ -17,7 +17,7 @@ HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
     "GROUP 2: CONTEXT NAVIGATION": ["open", "close"],
     "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config", "status", "results"],
-    "GROUP 4: DEVICE & TECHNIQUES": ["memristor", "techniques"],
+    "GROUP 4: DEVICE & TECHNIQUES": ["memristor"],
     "ADDITIONAL": ["help", "version", "clear", "history"],
 }
 
@@ -34,7 +34,6 @@ COMMAND_DESCRIPTIONS = {
     "status":  "Show current context status",
     "results": "List saved results by protocol and step",
     "memristor": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check, plot, dashboard)",
-    "techniques": "List techniques (deprecated, use config list techniques)",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -51,13 +50,14 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m project":     {"desc": "Create a new project (was 'project create')", "usage": "add -m project <name>"},
             "add -m protocol":    {"desc": "Create a protocol", "usage": "add -m protocol -n <name> [--desc <text>] [--step s1,s2] [-t ec-cv,ec-ca]"},
             "add -m metadata":    {"desc": "Update protocol metadata", "usage": "add -m metadata --step <steps> -pt <protocol> -t <techniques>"},
-            "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data --fzf [--all]"},
+            "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data --fzf [-d <device>] [--all]"},
         },
         "flags": {
             "-n, --name":     {"desc": "Protocol name (required for protocol mode)"},
             "--desc":         {"desc": "Protocol description"},
             "--step":         {"desc": "Step ID(s), comma-separated"},
             "-t, --technique":{"desc": "Technique(s), comma-separated"},
+            "-d, --device":   {"desc": "Device config (e.g. keithley-2400) for data loading"},
             "-pt, --protocol":{"desc": "Protocol name (for metadata mode)"},
             "--fzf":          {"desc": "Interactive fzf file selection (shows assigned/unassigned)"},
             "--all":          {"desc": "Assign all selected files to one step (skip per-file prompt)"},
@@ -68,6 +68,7 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m metadata -step 1_deposition -pt doping -t ec-ca",
             "add -m data --fzf",
             "add -m data --fzf --all",
+            "add -m data --fzf -d keithley-2400",
         ],
     },
     "edit": {
@@ -126,14 +127,16 @@ COMMAND_HELP: Dict[str, dict] = {
             "ls -m protocol":       {"desc": "List all protocols (summary)", "usage": "ls -m protocol"},
             "ls -m protocol --step":{"desc": "Show protocol steps only", "usage": "ls -m protocol --step"},
             "ls -m protocol --all": {"desc": "Show steps + files (full view)", "usage": "ls -m protocol --all"},
-            "ls <step>":            {"desc": "List files in specific step", "usage": "ls 1_deposition"},
+            "ls -m protocol -n <name>":{"desc": "List specific protocol by name", "usage": "ls -m protocol -n 1_protocol-1"},
+            "ls -n <step>":         {"desc": "List files in specific step", "usage": "ls -n step-4"},
         },
         "examples": [
             "ls",
             "ls -m project",
             "ls -m protocol",
             "ls -m protocol --all",
-            "ls 1_deposition",
+            "ls -m protocol -n 1_protocol-1",
+            "ls -n step-4",
         ],
     },
     "open": {
@@ -275,33 +278,42 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "config": {
         "usage": "config <subcommand> [args]",
-        "desc": "Configure themes, techniques, and devices (Group 3).",
+        "desc": "Configure themes, techniques, devices, and naming grammar (Group 3).",
         "subcommands": {
-            "config theme list":                        {"desc": "List available themes", "usage": "config theme list"},
-            "config theme set <name>":                  {"desc": "Set active theme", "usage": "config theme set <name>"},
-            "config list techniques":                   {"desc": "List all configured techniques", "usage": "config list techniques"},
-            "config list devices <technique>":           {"desc": "List devices for a technique", "usage": "config list devices iv-sweep"},
-            "config set technique <name> <device>":       {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
-            "config set techniques <technique> <device>": {"desc": "Set technique default device (alias for config set technique)", "usage": "config set techniques iv-sweep keithley-2400"},
-            "config edit <technique>":                   {"desc": "Open technique config in $EDITOR (--force to regenerate template)", "usage": "config edit iv-sweep [--force]"},
+            "config theme list":                            {"desc": "List available themes", "usage": "config theme list"},
+            "config theme set <name>":                      {"desc": "Set active theme", "usage": "config theme set <name>"},
+            "config init":                                  {"desc": "Generate a default config file", "usage": "config init [--global|--project]"},
+            "config show":                                  {"desc": "Show merged config (global + project)", "usage": "config show [--global|--project]"},
+            "config list techniques":                       {"desc": "List all configured techniques", "usage": "config list techniques"},
+            "config list devices <technique>":               {"desc": "List devices for a technique", "usage": "config list devices iv-sweep"},
+            "config list grammar":                          {"desc": "List naming grammar patterns", "usage": "config list grammar"},
+            "config set technique <name> <device>":          {"desc": "Set default device for a technique", "usage": "config set technique iv-sweep keithley-2400"},
+            "config edit <technique>":                      {"desc": "Open technique config in $EDITOR", "usage": "config edit iv-sweep [--force]"},
+            "config edit --global":                         {"desc": "Edit global config.yaml in $EDITOR", "usage": "config edit --global"},
+            "config edit devices":                          {"desc": "Edit global device registry in $EDITOR", "usage": "config edit devices"},
+            "config edit grammar":                          {"desc": "Edit naming grammar in $EDITOR", "usage": "config edit grammar"},
+            "config edit techniques --global":               {"desc": "Edit global technique registry in $EDITOR", "usage": "config edit techniques --global"},
+            "config devices list":                          {"desc": "List devices in global registry", "usage": "config devices list"},
+            "config grammar list":                          {"desc": "List naming grammar patterns", "usage": "config grammar list"},
+            "config grammar edit":                          {"desc": "Edit naming grammar in $EDITOR", "usage": "config grammar edit"},
         },
         "examples": [
             "config theme list",
             "config theme set tufte",
             "config theme set dark",
+            "config init --global",
+            "config show",
             "config list techniques",
             "config list devices iv-sweep",
+            "config list grammar",
             "config set technique iv-sweep keithley-2400",
-            "config set techniques iv-sweep keithley-2400",
-            "config edit iv-sweep",
-        ],
-    },
-    "techniques": {
-        "usage": "techniques",
-        "desc": "List techniques (deprecated — use 'config list techniques')",
-        "subcommands": {},
-        "examples": [
-            "techniques",
+            "config edit iv-sweep [--force]",
+            "config edit --global",
+            "config edit devices",
+            "config edit grammar",
+            "config edit techniques --global",
+            "config devices list",
+            "config grammar edit",
         ],
     },
 }
@@ -369,7 +381,7 @@ def show_command_help(cmd: str) -> None:
             console.print(f"    [{accent}]{ex}[/{accent}]")
         console.print()
 
-    console.print(f"  [{dim}]Use `s-cli {cmd} --help` for more details.[/{dim}]")
+    console.print(f"  [{dim}]Use `sci {cmd} --help` for more details.[/{dim}]")
     console.print()
 
 
