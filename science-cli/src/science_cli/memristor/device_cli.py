@@ -77,15 +77,15 @@ def _resolve_protocol_dir(args) -> Path:
 
 
 def _validate_protocol_dir(pdir: Path) -> bool:
-    """Validate protocol dir. Returns False and prints error if invalid."""
+    """Validate protocol dir. Returns False only if directory does not exist.
+    
+    devices.yaml is optional — sync and analyze use grammar-based workflows
+    that don't require it. Older commands that need devices.yaml will fail
+    when they call read_devices().
+    """
     if not pdir.exists():
         print(f"Directory does not exist: {pdir}")
         print("Use 'open -m protocol -n <name>' or navigate to a protocol directory.")
-        return False
-    yaml_path = pdir / "devices.yaml"
-    if not yaml_path.exists():
-        print(f"No devices.yaml in {pdir}")
-        print("Run 'memristor init' first.")
         return False
     return True
 
@@ -791,26 +791,54 @@ def cmd_rm(args: argparse.Namespace) -> None:
 
 
 def cmd_sync(args: argparse.Namespace) -> None:
+    """Sync: pure filename parsing — scan step dirs, parse filenames via grammar, populate SQLite.
+
+    Does NOT read CSV content. Does NOT compute Vset/Vreset.
+    Use 'memristor analyze' for CSV-based computation.
+    """
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
 
-    # ── Reindex mode: YAML → SQLite only, no CSV re-read ──
-    if getattr(args, "reindex", False):
-        _sqlite_reindex(pdir)
-        return
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import open_db, populate_protocol_from_step_dirs, close_db, rebuild_cells
 
-    report = sync_devices(pdir)
-    print(
-        f"Sync complete: {report['synced']} synced, "
-        f"{report['missing']} missing data, "
-        f"{report['unreadable']} unreadable, "
-        f"{report['type_mismatches']} type mismatches, "
-        f"{report['total']} total IV files"
-    )
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
 
-    # ── SQLite dual-write ──
-    _sqlite_sync_from_yaml(pdir)
+    protocol_name = pdir.name
+    conn = open_db(proj)
+    try:
+        report = populate_protocol_from_step_dirs(
+            conn,
+            protocol=protocol_name,
+            project_root=proj,
+        )
+        rebuild_cells(conn)
+        conn.commit()
+
+        print(f"Sync complete for protocol '{protocol_name}':")
+        print(f"  Step dirs found: {report['steps_found']}")
+        print(f"  Files found: {report['total_files']}")
+        print(f"  Files matched (grammar): {report['total_matched']}")
+        print(f"  Files inserted: {report['total_inserted']}")
+        if report['errors']:
+            print(f"  Errors ({len(report['errors'])}):")
+            for err in report['errors'][:10]:  # Show first 10
+                print(f"    - {err}")
+            if len(report['errors']) > 10:
+                print(f"    ... and {len(report['errors']) - 10} more")
+        print(f"  SQLite cache updated: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"  Sync failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
+
+    set_last_step(pdir.name)
 
 
 # ── SQLite sync helpers ─────────────────────────────────────
@@ -992,6 +1020,113 @@ def _sqlite_reindex(pdir: Path) -> None:
         sys.exit(1)
     finally:
         close_db(conn)
+
+
+# ── Command: analyze ────────────────────────────────────────
+
+
+def cmd_analyze(args: argparse.Namespace) -> None:
+    """Analyze: read CSVs, compute Vset/Vreset/ratio/compliance, update SQLite.
+
+    Depends on 'memristor sync' having populated the metadata.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import open_db, query_files, update_file_analysis, close_db
+    from science_cli.memristor.plotting import read_iv_csv
+    from science_cli.memristor.switching import extract_iv_parameters
+
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    protocol_name = pdir.name
+    conn = open_db(proj)
+
+    try:
+        files = query_files(conn, protocol=protocol_name)
+
+        # Filter to files with no parse_error
+        target_files = [
+            f for f in files
+            if not f.get("parse_error")
+        ]
+
+        if not target_files:
+            print("No parseable files found. Run 'memristor sync' first.")
+            close_db(conn)
+            return
+
+        force = getattr(args, "force", False)
+        single_file = getattr(args, "file", "") or ""
+
+        analyzed = 0
+        skipped = 0
+        errors = 0
+
+        print(f"Analyzing {len(target_files)} file(s) in protocol '{protocol_name}'...")
+
+        for fentry in target_files:
+            step = fentry["step"]
+            filename = fentry["filename"]
+
+            # Single-file filter
+            if single_file and filename != single_file:
+                skipped += 1
+                continue
+
+            # Skip if already analyzed (unless --force)
+            if not force and fentry.get("v_set") is not None:
+                skipped += 1
+                continue
+
+            # Resolve file path
+            filepath = pdir / step / filename
+            if not filepath.exists():
+                print(f"  [SKIP] File not found: {filename}")
+                skipped += 1
+                continue
+
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+                params = extract_iv_parameters(voltage, current)
+            except Exception as exc:
+                print(f"  [ERR]  {filename}: {exc}")
+                errors += 1
+                continue
+
+            update_file_analysis(
+                conn,
+                protocol=protocol_name,
+                step=step,
+                filename=filename,
+                v_set=params.get("v_set"),
+                v_reset=params.get("v_reset"),
+                on_off_ratio=params.get("on_off_ratio"),
+                current_compliance=params.get("compliance"),
+                compliance_confidence="high" if params.get("switching_detected") else "low",
+            )
+            analyzed += 1
+
+        conn.commit()
+
+        print(f"\nAnalyze complete:")
+        print(f"  Analyzed: {analyzed}")
+        print(f"  Skipped:  {skipped}")
+        print(f"  Errors:   {errors}")
+
+    except Exception as e:
+        conn.rollback()
+        print(f"  Analyze failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
+
+    set_last_step(pdir.name)
 
 
 # ── Command: validate ───────────────────────────────────────
@@ -1406,6 +1541,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--all", action="store_true", help="Cross-protocol dashboard (project-level)")
     p_dash.add_argument("--force", action="store_true", help="Force full re-analysis, ignore cache")
     p_dash.set_defaults(func=cmd_dashboard)
+
+    p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")
+    p_analyze.add_argument("--step-dir", default="")
+    p_analyze.add_argument("--force", action="store_true", help="Re-analyze all files (ignore cached analysis)")
+    p_analyze.add_argument("--file", default="", help="Single-file re-analysis")
+    p_analyze.set_defaults(func=cmd_analyze)
 
     return parser
 

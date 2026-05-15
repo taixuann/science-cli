@@ -67,12 +67,7 @@ def config_handler(args: list) -> None:
             console.print("[yellow]       config set techniques <technique> <device>[/yellow]")
 
     elif sub == "edit":
-        force = "--force" in sub_args
-        tech_args = [a for a in sub_args if a != "--force"]
-        if tech_args:
-            _cmd_edit_technique(tech_args[0], force=force)
-        else:
-            console.print("[yellow]Usage: config edit <technique> [--force][/yellow]")
+        _cmd_edit(sub_args)
 
     elif sub == "list":
         if not sub_args:
@@ -81,8 +76,24 @@ def config_handler(args: list) -> None:
             _cmd_list_techniques()
         elif sub_args[0] == "devices" and len(sub_args) > 1:
             _cmd_list_devices(sub_args[1])
+        elif sub_args[0] == "grammar":
+            _cmd_list_grammar()
         else:
-            console.print("[yellow]Usage: config list techniques | config list devices <technique>[/yellow]")
+            console.print("[yellow]Usage: config list techniques | config list devices <technique> | config list grammar[/yellow]")
+
+    elif sub == "devices":
+        if not sub_args or sub_args[0] == "list":
+            _cmd_list_global_devices()
+        else:
+            console.print("[yellow]Usage: config devices [list][/yellow]")
+
+    elif sub == "grammar":
+        if not sub_args or sub_args[0] == "list":
+            _cmd_list_grammar()
+        elif sub_args[0] == "edit":
+            _cmd_edit_global_grammar()
+        else:
+            console.print("[yellow]Usage: config grammar [list|edit][/yellow]")
 
     else:
         console.print(f"[yellow]Unknown config subcommand: {sub}[/yellow]")
@@ -289,7 +300,6 @@ def _cmd_edit_technique(technique: str, force: bool = False) -> None:
 # Examples:
 #   - "*{technique}*"        matches any file containing the technique name
 #   - "_IV_"                 matches files with _IV_ in the name
-#   - r"\\\\.lvm$"           matches .lvm extension (LabVIEW Measurement)
 #   - r"_sweep"              matches files containing _sweep
 #
 patterns:
@@ -327,9 +337,9 @@ patterns:
 #     potential   - Column name for potential (CV/CA)
 #
 # Column names are matched case-insensitively against CSV headers.
-# Use "Untitled" for LabVIEW Measurement (.lvm) column headers.
+# Use "Untitled" for Keithley 2400 tab-separated export column headers.
 #
-# --- Example: Keithley 2400 (LabVIEW .lvm format) ---
+# --- Example: Keithley 2400 (tab-separated CSV) ---
 # devices:
 #   keithley-2400:
 #     delimiter: "\\t"
@@ -395,6 +405,155 @@ patterns:
         console.print(f"[yellow]Editor exited with error. File saved at: {path}[/yellow]")
     except Exception as e:
         console.print(f"[red]Error editing file: {e}[/red]")
+
+
+def _cmd_edit(args: list) -> None:
+    """Handle `config edit` subcommand with support for --global, devices, grammar.
+
+    Usage:
+        config edit <technique> [--force]          # Edit per-technique config (existing behavior)
+        config edit --global                       # Edit global config
+        config edit devices                        # Edit global device registry
+        config edit grammar                        # Edit global file naming grammar
+        config edit techniques --global            # Edit global technique registry (NEW)
+    """
+    is_global = "--global" in args
+    is_force = "--force" in args
+    clean_args = [a for a in args if a not in ("--global", "--force")]
+
+    if clean_args:
+        target = clean_args[0]
+        if target == "devices":
+            _cmd_edit_global_devices()
+        elif target == "grammar":
+            _cmd_edit_global_grammar()
+        elif target == "techniques" and is_global:
+            _cmd_edit_global_techniques()
+        else:
+            _cmd_edit_technique(target, force=is_force)
+    elif is_global:
+        _cmd_edit_global_config()
+    else:
+        console.print("[yellow]Usage: config edit <technique> [--force][/yellow]")
+        console.print("[yellow]       config edit --global[/yellow]")
+        console.print("[yellow]       config edit devices[/yellow]")
+        console.print("[yellow]       config edit grammar[/yellow]")
+        console.print("[yellow]       config edit techniques --global[/yellow]")
+
+
+def _cmd_edit_global_config() -> None:
+    """Open the global config file in $EDITOR."""
+    from science_cli.core.config import _global_config_path
+
+    path = _global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        from science_cli.core.config import generate_default_config_yaml
+        content = generate_default_config_yaml()
+        with open(path, "w") as f:
+            f.write(content)
+        console.print(f"[dim]Created default config: {path}[/dim]")
+
+    editor = os.environ.get("EDITOR", "nvim")
+    try:
+        subprocess.run([editor, str(path)], check=True)
+        console.print(f"[green]✓[/green] Edited global config: {path}")
+        from science_cli.core.config import invalidate_cache
+        invalidate_cache()
+    except FileNotFoundError:
+        console.print(f"[red]Editor '{editor}' not found. Set $EDITOR or try: nano {path}[/red]")
+    except subprocess.CalledProcessError:
+        console.print(f"[yellow]Editor exited with error. File saved at: {path}[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error editing file: {e}[/red]")
+
+
+def _cmd_edit_global_devices() -> None:
+    """Open the devices section of the global config for editing."""
+    from science_cli.core.config import _global_config_path
+
+    path = _global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        from science_cli.core.config import generate_default_config_yaml
+        content = generate_default_config_yaml()
+        with open(path, "w") as f:
+            f.write(content)
+        console.print(f"[dim]Created default config: {path}[/dim]")
+
+    console.print("[dim]Edit the 'devices:' section in the global config.[/dim]")
+    editor = os.environ.get("EDITOR", "nvim")
+    try:
+        subprocess.run([editor, str(path)], check=True)
+        console.print(f"[green]✓[/green] Devices config updated")
+        from science_cli.core.config import invalidate_cache
+        invalidate_cache()
+    except FileNotFoundError:
+        console.print(f"[red]Editor '{editor}' not found.[/red]")
+    except subprocess.CalledProcessError:
+        console.print(f"[yellow]Editor exited with error.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def _cmd_edit_global_grammar() -> None:
+    """Open the grammar section of the global config for editing."""
+    from science_cli.core.config import _global_config_path
+
+    path = _global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        from science_cli.core.config import generate_default_config_yaml
+        content = generate_default_config_yaml()
+        with open(path, "w") as f:
+            f.write(content)
+        console.print(f"[dim]Created default config: {path}[/dim]")
+
+    console.print("[dim]Edit the 'file_naming:' section in the global config.[/dim]")
+    editor = os.environ.get("EDITOR", "nvim")
+    try:
+        subprocess.run([editor, str(path)], check=True)
+        console.print(f"[green]✓[/green] Grammar config updated")
+        from science_cli.core.config import invalidate_cache
+        invalidate_cache()
+    except FileNotFoundError:
+        console.print(f"[red]Editor '{editor}' not found.[/red]")
+    except subprocess.CalledProcessError:
+        console.print(f"[yellow]Editor exited with error.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def _cmd_edit_global_techniques() -> None:
+    """Open the techniques section of the global config for editing."""
+    from science_cli.core.config import _global_config_path
+
+    path = _global_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        from science_cli.core.config import generate_default_config_yaml
+        content = generate_default_config_yaml()
+        with open(path, "w") as f:
+            f.write(content)
+        console.print(f"[dim]Created default config: {path}[/dim]")
+
+    console.print("[dim]Edit the 'techniques:' section in the global config.[/dim]")
+    editor = os.environ.get("EDITOR", "nvim")
+    try:
+        subprocess.run([editor, str(path)], check=True)
+        console.print(f"[green]✓[/green] Techniques config updated")
+        from science_cli.core.config import invalidate_cache
+        invalidate_cache()
+    except FileNotFoundError:
+        console.print(f"[red]Editor '{editor}' not found.[/red]")
+    except subprocess.CalledProcessError:
+        console.print(f"[yellow]Editor exited with error.[/yellow]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
 
 
 def _cmd_list_techniques() -> None:
@@ -508,3 +667,67 @@ def _cmd_list_devices(technique: str) -> None:
         table.add_row(d)
 
     console.print(table)
+
+
+def _cmd_list_global_devices() -> None:
+    """List all devices in the global registry."""
+    from science_cli.core.config import list_global_devices, get_global_device_config
+
+    devices = list_global_devices()
+
+    if not devices:
+        console.print("[yellow]No devices in global registry.[/yellow]")
+        return
+
+    table = Table(title="Global Device Registry")
+    table.add_column("Device", style="cyan")
+    table.add_column("Label", style="dim")
+    table.add_column("Delimiter", style="white")
+    table.add_column("Header Lines", style="white")
+    table.add_column("Columns", style="green")
+
+    for d in devices:
+        cfg = get_global_device_config(d)
+        label = cfg.get("label", "") if cfg else ""
+        delim = repr(cfg.get("delimiter", ""))[1:-1] if cfg and cfg.get("delimiter") else "auto"
+        header = str(cfg.get("header_lines", 0)) if cfg else "0"
+        cols = ", ".join(sorted(cfg.get("columns", {}).keys())) if cfg else ""
+        table.add_row(d, label, delim, header, cols)
+
+    console.print(table)
+
+
+def _cmd_list_grammar() -> None:
+    """List configured file naming grammar patterns."""
+    from science_cli.core.config import get_file_naming_patterns
+
+    patterns = get_file_naming_patterns()
+
+    if not patterns:
+        console.print("[yellow]No file naming patterns configured.[/yellow]")
+        console.print("[dim]Use 'config edit grammar' to add patterns.[/dim]")
+        return
+
+    table = Table(title="File Naming Grammar Patterns")
+    table.add_column("ID", style="cyan")
+    table.add_column("Template", style="dim")
+    table.add_column("Fields", style="green")
+
+    for p in patterns:
+        pid = p.get("id", "?")
+        template = p.get("template", "")
+        fields_spec = p.get("fields", [])
+        if isinstance(fields_spec, list):
+            field_names = ", ".join(
+                fd.get("name", "?") for fd in fields_spec
+            )
+        elif isinstance(fields_spec, dict):
+            field_names = ", ".join(fields_spec.keys())
+        else:
+            field_names = ""
+        table.add_row(pid, template, field_names)
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Separator is ALWAYS '_' (underscore) — hardcoded.[/dim]")
+    console.print("[dim]Use 'config edit grammar' to modify.[/dim]")

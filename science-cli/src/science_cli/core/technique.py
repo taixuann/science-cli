@@ -1,8 +1,13 @@
 """Technique detection from filenames — merges hardcoded + config patterns.
 
-Resolution order for patterns:
-    1. Config patterns (global + per-project) — highest priority
-    2. Hardcoded fallback patterns
+Resolution order for patterns (4-tier):
+    1. Project-level overrides — highest priority
+    2. Global config patterns
+    3. Hardcoded fallback grammar patterns
+    4. Per-field extract specs (e.g., matrix row/col)
+
+All parsed results are normalized via standardize_grammar_fields() to include
+5 universal fields: date_code, material, technique, matrix, suffix.
 """
 
 import re
@@ -63,6 +68,24 @@ PATTERNS: dict[str, list[str]] = {
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
     "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
     "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
+}
+
+
+# Hardcoded grammar fallback patterns — used when no config grammar exists
+HARDCODED_GRAMMAR: dict = {
+    "patterns": [
+        {
+            "regex": r"(?P<date_code>\d{6,8})[_-](?P<material>[A-Za-z0-9]+)[_-](?P<technique>[A-Za-z0-9]+)[_-]?(?P<matrix>[A-Za-z0-9\-\+]+)?[_-]?(?P<suffix>\d+)?",
+            "description": "Standard: date_material_technique_matrix_suffix",
+            "fields": [
+                {"name": "date_code", "description": "Date code (YYYYMMDD)"},
+                {"name": "material", "description": "Material name or code"},
+                {"name": "technique", "description": "Technique abbreviation"},
+                {"name": "matrix", "description": "Matrix position (r0c0 or b1-t1)", "extract": r"r(?P<row>\d+)c(?P<col>\d+)"},
+                {"name": "suffix", "description": "Run number suffix"},
+            ],
+        },
+    ],
 }
 
 
@@ -178,19 +201,104 @@ def get_technique_label(technique: str, project_root=None) -> str:
     return technique_label(technique)
 
 
-def parse_filename_grammar(filename: str, project_root=None) -> dict:
-    """Parse a filename using the configured naming grammar patterns.
+def _merge_grammar(base: dict, override: dict) -> dict:
+    """Merge two grammar dicts, with override patterns taking priority.
 
-    Tries each pattern's regex in order. Returns dict with extracted fields
-    (date_code, material, batch, row, col, technique, type, suffix, etc.)
-    on first match, or dict with ``parse_error`` key if no pattern matches.
-
-    Also extracts row/col from matrix field using extract sub-regexes
-    specified in the pattern config.
+    Override patterns are prepended before base patterns. Duplicate regexes
+    are skipped (first occurrence wins based on priority order).
+    Top-level non-pattern keys from override are applied to the result.
     """
-    from science_cli.core.config import get_file_naming_grammar
+    merged = dict(base)
+    base_patterns = merged.get("patterns", [])
+    override_patterns = override.get("patterns", [])
 
-    grammar = get_file_naming_grammar(project_root)
+    existing_regexes: set[str] = set()
+    new_patterns: list[dict] = []
+
+    # Prepend override patterns first (highest priority)
+    for p in override_patterns:
+        regex = p.get("regex", "")
+        if regex and regex not in existing_regexes:
+            new_patterns.append(dict(p))
+            existing_regexes.add(regex)
+
+    # Append base patterns (lower priority), skipping dupes
+    for p in base_patterns:
+        regex = p.get("regex", "")
+        if regex and regex not in existing_regexes:
+            new_patterns.append(dict(p))
+            existing_regexes.add(regex)
+
+    merged["patterns"] = new_patterns
+
+    # Merge top-level keys from override (non-patterns)
+    for k, v in override.items():
+        if k != "patterns":
+            merged[k] = v
+
+    return merged
+
+
+def _resolve_grammar_from_merged_config(project_root=None) -> dict:
+    """Resolve file naming grammar via 4-tier resolution chain.
+
+    Resolution order:
+        1. Hardcoded grammar (fallback base) — lowest priority
+        2. Global config patterns via get_file_naming_grammar()
+        3. Project-level overrides (via project_root) — highest priority
+        4. Per-pattern extract specs applied at match time
+
+    Returns merged grammar dict with ``patterns`` key.
+    """
+    merged = dict(HARDCODED_GRAMMAR)
+
+    try:
+        from science_cli.core.config import get_file_naming_grammar
+
+        # Layer 2: Global config grammar
+        global_grammar = get_file_naming_grammar(None)
+        if global_grammar and global_grammar.get("patterns"):
+            merged = _merge_grammar(merged, global_grammar)
+
+        # Layer 3: Project-level overrides (only if different from global)
+        if project_root is not None:
+            proj_grammar = get_file_naming_grammar(project_root)
+            if (
+                proj_grammar
+                and proj_grammar.get("patterns")
+                and proj_grammar != global_grammar
+            ):
+                merged = _merge_grammar(merged, proj_grammar)
+
+        return merged
+    except ImportError:
+        return merged
+
+
+def parse_filename_grammar(filename: str, project_root=None) -> dict:
+    """Parse a filename using the configured naming grammar patterns (4-tier resolution).
+
+    Resolution order:
+        1. Hardcoded grammar patterns (in this file as fallback)
+        2. Global config patterns via get_file_naming_grammar()
+        3. Project-level overrides (via project_root)
+        4. Per-pattern extract specs applied to extract row/col from matrix
+
+    Returns dict with extracted fields (date_code, material, technique, matrix,
+    suffix) normalized via standardize_grammar_fields(), or dict with
+    ``parse_error`` key if no pattern matches.
+
+    When *project_root* is ``None``, attempts to auto-detect from session.
+    """
+
+    if project_root is None:
+        try:
+            from science_cli.core.project import get_current_project_path
+            project_root = get_current_project_path()
+        except ImportError:
+            pass
+
+    grammar = _resolve_grammar_from_merged_config(project_root)
     patterns = grammar.get("patterns", [])
 
     if not patterns:
@@ -207,16 +315,71 @@ def parse_filename_grammar(filename: str, project_root=None) -> dict:
 
         if m:
             result = m.groupdict()
-            # Process extract sub-regexes for matrix fields
+
+            # Collect extract specs from both formats:
+            # 1. Pattern-level "extract" dict: {matrix: "r...", ...}
+            extracts: dict[str, str] = {}
             if "extract" in pattern:
-                for field, extract_spec in pattern["extract"].items():
-                    if field in result and result[field]:
-                        try:
-                            em = re.search(extract_spec, result[field])
-                            if em:
-                                result.update(em.groupdict())
-                        except re.error:
-                            pass
-            return result
+                extracts.update(pattern["extract"])
+
+            # 2. Per-field extract (fields is a LIST of dicts with 'name' + 'extract')
+            fields_spec = pattern.get("fields", [])
+            if isinstance(fields_spec, list):
+                for fd in fields_spec:
+                    if isinstance(fd, dict) and "extract" in fd:
+                        fname = fd.get("name", "")
+                        if fname:
+                            extracts[fname] = fd["extract"]
+
+            # Apply all extract sub-regexes
+            for field, extract_spec in extracts.items():
+                if field in result and result[field]:
+                    try:
+                        em = re.search(extract_spec, result[field])
+                        if em:
+                            result.update(em.groupdict())
+                    except re.error:
+                        pass
+            # Normalize to universal fields
+            return standardize_grammar_fields(result)
 
     return {"parse_error": "no matching pattern"}
+
+
+def standardize_grammar_fields(parsed: dict) -> dict:
+    """Normalize a parsed grammar result to include ALL 5 universal fields.
+    
+    Ensures every result has: date_code, material, technique, matrix, suffix.
+    Missing fields are set to None.
+    
+    Also extracts row/col from matrix field if present.
+    """
+    result = dict(parsed)
+    
+    # Ensure universal fields exist
+    for field in ("date_code", "material", "technique", "matrix", "suffix"):
+        if field not in result:
+            result[field] = None
+    
+    # Extract row/col from matrix field (e.g., "r0c0" -> row=0, col=0)
+    if result.get("matrix") and ("row" not in result or result["row"] is None):
+        m = re.search(r'r(\d+)c(\d+)', str(result["matrix"]), re.IGNORECASE)
+        if m:
+            result["row"] = int(m.group(1))
+            result["col"] = int(m.group(2))
+    
+    # Also parse bN-tN format
+    if result.get("matrix") and ("row" not in result or result["row"] is None):
+        m = re.search(r'b(\d+)-t(\d+)', str(result["matrix"]), re.IGNORECASE)
+        if m:
+            result["row"] = int(m.group(2)) - 1  # tN -> 0-indexed row
+            result["col"] = int(m.group(1)) - 1  # bN -> 0-indexed col
+    
+    # Convert suffix to int if possible
+    if result.get("suffix") is not None:
+        try:
+            result["suffix"] = int(result["suffix"])
+        except (ValueError, TypeError):
+            pass
+    
+    return result

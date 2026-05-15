@@ -285,16 +285,16 @@ science-cli/
     ├── tui/                           ← Textual TUI
     │
     ├── memristor/                     ← Memristor characterization
-│   ├── __init__.py                ← Public API + built-in data
-│   ├── db.py                      ← ** SQLite query cache ** (Sprint 6)
-│   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
-│   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard)
-│   ├── dashboard.py               ← ** Plotly interactive HTML dashboard **
-│   ├── plotting.py                ← IV CSV reading + SVG generation
-│   ├── endurance.py               ← Endurance analysis
-│   ├── retention.py               ← Retention analysis
-│   ├── switching.py               ← Switching analysis
-│   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
+    │   ├── __init__.py                ← Public API + built-in data
+    │   ├── db.py                      ← ** SQLite query cache (v2 schema with universal grammar columns) **
+    │   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
+    │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard, sync, analyze)
+    │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard (SQLite fast path) **
+    │   ├── plotting.py                ← IV CSV reading + SVG generation
+    │   ├── endurance.py               ← Endurance analysis
+    │   ├── retention.py               ← Retention analysis
+    │   ├── switching.py               ← Switching analysis
+    │   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
 ```
 
 ---
@@ -338,7 +338,7 @@ defaults:
 ```
 
 ### Adding a New Device Config
-Devices live under their parent technique:
+Devices live under their parent technique (legacy approach):
 ```yaml
 techniques:
   ec-eis:
@@ -354,6 +354,18 @@ techniques:
           z_imag: "-Z''/Ohm"
 ```
 Same device name can appear under multiple techniques with different column mappings.
+
+### Adding a Global Device (Sprint 8)
+Devices can now be defined globally (shared across all techniques):
+1. Add to `_DEFAULT_GLOBAL_DEVICES` in `core/config.py`, or
+2. Add to `~/.config/science-cli/config.yaml` under the `devices:` section via `config edit devices`
+3. Reference by name in technique configs via `default_device: keithley-2400`
+4. Fallback resolution: `_resolve_device_config()` checks global registry if per-technique lookup fails
+
+### Adding a Global Technique (Sprint 8)
+1. Add to `_DEFAULT_GLOBAL_TECHNIQUES` in `core/config.py`, or
+2. Add to `~/.config/science-cli/config.yaml` under the `techniques:` section via `config edit techniques --global`
+3. Include `grammar_codes`, `default_device`, and optional `types` mapping
 
 ---
 
@@ -385,34 +397,59 @@ Same device name can appear under multiple techniques with different column mapp
 
 ---
 
-## Config System Architecture
+## Config System Architecture (4-Tier)
 
 ```
-Hardcoded defaults (core/config.py)
+Hardcoded defaults (core/config.py)         ← _DEFAULT_DEVICE, _DEFAULT_TECHNIQUE_PATTERNS
        ↓ overridden by
-Global config (~/.config/science-cli/config.yaml)
+Global config (~/.config/science-cli/config.yaml)  ← device registry, technique templates, grammar
        ↓ overridden by
-Per-project config (<project_root>/sci-config.yaml)
-       ↓
-Merged config (get_merged_config())
+Per-project config (<project_root>/sci-config.yaml) ← type→step mapping, project overrides
+       ↓ overridden by
+Per-protocol metadata (protocol/<name>/...)
 ```
+
+**Global Device Registry** (Sprint 8):
+- `_DEFAULT_GLOBAL_DEVICES` in `core/config.py` — built-in instruments (keithley-2400, keysight-b1500)
+- `get_global_device_config(name)` — lookup from hardcoded + global config
+- `list_global_devices()` — list all registered devices
+- Devices defined independently of techniques (shared across all techniques)
+
+**Global Technique Registry** (Sprint 8):
+- `_DEFAULT_GLOBAL_TECHNIQUES` in `core/config.py` — built-in technique definitions
+- `get_global_technique_config(name)` — lookup from hardcoded + global config
+- `list_global_techniques()` — list all registered techniques
+- Includes grammar_codes, default_device, types per technique
 
 **Key modules:**
-- `core/config.py` — loading, merging, caching, typed accessors
-- `core/technique.py` — consults config for filename patterns
-- `core/data_loader.py` — consults config for device loading params
+- `core/config.py` — loading, merging, caching, typed accessors, global registry
+- `core/technique.py` — grammar-based filename parsing (4-tier resolution: hardcoded → global → project → protocol)
+- `core/data_loader.py` — device-aware loading with global fallback
 - `core/project.py` — consults config for projects_root
-- `cli/commands/config.py` — `config init` and `config show` commands
+- `cli/commands/config.py` — `config init`, `config show`, `config edit --global`, `config devices`, `config grammar`
+- `memristor/db.py` — schema v2 with universal grammar columns, `populate_from_grammar()`, `update_file_analysis()`
+- `memristor/dashboard.py` — SQLite fast read path via `_collect_device_data_from_sqlite()`
+- `memristor/device_cli.py` — `sync` (pure filename parsing) + `analyze` (CSV computation)
 
 **Typed accessors:**
 ```python
 from science_cli.core.config import (
-    get_device_config,       # → dict or None
-    get_technique_patterns,  # → list[str]
-    get_default_device,      # → str
-    get_projects_root,       # → Path
-    get_header_marker,       # → str
-    get_merged_config,       # → dict (raw)
+    get_device_config,              # → dict or None
+    get_technique_patterns,         # → list[str]
+    get_default_device,             # → str
+    get_projects_root,              # → Path
+    get_header_marker,              # → str
+    get_merged_config,              # → dict (raw)
+    get_global_device_config,       # → dict or None (Sprint 8)
+    list_global_devices,            # → list[str] (Sprint 8)
+    get_global_technique_config,    # → dict or None (Sprint 8)
+    list_global_techniques,         # → list[str] (Sprint 8)
+    get_file_naming_grammar,        # → dict (Sprint 8, separator hardcoded to "_")
+)
+
+from science_cli.core.technique import (
+    parse_filename_grammar,         # → dict with 5 universal fields (Sprint 8)
+    standardize_grammar_fields,     # → normalize to date_code, material, technique, matrix, suffix
 )
 ```
 
@@ -438,6 +475,7 @@ from science_cli.core.config import (
 | documentation/ structure | cleanup/architecture-guardrails | plans/ and instructions/ directories created |
 | Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
 | PLAN files created | cleanup/architecture-guardrails | 4 PLANs created with cross-PLAN relationships |
+| Sprint 8: Global Config Registry | Sprint 8 | 4-tier config, global device/technique registry, sync/analyze split, SQLite v2 auto-construction |
 
 ### Active Gaps (Need Execution)
 
@@ -447,7 +485,15 @@ from science_cli.core.config import (
 
 #### Config Gaps
 
-✅ **All gaps closed** — technique configs, `config set technique`, `config edit`, `config list techniques/devices` all implemented. Sprint 7 added config-driven technique registry and filename naming grammar.
+✅ **All gaps closed** (Sprint 8):
+- **4-tier config**: Hardcoded defaults → Global config → Per-project config → Per-protocol
+- **Global device registry**: Built-in keithley-2400 and keysight-b1500, extensible via `config edit devices`
+- **Global technique registry**: Built-in iv-sweep, iv-breakdown, iv-leakage with grammar_codes
+- **Universal grammar fields**: 5 standardized fields (date_code, material, technique, matrix, suffix), hardcoded `_` separator
+- **Grammar-based filename parsing**: 4-tier resolution in `parse_filename_grammar()`
+- **SQLite auto-construction**: `populate_from_grammar()` scans step dirs, parses filenames, populates SQLite without YAML
+- **sync/analyze split**: `memristor sync` = pure filename parsing; `memristor analyze` = CSV-based computation
+- **Dashboard SQLite fast path**: `generate_dashboard()` tries SQLite first, falls back to CSV reading
 
 #### Extension Gaps
 
@@ -472,12 +518,13 @@ from science_cli.core.config import (
 | Item | Type | Notes |
 |------|------|-------|
 | Per-device `data/plot/analyze` device shortcuts | Feature | `sci data -d keithley-2400` |
-| SQLite integration with per-device device configs | Feature | `config set techniques` + SQLite v2 |
 | Plugin system for 3rd-party device configs | Feature | Auto-discover from pip-installed packages |
+| Cycle evolution analysis in dashboard | Feature | Placeholder panel exists, needs endurance data integration |
+| Confidence scoring for parameter extraction | Feature | Placeholder panel exists, needs algorithm |
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-7) in PLAN-enhanced-dashboard are completed. The `refactor/2.1.0` branch contains all implementations.
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. The `refactor/2.1.0` branch contains all implementations.
 
 **When creating a new PLAN, check if it relates to any future considerations above.**
 

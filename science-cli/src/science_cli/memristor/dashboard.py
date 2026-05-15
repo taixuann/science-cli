@@ -142,6 +142,122 @@ def _collect_device_data(config, results_dir: Path) -> dict:
     }
 
 
+def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[dict]) -> dict:
+    """Collect IV data from SQLite cache (pre-computed analysis).
+
+    Uses v_set, v_reset, on_off_ratio from the files table.
+    Falls back to CSV reading for files that don't have analysis values.
+    """
+    from science_cli.memristor.plotting import read_iv_csv
+    from science_cli.memristor.device import extract_material_batch
+
+    data_dir = results_dir.parent
+    per_device: dict[tuple[int, int], dict] = {}
+    all_vset: list[float] = []
+    all_vreset: list[float] = []
+    all_ratios: list[float] = []
+    total_iv_files = 0
+
+    for fentry in db_files:
+        step = fentry.get("step", "")
+        filename = fentry.get("filename", "")
+        material = fentry.get("material", "unknown")
+        row = fentry.get("row")
+        col = fentry.get("col")
+
+        if row is None or col is None:
+            continue
+
+        csv_path = data_dir / filename
+        if not csv_path.exists():
+            csv_path = data_dir.parent / step / filename
+        if not csv_path.exists():
+            continue
+
+        # Try to read CSV for overlay data
+        try:
+            voltage, current, _info = read_iv_csv(str(csv_path))
+        except Exception:
+            continue
+
+        # Use pre-computed analysis from SQLite
+        v_set = fentry.get("v_set")
+        v_reset = fentry.get("v_reset")
+        ratio = fentry.get("on_off_ratio")
+        switching = v_set is not None or v_reset is not None
+
+        # Extract material+batch
+        mb = extract_material_batch(filename)
+        if mb:
+            mat_name, batch = mb
+            mat_key = f"{mat_name}({batch})" if batch else mat_name
+        else:
+            mat_key = material
+
+        key = (row, col)
+        if key not in per_device:
+            per_device[key] = {
+                "row": row,
+                "col": col,
+                "material_key": mat_key,
+                "v_set_values": [],
+                "v_reset_values": [],
+                "ratio_values": [],
+                "switching_detected": False,
+                "files": [],
+            }
+
+        device = per_device[key]
+        device["files"].append({
+            "voltage": voltage.tolist(),
+            "current": current.tolist(),
+            "v_set": v_set,
+            "v_reset": v_reset,
+            "ratio": ratio,
+        })
+        total_iv_files += 1
+
+        if switching:
+            device["switching_detected"] = True
+        if v_set is not None:
+            device["v_set_values"].append(float(v_set))
+            all_vset.append(float(v_set))
+        if v_reset is not None:
+            device["v_reset_values"].append(float(v_reset))
+            all_vreset.append(float(v_reset))
+        if ratio is not None:
+            device["ratio_values"].append(float(ratio))
+            all_ratios.append(float(ratio))
+
+    # Compute per-device medians
+    for key, device in per_device.items():
+        device["v_set"] = (
+            float(np.median(device["v_set_values"]))
+            if device["v_set_values"] else None
+        )
+        device["v_reset"] = (
+            float(np.median(device["v_reset_values"]))
+            if device["v_reset_values"] else None
+        )
+        device["ratio"] = (
+            float(np.median(device["ratio_values"]))
+            if device["ratio_values"] else None
+        )
+        device["n_files"] = len(device["files"])
+
+    switching_count = sum(1 for d in per_device.values() if d["switching_detected"])
+
+    return {
+        "per_device": per_device,
+        "all_vset": all_vset,
+        "all_vreset": all_vreset,
+        "all_ratios": all_ratios,
+        "total_iv_files": total_iv_files,
+        "switching_count": switching_count,
+        "total_measured_devices": len(per_device),
+    }
+
+
 def _compute_aggregate(collection: dict, config) -> dict:
     """Compute aggregate statistics from collected data."""
     all_vset = collection["all_vset"]
@@ -225,9 +341,13 @@ def generate_dashboard(
     output_path: str | Path,
 ) -> Path:
     """Generate a self-contained dark-themed interactive Plotly HTML dashboard.
-
-    Reads raw IV CSV data, extracts V_set/V_reset/ON-OFF ratio per device,
-    and generates an interactive HTML dashboard matching the reference layout.
+    
+    Reads from SQLite cache first for analysis data, falls back to
+    raw CSV reading if SQLite data is not available.
+    
+    Config is resolved from the global registry — technique configs,
+    device configs, and grammar patterns are loaded from the 4-tier
+    config system (hardcoded → global → project → protocol).
 
     Args:
         config: DeviceConfig instance loaded from devices.yaml.
@@ -241,8 +361,32 @@ def generate_dashboard(
     Raises:
         ValueError: If no IV files are found or no data could be collected.
     """
-    # ── Phase 1: Collect data ──
-    collection = _collect_device_data(config, results_dir)
+    # ── Try SQLite fast-read path ──
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import open_db, query_files, close_db
+    
+    proj = get_current_project_path()
+    sqlite_available = False
+    sqlite_data = None
+    
+    if proj:
+        try:
+            db_path = proj / f"{proj.name}.db"
+            if db_path.exists():
+                conn = open_db(proj)
+                db_files = query_files(conn)
+                close_db(conn)
+                if db_files and len(db_files) > 0:
+                    sqlite_available = True
+                    sqlite_data = db_files
+        except Exception:
+            pass
+    
+    # ── Phase 1: Collect data (SQLite or CSV) ──
+    if sqlite_available:
+        collection = _collect_device_data_from_sqlite(config, results_dir, sqlite_data)
+    else:
+        collection = _collect_device_data(config, results_dir)
 
     if not collection["per_device"]:
         raise ValueError(

@@ -1,7 +1,7 @@
 """SQLite query cache for memristor data — read-optimized cache layer.
 
-Schema:
-    files — per-file metadata, technique, results
+Schema (v2):
+    files — per-file metadata, universal grammar columns, analysis results
     cells — per-cell aggregated metrics
     protocols — protocol metadata
     _meta — schema version tracking
@@ -15,7 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Data file suffixes (same as device.py DATA_SUFFIXES)
+DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
 
 # Schema DDL
 CREATE_FILES = """
@@ -24,23 +27,26 @@ CREATE TABLE IF NOT EXISTS files (
     protocol TEXT NOT NULL,
     step TEXT NOT NULL,
     filename TEXT NOT NULL,
-    technique TEXT NOT NULL,
+    technique_id TEXT,
+    device_id TEXT,
+    -- Universal grammar fields (populated by sync)
     date_code TEXT,
     material TEXT NOT NULL,
+    matrix TEXT,
     row INTEGER,
     col INTEGER,
-    cycle_index INTEGER,
-    timestamp_first REAL,
-    timestamp_last REAL,
+    suffix INTEGER,
+    -- Computed analysis values (populated by analyze)
     v_set REAL,
     v_reset REAL,
     on_off_ratio REAL,
-    current_compliance_1sf TEXT,
+    current_compliance REAL,
     compliance_confidence TEXT,
-    plot_figure_path TEXT,
+    -- Metadata
     file_size INTEGER,
     mtime TEXT,
-    UNIQUE(protocol, step, filename)
+    parse_error TEXT,
+    UNIQUE(protocol, step, filename, technique_id)
 )
 """
 
@@ -81,7 +87,7 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_files_material ON files(material)",
     "CREATE INDEX IF NOT EXISTS idx_files_protocol ON files(protocol)",
     "CREATE INDEX IF NOT EXISTS idx_files_mtime ON files(mtime)",
-    "CREATE INDEX IF NOT EXISTS idx_files_technique ON files(technique)",
+    "CREATE INDEX IF NOT EXISTS idx_files_technique ON files(technique_id)",
     "CREATE INDEX IF NOT EXISTS idx_cells_protocol_material ON cells(protocol, material)",
 ]
 
@@ -141,9 +147,11 @@ def check_schema(conn: sqlite3.Connection) -> None:
 
 def _run_migrations(conn: sqlite3.Connection, from_version: int, to_version: int) -> None:
     """Apply sequential schema migrations from *from_version* to *to_version*."""
-    # Currently no migrations needed (v1 is the initial schema).
-    # Future migrations can be added here as numbered steps.
-    pass
+    if from_version < 2 <= to_version:
+        # v1 → v2: schema redesigned with universal grammar columns
+        # Drop old files table and recreate with v2 schema
+        conn.execute("DROP TABLE IF EXISTS files")
+        conn.execute(CREATE_FILES)
 
 
 # ── CRUD helpers ───────────────────────────────────────────────────────
@@ -154,40 +162,40 @@ def insert_file(
     protocol: str,
     step: str,
     filename: str,
-    technique: str,
+    technique_id: Optional[str] = None,
+    device_id: Optional[str] = None,
     material: str = "unknown",
     row: Optional[int] = None,
     col: Optional[int] = None,
     date_code: Optional[str] = None,
-    cycle_index: Optional[int] = None,
-    timestamp_first: Optional[float] = None,
-    timestamp_last: Optional[float] = None,
+    matrix: Optional[str] = None,
+    suffix: Optional[int] = None,
     v_set: Optional[float] = None,
     v_reset: Optional[float] = None,
     on_off_ratio: Optional[float] = None,
-    current_compliance_1sf: Optional[str] = None,
+    current_compliance: Optional[float] = None,
     compliance_confidence: Optional[str] = None,
-    plot_figure_path: Optional[str] = None,
+    parse_error: Optional[str] = None,
     file_size: int = 0,
     mtime: str = "",
 ) -> None:
     """Insert or replace a file row in the ``files`` table."""
     conn.execute(
         """INSERT OR REPLACE INTO files (
-            protocol, step, filename, technique, date_code, material,
-            row, col, cycle_index,
-            timestamp_first, timestamp_last,
+            protocol, step, filename, technique_id, device_id,
+            date_code, material, matrix,
+            row, col, suffix,
             v_set, v_reset, on_off_ratio,
-            current_compliance_1sf, compliance_confidence,
-            plot_figure_path, file_size, mtime
+            current_compliance, compliance_confidence,
+            parse_error, file_size, mtime
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            protocol, step, filename, technique, date_code, material,
-            row, col, cycle_index,
-            timestamp_first, timestamp_last,
+            protocol, step, filename, technique_id, device_id,
+            date_code, material, matrix,
+            row, col, suffix,
             v_set, v_reset, on_off_ratio,
-            current_compliance_1sf, compliance_confidence,
-            plot_figure_path, file_size, mtime,
+            current_compliance, compliance_confidence,
+            parse_error, file_size, mtime,
         ),
     )
 
@@ -249,7 +257,7 @@ def query_files(
         sql += " AND protocol = ?"
         params.append(protocol)
     if technique:
-        sql += " AND technique = ?"
+        sql += " AND technique_id = ?"
         params.append(technique)
     if material:
         sql += " AND material = ?"
@@ -289,12 +297,24 @@ def update_file_analysis(
     v_set: Optional[float] = None,
     v_reset: Optional[float] = None,
     on_off_ratio: Optional[float] = None,
+    current_compliance: Optional[float] = None,
+    compliance_confidence: Optional[str] = None,
 ) -> None:
-    """Update analysis results (Vset/Vreset/ratio) for a file row."""
+    """Update analysis results for a file row.
+
+    Updates Vset, Vreset, on/off ratio, current compliance, and
+    compliance confidence for the matching file.
+    """
     conn.execute(
-        """UPDATE files SET v_set = ?, v_reset = ?, on_off_ratio = ?
+        """UPDATE files SET
+            v_set = ?, v_reset = ?, on_off_ratio = ?,
+            current_compliance = ?, compliance_confidence = ?
            WHERE protocol = ? AND step = ? AND filename = ?""",
-        (v_set, v_reset, on_off_ratio, protocol, step, filename),
+        (
+            v_set, v_reset, on_off_ratio,
+            current_compliance, compliance_confidence,
+            protocol, step, filename,
+        ),
     )
 
 
@@ -386,3 +406,228 @@ def close_db(conn: sqlite3.Connection) -> None:
         conn.close()
     except Exception:
         pass
+
+
+# ── Grammar-based population ───────────────────────────────────────────
+
+
+def populate_from_grammar(
+    conn: sqlite3.Connection,
+    protocol: str,
+    step: str,
+    project_root: Optional[Path] = None,
+) -> dict:
+    """Scan step directory, parse filenames via grammar patterns, populate SQLite.
+
+    Does NOT read CSV content — pure filename parsing only.
+
+    Args:
+        conn: Open SQLite connection.
+        protocol: Protocol name.
+        step: Step directory name (relative to protocol dir).
+        project_root: Project root for config resolution.
+
+    Returns:
+        dict with keys: files_found, files_matched, files_inserted, errors
+    """
+    from science_cli.core.technique import parse_filename_grammar
+    from science_cli.core.config import resolve_technique_from_grammar, get_default_device
+
+    # Resolve project root
+    if project_root is None:
+        try:
+            from science_cli.core.project import get_current_project_path
+            project_root = get_current_project_path()
+        except ImportError:
+            pass
+
+    if project_root is None:
+        return {
+            "files_found": 0,
+            "files_matched": 0,
+            "files_inserted": 0,
+            "errors": ["cannot resolve project_root"],
+        }
+
+    step_dir = project_root / "protocol" / protocol / step
+    if not step_dir.is_dir():
+        return {
+            "files_found": 0,
+            "files_matched": 0,
+            "files_inserted": 0,
+            "errors": [f"step directory not found: {step_dir}"],
+        }
+
+    files_found = 0
+    files_matched = 0
+    files_inserted = 0
+    errors: list[str] = []
+
+    for entry in sorted(step_dir.iterdir()):
+        if not entry.is_file():
+            continue
+        if entry.name.startswith("."):
+            continue
+        if entry.suffix.lower() not in DATA_SUFFIXES:
+            continue
+
+        files_found += 1
+        filename = entry.name
+        file_size = entry.stat().st_size
+        mtime = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
+
+        # Parse filename via grammar
+        parsed = parse_filename_grammar(filename, project_root=project_root)
+
+        if "parse_error" in parsed:
+            # No grammar pattern matched — store with parse error
+            insert_file(
+                conn,
+                protocol=protocol,
+                step=step,
+                filename=filename,
+                material="unknown",
+                parse_error=parsed["parse_error"],
+                file_size=file_size,
+                mtime=mtime,
+            )
+            files_inserted += 1
+            errors.append(f"{filename}: {parsed['parse_error']}")
+            continue
+
+        files_matched += 1
+
+        # Extract universal grammar fields from parse result
+        date_code = parsed.get("date_code")
+        material = parsed.get("material", "unknown")
+        matrix = parsed.get("matrix")
+        row_str = parsed.get("row")
+        col_str = parsed.get("col")
+        suffix_str = parsed.get("suffix")
+        grammar_code = parsed.get("technique", "")
+
+        row = int(row_str) if row_str is not None else None
+        col = int(col_str) if col_str is not None else None
+        suffix = int(suffix_str) if suffix_str is not None else None
+
+        # Resolve technique_id from grammar code
+        technique_id = None
+        if grammar_code:
+            technique_id = resolve_technique_from_grammar(
+                grammar_code, project_root=project_root
+            )
+
+        # Resolve device_id from technique config (default device)
+        device_id = None
+        if technique_id:
+            device_id = get_default_device(technique_id, project_root=project_root)
+            if not device_id:
+                device_id = None
+
+        insert_file(
+            conn,
+            protocol=protocol,
+            step=step,
+            filename=filename,
+            technique_id=technique_id,
+            device_id=device_id,
+            date_code=date_code,
+            material=material,
+            matrix=matrix,
+            row=row,
+            col=col,
+            suffix=suffix,
+            file_size=file_size,
+            mtime=mtime,
+        )
+        files_inserted += 1
+
+    return {
+        "files_found": files_found,
+        "files_matched": files_matched,
+        "files_inserted": files_inserted,
+        "errors": errors,
+    }
+
+
+def populate_protocol_from_step_dirs(
+    conn: sqlite3.Connection,
+    protocol: str,
+    project_root: Optional[Path] = None,
+) -> dict:
+    """Scan ALL step directories under ``protocol/<name>/`` and populate the database.
+
+    Calls ``populate_from_grammar()`` for each step directory found.
+    Upserts the protocols table with the protocol name.
+
+    Args:
+        conn: Open SQLite connection.
+        protocol: Protocol name.
+        project_root: Project root for config resolution.
+
+    Returns:
+        dict with keys: steps_found, total_files, total_matched, total_inserted, errors
+    """
+    # Resolve project root
+    if project_root is None:
+        try:
+            from science_cli.core.project import get_current_project_path
+            project_root = get_current_project_path()
+        except ImportError:
+            pass
+
+    if project_root is None:
+        return {
+            "steps_found": 0,
+            "total_files": 0,
+            "total_matched": 0,
+            "total_inserted": 0,
+            "errors": ["cannot resolve project_root"],
+        }
+
+    proto_dir = project_root / "protocol" / protocol
+    if not proto_dir.is_dir():
+        return {
+            "steps_found": 0,
+            "total_files": 0,
+            "total_matched": 0,
+            "total_inserted": 0,
+            "errors": [f"protocol directory not found: {proto_dir}"],
+        }
+
+    steps_found = 0
+    total_files = 0
+    total_matched = 0
+    total_inserted = 0
+    all_errors: list[str] = []
+
+    for entry in sorted(proto_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        if entry.name.startswith("."):
+            continue
+
+        step_name = entry.name
+        steps_found += 1
+
+        result = populate_from_grammar(
+            conn,
+            protocol=protocol,
+            step=step_name,
+            project_root=project_root,
+        )
+        total_files += result["files_found"]
+        total_matched += result["files_matched"]
+        total_inserted += result["files_inserted"]
+        all_errors.extend(result["errors"])
+
+    # Upsert protocol entry
+    upsert_protocol(conn, name=protocol)
+
+    return {
+        "steps_found": steps_found,
+        "total_files": total_files,
+        "total_matched": total_matched,
+        "total_inserted": total_inserted,
+        "errors": all_errors,
+    }

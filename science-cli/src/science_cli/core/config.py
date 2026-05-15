@@ -340,6 +340,13 @@ def get_file_naming_patterns(project_root: Path | None = None) -> list[dict]:
 
     Returns list of pattern dicts with keys: template, description, regex, fields.
     Falls back to empty list if no naming grammar configured.
+
+    Universal grammar fields (standardized across all projects/techniques/devices):
+        - ``date_code``: Date in DDMMYY or YYYYMMDD format
+        - ``material``: Material/device name (primary field)
+        - ``technique``: Measurement technique code
+        - ``matrix``: Crossbar addressing (rNcN, bN-tN)
+        - ``suffix``: Order/cycle number (zero-padded integer)
     """
     config = get_merged_config(project_root)
     naming = config.get("file_naming", {})
@@ -357,7 +364,7 @@ def get_file_naming_grammar(project_root: Path | None = None) -> dict:
     config = get_merged_config(project_root)
     naming = config.get("file_naming", {})
     return {
-        "separator": naming.get("separator", "_"),
+        "separator": "_",  # HARDCODED — never configurable
         "patterns": naming.get("patterns", []),
     }
 
@@ -396,6 +403,133 @@ def get_device_config_detail(
     return dict(device_cfg)
 
 
+# ── Global device/technique registry accessors ──────────────────────────
+
+
+def get_global_device_config(device_name: str) -> dict | None:
+    """Look up a device config from the global config's ``devices:`` registry.
+
+    Checks:
+        1. Hardcoded default global devices
+        2. Global config (~/.config/science-cli/config.yaml → devices: section)
+
+    Returns dict with: delimiter, decimal, header_lines, encoding, columns
+    or None if not found.
+    """
+    # Check hardcoded defaults first
+    if device_name in _DEFAULT_GLOBAL_DEVICES:
+        return dict(_DEFAULT_GLOBAL_DEVICES[device_name])
+
+    # Check global config
+    global_cfg = load_global_config()
+    devices_section = global_cfg.get("devices", {})
+    cfg = devices_section.get(device_name)
+    if cfg:
+        return dict(cfg)
+
+    return None
+
+
+def list_global_devices() -> list[str]:
+    """List all device names in the global registry.
+
+    Combines hardcoded defaults and global config.
+    """
+    names: set[str] = set(_DEFAULT_GLOBAL_DEVICES.keys())
+    global_cfg = load_global_config()
+    devices_section = global_cfg.get("devices", {})
+    names.update(devices_section.keys())
+    return sorted(names)
+
+
+def get_global_technique_config(technique_name: str) -> dict | None:
+    """Look up a technique config from the global registry.
+
+    Checks:
+        1. Hardcoded default technique configs
+        2. Global config (~/.config/science-cli/config.yaml → techniques: section)
+
+    Returns dict with: patterns, label, grammar_codes, types, default_device
+    or None if not found.
+    """
+    # Check hardcoded defaults
+    if technique_name in _DEFAULT_GLOBAL_TECHNIQUES:
+        return dict(_DEFAULT_GLOBAL_TECHNIQUES[technique_name])
+
+    # Check global config
+    global_cfg = load_global_config()
+    tech_section = global_cfg.get("techniques", {})
+    cfg = tech_section.get(technique_name)
+    if cfg:
+        return dict(cfg)
+
+    return None
+
+
+def list_global_techniques() -> list[str]:
+    """List all technique names in the global registry.
+
+    Combines hardcoded defaults and global config.
+    """
+    names: set[str] = set(_DEFAULT_GLOBAL_TECHNIQUES.keys())
+    names.update(_DEFAULT_TECHNIQUE_PATTERNS.keys())
+    global_cfg = load_global_config()
+    tech_section = global_cfg.get("techniques", {})
+    names.update(tech_section.keys())
+    return sorted(names)
+
+
+# Hardcoded default global devices (the "built-in library")
+_DEFAULT_GLOBAL_DEVICES: dict[str, dict] = {
+    "keithley-2400": {
+        "label": "Keithley 2400 SourceMeter",
+        "delimiter": "\t",
+        "decimal": ".",
+        "header_lines": 23,
+        "encoding": "utf-8",
+        "columns": {
+            "voltage": "Untitled",
+            "current": "Untitled 1",
+            "time": "Untitled 2",
+        },
+    },
+    "keysight-b1500": {
+        "label": "Keysight B1500A Semiconductor Analyzer",
+        "delimiter": ",",
+        "header_lines": 48,
+        "columns": {
+            "voltage": "BV",
+            "current": "BI",
+            "time": "Time",
+        },
+    },
+}
+
+# Hardcoded default global technique configs
+_DEFAULT_GLOBAL_TECHNIQUES: dict[str, dict] = {
+    "iv-sweep": {
+        "label": "IV Sweep",
+        "grammar_codes": ["iv", "IV", "iv-sweep", "iv_dc"],
+        "default_device": "keithley-2400",
+        "types": {
+            "forming": {"label": "Forming", "step_type": "forming"},
+            "set": {"label": "Set", "step_type": "set"},
+            "reset": {"label": "Reset", "step_type": "reset"},
+        },
+    },
+    "iv-breakdown": {
+        "label": "Breakdown",
+        "grammar_codes": ["bd", "breakdown"],
+        "default_device": "keithley-2400",
+    },
+    "iv-leakage": {
+        "label": "Leakage",
+        "grammar_codes": ["leak", "leakage"],
+        "default_device": "keithley-2400",
+    },
+}
+
+
 # ── Config generation (for config init) ────────────────────────────────
 
 def generate_default_config_yaml() -> str:
@@ -410,6 +544,12 @@ def generate_default_config_yaml() -> str:
 #
 # This file is merged with hardcoded defaults.  Per-project
 # sci-config.yaml files override these settings.
+#
+# 4-tier resolution order:
+#   1. Hardcoded defaults (core/config.py)
+#   2. Global config (~/.config/science-cli/config.yaml)  <- THIS FILE
+#   3. Per-project config (<project>/sci-config.yaml)
+#   4. Per-protocol metadata (protocol/<name>/...)
 
 # Root directory for all projects
 projects_root: "{projects_root}"
@@ -421,61 +561,71 @@ theme: publication-acs
 default_dpi: 300
 default_figure_format: pdf
 
-# ── Technique configuration ──────────────────────────────────────────
-# Each technique can define filename patterns, a header marker,
-# and device-specific loading parameters.
+# --- File Naming Grammar ---
+# Defines how filenames are parsed into universal fields.
+# Separator is ALWAYS _ (underscore) -- not configurable.
+#
+# Universal grammar fields (standardized):
+#   - date_code: Date in DDMMYY or YYYYMMDD format
+#   - material: Material/device name (primary field)
+#   - technique: Measurement technique code
+#   - matrix: Crossbar addressing (rNcN, bN-tN)
+#   - suffix: Order/cycle number (zero-padded integer)
+
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}"
+      description: "Standard rNcN convention (rectangular crossbar)"
+      regex: '^(?P<date_code>\\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\\d+))?_(?P<matrix>r\\d+c\\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\\d+))?\\.\\w+$'
+    - id: bN-tN
+      template: "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}"
+      description: "Bottom/top crossbar convention"
+      regex: '^(?P<date_code>\\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\\d+))?_b(?P<bot>\\d+)-t(?P<top>\\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\\d+))?\\.\\w+$'
+
+# --- Device Registry ---
+# Global device configurations shared across all projects.
+# Add a new instrument here once, use it everywhere.
+
+devices:
+  keithley-2400:
+    label: "Keithley 2400 SourceMeter"
+    delimiter: "\\t"
+    decimal: "."
+    header_lines: 23
+    encoding: "utf-8"
+    columns:
+      voltage: "Untitled"
+      current: "Untitled 1"
+      time: "Untitled 2"
+  keysight-b1500:
+    label: "Keysight B1500A Semiconductor Analyzer"
+    delimiter: ","
+    header_lines: 48
+    columns:
+      voltage: "BV"
+      current: "BI"
+      time: "Time"
+
+# --- Technique Registry ---
+# Global technique definitions shared across all projects.
+# Each technique can reference a default device from the devices registry.
 
 techniques:
-  # ── Example: IV Sweep ──────────────────────────────────────────────
-  # iv-sweep:
-  #   patterns: ["*IV*", "*sweep*", "*iv*"]
-  #   header_marker: "Voltage"
-  #   devices:
-  #     keithley-2400:
-  #       delimiter: "\\t"
-  #       decimal: "."
-  #       header_lines: 15
-  #       encoding: "utf-8"
-  #       columns:
-  #         voltage: "SourceV"
-  #         current: "MeasureI"
+  iv-sweep:
+    label: "IV Sweep"
+    grammar_codes: ["iv", "IV", "iv-sweep", "iv_dc"]
+    default_device: keithley-2400
+    types:
+      forming: { label: "Forming", step_type: forming }
+      set: { label: "Set", step_type: set }
+      reset: { label: "Reset", step_type: reset }
 
-  # ── Example: EIS ───────────────────────────────────────────────────
-  # ec-eis:
-  #   patterns: ["*EIS*", "*eis*", "*.mpt"]
-  #   header_marker: "Frequency"
-  #   devices:
-  #     biologic-mpt:
-  #       delimiter: "\\t"
-  #       decimal: ","
-  #       header_lines: 1
-  #       encoding: "latin-1"
-  #       columns:
-  #         frequency: "freq"
-  #         z_real: "Re(Z)"
-  #         z_imag: "-Im(Z)"
-
-  # ── Example: CV ────────────────────────────────────────────────────
-  # ec-cv:
-  #   patterns: ["*CV*", "*cv*"]
-  #   header_marker: "Potential"
-  #   devices:
-  #     biologic-mpt:
-  #       delimiter: "\\t"
-  #       decimal: ","
-  #       header_lines: 1
-  #       encoding: "latin-1"
-  #       columns:
-  #         potential: "Ewe/V"
-  #         current: "I/mA"
-
-# ── Default device per technique ─────────────────────────────────────
+# --- Default device per technique ---
 # When no device is specified, use this device for the technique.
 defaults:
-  # iv-sweep: keithley-2400
-  # ec-eis: biologic-mpt
-  # ec-cv: biologic-mpt
-""".format(projects_root=_DEFAULT_PROJECTS_ROOT)
+  iv-sweep: keithley-2400
+""".replace("{projects_root}", _DEFAULT_PROJECTS_ROOT)
 
 
 def write_technique_config(technique: str, data: dict) -> Path:

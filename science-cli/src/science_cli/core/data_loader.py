@@ -1,9 +1,10 @@
 """Data loading — reads experimental data files into pandas DataFrames.
 
-Supports device-aware loading via the config system:
-    - When 'technique' and 'device' params are given, uses the device config
-      for delimiter, decimal, header_lines, encoding, and column name mapping.
-    - Falls back to auto-detection when no device config is available.
+Supports device-aware loading via the config system (4-tier resolution):
+    1. Per-technique device config (technique → devices → device)
+    2. Global device registry (devices → device) — fallback
+    3. Auto-detection from file extension (no device config available)
+    4. Hardcoded defaults (delimiter, encoding, header_lines)
 """
 
 from pathlib import Path
@@ -54,15 +55,32 @@ def load_data_file(
 
 
 def _resolve_device_config(technique: str, device: str) -> dict | None:
-    """Look up device loading config from the config system."""
+    """Look up device loading config from the config system.
+
+    Resolution order:
+        1. Per-technique device config (technique → devices → device)
+        2. Global device registry (devices → device)
+        3. Hardcoded defaults
+    """
     if not technique or not device:
         return None
     try:
-        from science_cli.core.config import get_device_config
+        from science_cli.core.config import get_device_config, get_global_device_config
         from science_cli.core.project import get_current_project_path
         proj = get_current_project_path()
         project_root = proj if proj else None
-        return get_device_config(technique, device, project_root)
+
+        # Try per-technique device config first
+        cfg = get_device_config(technique, device, project_root)
+        if cfg:
+            return cfg
+
+        # Fall back to global device registry
+        cfg = get_global_device_config(device)
+        if cfg:
+            return cfg
+
+        return None
     except ImportError:
         return None
 

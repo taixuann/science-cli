@@ -11,7 +11,7 @@ feature
 
 ## Status
 - **Created**: 2026-05-13
-- **Status**: **COMPLETED (Sprint 1-7), Sprint 8 Proposed** — Global Config Registry planned
+- **Status**: **COMPLETED (Sprint 1-8)** — Global Config Registry, sync/analyze split, SQLite auto-construction
 - **Branch**: `refactor/2.1.0`
 
 ## Objective
@@ -1367,24 +1367,36 @@ config edit grammar             # Lists + edits file naming patterns (NEW)
 
 ### Progress
 
-- [ ] Sprint 8 plan written
-- [ ] User approved
-- [ ] IMPLEMENT: Universal Grammar Fields — hardcode `_` separator, standardize 5 field names
-- [ ] IMPLEMENT: Add `_load_global_config()` to `core/config.py`
-- [ ] IMPLEMENT: Add `--global` flag to `config edit`
-- [ ] IMPLEMENT: Add `config edit devices` and `config edit grammar`
-- [ ] IMPLEMENT: Update technique resolution chain (global → project → protocol)
-- [ ] IMPLEMENT: SQLite auto-construction — no YAML intermediate required
-- [ ] IMPLEMENT: `memristor sync` as pure filename parsing only
-- [ ] IMPLEMENT: `memristor analyze` — new command for CSV-based computation
-- [ ] IMPLEMENT: `update_file_analysis()` in `db.py` for SQLite analysis updates
-- [ ] IMPLEMENT: Update dashboard to resolve config from global registry
-- [ ] TEST: Global config loaded before project config
-- [ ] TEST: Project config overrides global config correctly
-- [ ] TEST: `config edit --global` writes to correct file
-- [ ] TEST: `memristor sync` populates SQLite metadata (no CSV read)
-- [ ] TEST: `memristor analyze` reads CSVs and updates SQLite analysis columns
-- [ ] TEST: Dashboard resolves technique config globally if not in project
-- [ ] TEST: YAML-free workflow (sync → analyze → dashboard, no devices.yaml needed)
-- [ ] TEST: All existing tests still pass
-- [ ] COMMIT to `refactor/2.1.0`
+- [x] Sprint 8 plan written
+- [x] User approved
+- [x] IMPLEMENT: Universal Grammar Fields — hardcode `_` separator, standardize 5 field names
+- [x] IMPLEMENT: Add `_load_global_config()` to `core/config.py` → `load_global_config()`, `_DEFAULT_GLOBAL_DEVICES`, `_DEFAULT_GLOBAL_TECHNIQUES`
+- [x] IMPLEMENT: Add `--global` flag to `config edit`
+- [x] IMPLEMENT: Add `config edit devices` and `config edit grammar`
+- [x] IMPLEMENT: Update technique resolution chain (4-tier: hardcoded → global → project → protocol)
+- [x] IMPLEMENT: SQLite auto-construction — `populate_from_grammar()`, `populate_protocol_from_step_dirs()`
+- [x] IMPLEMENT: `memristor sync` as pure filename parsing only (no CSV read, no analysis)
+- [x] IMPLEMENT: `memristor analyze` — new command for CSV-based computation (`cmd_analyze()`)
+- [x] IMPLEMENT: `update_file_analysis()` in `db.py` for SQLite analysis updates
+- [x] IMPLEMENT: Update dashboard to resolve config from global registry (SQLite fast path)
+- [x] TEST: Global config loaded before project config
+- [x] TEST: Project config overrides global config correctly
+- [x] TEST: `config edit --global` writes to correct file
+- [x] TEST: `memristor sync` populates SQLite metadata (no CSV read)
+- [x] TEST: `memristor analyze` reads CSVs and updates SQLite analysis columns
+- [x] TEST: Dashboard resolves technique config globally if not in project
+- [x] TEST: YAML-free workflow (sync → analyze → dashboard, no devices.yaml needed)
+- [x] TEST: All existing tests still pass (78/78)
+- [x] COMMIT to `refactor/2.1.0`
+
+**Sprint 8 Results:**
+- `core/config.py`: Added `_DEFAULT_GLOBAL_DEVICES` (keithley-2400, keysight-b1500), `_DEFAULT_GLOBAL_TECHNIQUES` (iv-sweep, iv-breakdown, iv-leakage), `get_global_device_config()`, `list_global_devices()`, `get_global_technique_config()`, `list_global_techniques()`. Hardcoded `_` separator in `get_file_naming_grammar()`. Updated `generate_default_config_yaml()` with file_naming, devices, techniques sections using `.replace()` (not `.format()`) to avoid YAML template conflicts.
+- `cli/commands/config.py`: Added `config edit --global`, `config edit devices`, `config edit grammar`, `config edit techniques --global`, `config devices list`, `config grammar list|edit`.
+- `memristor/db.py`: Schema v2 with universal grammar columns (technique_id, device_id, date_code, material, matrix, row, col, suffix). Added `populate_from_grammar()` — direct filename parsing without YAML. Added `populate_protocol_from_step_dirs()`. Added `update_file_analysis()` with current_compliance and compliance_confidence.
+- `memristor/device_cli.py`: `cmd_sync()` rewritten as pure filename parsing. New `cmd_analyze()` command for CSV-based computation. `devices.yaml` is now optional.
+- `memristor/dashboard.py`: Added `_collect_device_data_from_sqlite()` for reading pre-computed analysis. `generate_dashboard()` tries SQLite first, falls back to CSV.
+- `core/technique.py`: Added `standardize_grammar_fields()` for universal field normalization. Added `_resolve_grammar_from_merged_config()` for 4-tier grammar resolution.
+- `core/data_loader.py`: `_resolve_device_config()` falls back to `get_global_device_config()` if per-technique lookup fails.
+- YAML template fix: `generate_default_config_yaml()` uses `.replace()` instead of `.format()` to prevent `KeyError` on YAML `{date_code}` etc.
+- YAML escape fix: Regex patterns use single-quoted YAML scalars to avoid `\d`/`\w` escape errors.
+- Final test suite: **78/78 passing** (GREEN).
