@@ -1499,7 +1499,7 @@ function buildHeatmapZ(proto, metric) {
       } else {
         htr.push(
           '<b>R'+(r+1)+'C'+(c+1)+'</b><br>' +
-          'ON/OFF: ' + (d.ratio ? d.ratio.toExponential(2) : 'N/A') + '<br>' +
+          'ON/OFF: ' + fmtRatio(d.ratio) + '<br>' +
           'Vset: ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Vreset: ' + (d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Switching: ' + (d.switching ? 'Yes' : 'No') + '<br>' +
@@ -1639,7 +1639,7 @@ function updateCrossDevice(d) {
   document.getElementById('cross-dev-badge').textContent = d.protocol + ' / R'+(d.row+1)+'C'+(d.col+1);
   document.getElementById('cross-cell-info').textContent =
     'Selected: ' + d.protocol + '::R'+(d.row+1)+'C'+(d.col+1) +
-    ' | ON/OFF = ' + (d.ratio != null ? d.ratio.toExponential(2) : 'N/A') +
+    ' | ON/OFF = ' + fmtRatio(d.ratio) +
     ' | Vset = ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A');
 }
 
@@ -2433,6 +2433,14 @@ var plotConfig = {
 //  HEATMAP
 // ══════════════════════════════════════════════════════
 
+var fmtRatio = function(v) {
+  if (v == null) return 'N/A';
+  if (v >= 100) return Math.round(v).toString();
+  if (v >= 10) return v.toFixed(1);
+  if (v >= 1) return v.toFixed(2);
+  return v.toFixed(3);
+};
+
 function getMetricValue(d, metric) {
   if (!d) return null;
   if (d.failed) return null;
@@ -2466,7 +2474,7 @@ function buildHeatmapData(metric) {
       } else {
         ht.push(
           '<b>R'+(r+1)+'C'+(c+1)+'</b><br>' +
-          'ON/OFF: ' + (d.ratio ? d.ratio.toExponential(2) : 'N/A') + '<br>' +
+          'ON/OFF: ' + fmtRatio(d.ratio) + '<br>' +
           'Vset: ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Vreset: ' + (d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Switching: ' + (d.switching ? 'Yes' : 'No') + '<br>' +
@@ -2580,7 +2588,7 @@ function updateSelectedDevice(d) {
       '<div style="font-size:10px;line-height:1.6">'+
         '<div style="font-weight:600;color:var(--accent);margin-bottom:1px">'+rc+' &mdash; '+(d.material||'')+'</div>'+
         '<span>Files: '+(d.n_files||0)+' &nbsp;|&nbsp; </span>'+
-        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
+        '<span>ON/OFF: <b>'+fmtRatio(d.ratio)+'</b> &nbsp;|&nbsp; </span>'+
         '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
         '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
         '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
