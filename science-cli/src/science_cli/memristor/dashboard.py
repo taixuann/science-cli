@@ -2525,8 +2525,8 @@ function drawHeatmap(metric) {
     },
     {
       type: 'scatter',
-      x: selectedCell ? [selectedCell.col + 0.5] : [],
-      y: selectedCell ? [(rows - 1 - selectedCell.row) + 0.5] : [],
+      x: selectedCell ? [selectedCell.col] : [],
+      y: selectedCell ? [(rows - 1 - selectedCell.row)] : [],
       mode: 'markers',
       marker: { color: 'rgba(0,212,255,0)', size: 24, line: { color: '#00d4ff', width: 2.5 } },
       hoverinfo: 'skip', showlegend: false
@@ -2537,7 +2537,7 @@ function drawHeatmap(metric) {
     margin: { t: 22, r: 70, b: 26, l: 30 },
     xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: { text: 'Column', standoff: 12 }, tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0 },
     yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
-    height: Math.max(300, document.getElementById('heatmap-plot').clientHeight || 380)
+    height: 360
   }, plotConfig);
 
   var heatmapEl = document.getElementById('heatmap-plot');
