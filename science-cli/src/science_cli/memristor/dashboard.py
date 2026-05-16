@@ -665,8 +665,8 @@ def _build_html(
           </div>
           <div class="panel-body" style="padding:2px 6px 4px 6px">
             <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
-            <div id="selected-device-info" style="margin-top:2px;padding:3px 6px;background:var(--bg-card2);border-radius:3px;border:1px solid var(--border);font-size:10px;line-height:1.4;min-height:14px">
-              <span style="color:var(--text-dim)">Click a cell to select</span>
+            <div id="selected-device-info" style="margin-top:2px;padding:4px 8px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.5;min-height:20px;color:var(--text-dim)">
+              Click a cell to select
             </div>
           </div>
         </div>
@@ -2723,50 +2723,57 @@ function drawIVPlot(deviceInfo) {
       if (v >= 0) { posV.push(v); posI.push(absI); }
       else { negV.push(v); negI.push(absI); }
     }
-    if (posV.length > 0) {
-      traces.push({
-        x: posV, y: posI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: isSingleSweep ? 1.8 : 1.2 },
-        name: isSingleSweep ? (f.label || ('#'+ (i+1))) : 'IV',
-        showlegend: isSingleSweep,
-        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
-      });
-    }
-    if (negV.length > 0) {
-      traces.push({
-        x: negV, y: negI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: isSingleSweep ? 1.8 : 1.2, dash: 'dash' },
-        showlegend: false,
-        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
-      });
+    if (!isSingleSweep) {
+      // Overlay mode: draw regular traces
+      if (posV.length > 0) {
+        traces.push({
+          x: posV, y: posI, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.2 },
+          name: 'IV', showlegend: false,
+          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+        });
+      }
+      if (negV.length > 0) {
+        traces.push({
+          x: negV, y: negI, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.2, dash: 'dash' },
+          showlegend: false,
+          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+        });
+      }
     }
 
-    // Per-file Vset/Vreset markers — visible in both modes, legend only in single-cycle
-    var showMarkerLegend = isSingleSweep;
-    if (f.v_set != null && f.i_set != null) {
-      var iAbs = Math.abs(f.i_set);
-      if (iAbs > 0) {
-        traces.push({
-          x: [f.v_set], y: [iAbs], type: 'scatter', mode: 'markers+text',
-          marker: { color: '#ef4444', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
-          text: [isSingleSweep ? 'Vset' : ''], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
-          name: 'Vset', showlegend: showMarkerLegend,
-          hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + iAbs.toFixed(3) + ' A<extra></extra>'
-        });
+    // Per-file Vset/Vreset markers — find I at switching voltage from trace data
+    function traceCurrentAt(V, arrV, arrI) {
+      if (V == null || !arrV || !arrI || arrV.length < 2) return null;
+      var idx = 0, minD = Infinity;
+      for (var k = 0; k < arrV.length; k++) {
+        var d = Math.abs(arrV[k] - V);
+        if (d < minD) { minD = d; idx = k; }
       }
+      return Math.abs(arrI[idx]);
     }
-    if (f.v_reset != null && f.i_reset != null) {
-      var rAbs = Math.abs(f.i_reset);
-      if (rAbs > 0) {
-        var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
-        traces.push({
-          x: [rSign], y: [rAbs], type: 'scatter', mode: 'markers+text',
-          marker: { color: '#3b82f6', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
-          text: [isSingleSweep ? 'Vreset' : ''], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
-          name: 'Vreset', showlegend: showMarkerLegend,
-          hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + rAbs.toFixed(3) + ' A<extra></extra>'
-        });
-      }
+    var showMarkerLegend = isSingleSweep;
+    var vsetI = f.i_set != null ? Math.abs(f.i_set) : traceCurrentAt(f.v_set, f.voltage, f.current);
+    if (f.v_set != null && vsetI != null && vsetI > 0) {
+      traces.push({
+        x: [f.v_set], y: [vsetI], type: 'scatter', mode: 'markers+text',
+        marker: { color: '#ef4444', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+        text: [isSingleSweep ? 'Vset' : ''], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
+        name: 'Vset', showlegend: showMarkerLegend,
+        hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + vsetI.toFixed(3) + ' A<extra></extra>'
+      });
+    }
+    var vresetI = f.i_reset != null ? Math.abs(f.i_reset) : traceCurrentAt(f.v_reset, f.voltage, f.current);
+    if (f.v_reset != null && vresetI != null && vresetI > 0) {
+      var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
+      traces.push({
+        x: [rSign], y: [vresetI], type: 'scatter', mode: 'markers+text',
+        marker: { color: '#3b82f6', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+        text: [isSingleSweep ? 'Vreset' : ''], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
+        name: 'Vreset', showlegend: showMarkerLegend,
+        hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + vresetI.toFixed(3) + ' A<extra></extra>'
+      });
     }
     if (isSingleSweep) break;
   }
