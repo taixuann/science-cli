@@ -293,10 +293,10 @@ YAML_EXCLUDE = {"devices.yaml", "devices.yml", "results"}
 MATERIAL_TAG_PREFIX = "material:"
 
 _MATERIAL_BATCH_RE = re.compile(
-    r'^\d{4}_'                        # DDMM date prefix
-    r'([A-Za-z0-9\-]+?)'              # Material name (lazy)
-    r'(?:\((\d+)\))?'                 # Optional batch number in parens
-    r'_b\d+-t\d+_'                    # b#-t# position markers
+    r'^\d{4,6}_'                      # DDMM or DDMMYY date prefix
+    r'([A-Za-z0-9/\-]+?)'            # Material name (lazy, allows /)
+    r'(?:\(([A-Za-z0-9]+)\))?'       # Optional batch (alphanumeric)
+    r'_(?:iv-sweep|b\d+-t\d+)_'      # technique or b#-t# position markers
 )
 
 

@@ -44,7 +44,7 @@ def _collect_device_data(config, results_dir: Path) -> dict:
     from science_cli.memristor.device import extract_material_batch
 
     data_dir = results_dir.parent
-    per_device: dict[tuple[int, int], dict] = {}
+    per_device: dict[tuple, dict] = {}
     all_vset: list[float] = []
     all_vreset: list[float] = []
     all_ratios: list[float] = []
@@ -73,7 +73,7 @@ def _collect_device_data(config, results_dir: Path) -> dict:
         else:
             mat_key = "unknown"
 
-        key = (pt.row, pt.col)
+        key = (pt.row, pt.col, mat_key)
         if key not in per_device:
             per_device[key] = {
                 "row": pt.row,
@@ -196,7 +196,7 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
         else:
             mat_key = material
 
-        key = (row, col)
+        key = (row, col, mat_key)
         if key not in per_device:
             per_device[key] = {
                 "row": row,
@@ -310,26 +310,37 @@ def _build_heatmap_matrix(config, per_device: dict) -> dict:
     rows = config.device.rows
     cols = config.device.cols
 
+    # Collect materials at each cell for the selector
+    cell_materials: dict[tuple[int, int], list[str]] = {}
+    for (r, c, mat), dev in per_device.items():
+        cell_materials.setdefault((r, c), []).append(mat)
+
     matrix = []
     for r in range(rows):
         row_data = []
         for c in range(cols):
-            device = per_device.get((r, c))
-            if device:
-                row_data.append({
-                    "v_set": device["v_set"],
-                    "v_reset": device["v_reset"],
-                    "ratio": device["ratio"],
-                    "switching": device["switching_detected"],
-                    "material": device["material_key"],
-                    "n_files": device["n_files"],
-                    "failed": not device["switching_detected"],
-                })
+            mats = cell_materials.get((r, c))
+            if mats:
+                # Use the first material at this cell
+                first_dev = per_device.get((r, c, mats[0]))
+                if first_dev:
+                    row_data.append({
+                        "v_set": first_dev["v_set"],
+                        "v_reset": first_dev["v_reset"],
+                        "ratio": first_dev["ratio"],
+                        "switching": first_dev["switching_detected"],
+                        "material": first_dev["material_key"],
+                        "n_files": first_dev["n_files"],
+                        "failed": not first_dev["switching_detected"],
+                        "materials": mats,
+                    })
+                else:
+                    row_data.append(None)
             else:
                 row_data.append(None)
         matrix.append(row_data)
 
-    return {"rows": rows, "cols": cols, "matrix": matrix}
+    return {"rows": rows, "cols": cols, "matrix": matrix, "all_materials": sorted(set(m for (r, c, m) in per_device))}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -405,12 +416,12 @@ def generate_dashboard(
     # ── Build per-device dictionary for JS embedding ──
     devices_js = {}
     iv_js = {}
-    for (row, col), device in collection["per_device"].items():
-        cell_id = f"R{row + 1}C{col + 1}"
+    for (row, col, mat_key), device in collection["per_device"].items():
+        cell_id = f"R{row + 1}C{col + 1}_{mat_key}"
         devices_js[cell_id] = {
             "row": row,
             "col": col,
-            "material": device["material_key"],
+            "material": mat_key,
             "v_set": device["v_set"],
             "v_reset": device["v_reset"],
             "ratio": device["ratio"],
@@ -541,19 +552,7 @@ def _build_html(
         </select>
       </div>
       <div style="margin-top:8px">
-        <div class="toggle-row"><span>Log Scale</span><label class="toggle"><input type="checkbox" id="toggle-log" checked><span class="toggle-slider"></span></label></div>
-        <div class="toggle-row"><span>Overlay Mode</span><label class="toggle"><input type="checkbox" id="toggle-overlay" checked><span class="toggle-slider"></span></label></div>
-        <div class="toggle-row"><span>Color by Cycle</span><label class="toggle"><input type="checkbox" id="toggle-colorcycle" checked><span class="toggle-slider"></span></label></div>
         <div class="toggle-row"><span>Highlight Outliers</span><label class="toggle"><input type="checkbox" id="toggle-outliers"><span class="toggle-slider"></span></label></div>
-      </div>
-      <!-- Cycle Navigation -->
-      <div class="filter-group" id="cycle-nav" style="display:none">
-        <div class="filter-label">Sweep Cycle</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-          <button class="cy-btn" id="sweep-prev" style="padding:2px 8px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:4px">&#9664;</button>
-          <select id="sweep-select" style="flex:1;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;border-radius:4px;font-size:11px"></select>
-          <button class="cy-btn" id="sweep-next" style="padding:2px 8px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:4px">&#9654;</button>
-        </div>
       </div>
     </div>
 
@@ -690,6 +689,9 @@ def _build_html(
             <div class="panel-title">Crossbar Heatmap</div>
             <div class="panel-badge" id="heatmap-badge">ON/OFF Ratio</div>
             <div class="panel-spacer"></div>
+            <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer">
+              <input type="checkbox" id="toggle-log" checked style="accent-color:var(--accent)"> Log
+            </label>
             <select class="ctrl-select" id="heatmap-metric">
               <option>ON/OFF Ratio</option>
               <option>Vset (V)</option>
@@ -710,11 +712,22 @@ def _build_html(
             <div class="panel-title">Device Explorer</div>
             <span id="iv-device-badge" class="panel-badge">—</span>
             <div class="panel-spacer"></div>
+            <!-- Overlay toggle + cycle nav -->
+            <div style="display:flex;align-items:center;gap:8px;margin-right:8px">
+              <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer">
+                <input type="checkbox" id="toggle-overlay" checked style="accent-color:var(--accent)"> Overlay
+              </label>
+              <div id="cycle-nav" style="display:none;display:flex;align-items:center;gap:3px">
+                <button id="sweep-prev" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9664;</button>
+                <select id="sweep-select" style="width:60px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:1px 2px;border-radius:3px;font-size:10px"></select>
+                <button id="sweep-next" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9654;</button>
+              </div>
+            </div>
             <div class="tab-bar">
-              <div class="tab active" onclick="switchTab('iv', this)">IV Overlay</div>
-              <div class="tab" onclick="switchTab('params', this)">Extracted Params</div>
-              <div class="tab" onclick="switchTab('evo', this)">Cycle Evo.</div>
-              <div class="tab" onclick="switchTab('raw', this)">Raw Data</div>
+              <div class="tab active" onclick="switchTab('iv', this)">IV</div>
+              <div class="tab" onclick="switchTab('params', this)">Params</div>
+              <div class="tab" onclick="switchTab('evo', this)">Evo</div>
+              <div class="tab" onclick="switchTab('raw', this)">Raw</div>
             </div>
           </div>
           <div class="panel-body" style="padding:0">
@@ -2510,10 +2523,24 @@ function drawHeatmap(metric) {
       var p = eventData.points[0];
       var rIdx = parseInt(p.y) - 1;
       var cIdx = parseInt(p.x) - 1;
-      var cellId = 'R' + (rIdx+1) + 'C' + (cIdx+1);
-      var d = DEVICE_DATA[cellId];
+      // Find device for this cell matching the selected material
+      var mat = document.getElementById('header-material').value;
+      var d = null;
+      if (mat && mat !== 'All') {
+        var key = 'R' + (rIdx+1) + 'C' + (cIdx+1) + '_' + mat;
+        d = DEVICE_DATA[key];
+      }
+      if (!d) {
+        // Fall back to first device at this cell
+        for (var k in DEVICE_DATA) {
+          if (DEVICE_DATA.hasOwnProperty(k) && k.indexOf('R'+(rIdx+1)+'C'+(cIdx+1)) === 0) {
+            d = DEVICE_DATA[k];
+            break;
+          }
+        }
+      }
       if (d) {
-        selectedCellId = cellId;
+        selectedCellId = 'R'+(rIdx+1)+'C'+(cIdx+1)+'_'+(d.material||'');
         selectedCell = d;
         updateSelectedDevice(d);
         drawHeatmap(metricName);
@@ -2592,15 +2619,24 @@ document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(
 });
 
 // ── Overlay toggle: show/hide cycle nav
+// ── Material selector
+function onMaterialChange() {
+  drawHeatmap(document.getElementById('heatmap-metric').value);
+  if (selectedCell) drawIVPlot(selectedCell);
+}
+document.getElementById('header-material').addEventListener('change', onMaterialChange);
+if (document.getElementById('filter-material'))
+  document.getElementById('filter-material').addEventListener('change', onMaterialChange);
+
 document.getElementById('toggle-overlay').addEventListener('change', function() {
   var nav = document.getElementById('cycle-nav');
   if (nav) nav.style.display = this.checked ? 'none' : '';
   if (selectedCell) drawIVPlot(selectedCell);
 });
 
-// ── Color by cycle toggle
-document.getElementById('toggle-colorcycle').addEventListener('change', function() {
-  if (selectedCell) drawIVPlot(selectedCell);
+// ── Log scale for heatmap
+document.getElementById('toggle-log').addEventListener('change', function() {
+  drawHeatmap(document.getElementById('heatmap-metric').value);
 });
 
 // ── Sweep cycle navigation
@@ -2645,7 +2681,6 @@ function drawIVPlot(deviceInfo) {
   }
 
   var overlayMode = document.getElementById('toggle-overlay') ? document.getElementById('toggle-overlay').checked : true;
-  var colorByCycle = document.getElementById('toggle-colorcycle') ? document.getElementById('toggle-colorcycle').checked : true;
   var currentSweepIdx = document.getElementById('sweep-select') ? parseInt(document.getElementById('sweep-select').value) : -1;
   var isSingleSweep = !overlayMode && currentSweepIdx >= 0 && currentSweepIdx < files.length;
   var sweepIdx = isSingleSweep ? currentSweepIdx : -1;
@@ -2667,8 +2702,7 @@ function drawIVPlot(deviceInfo) {
     if (isSingleSweep && i !== sweepIdx) continue;
     var f = files[i];
     // Determine trace color: by cycle index if colorByCycle, else by position
-    var tIdx = isSingleSweep ? currentSweepIdx : i;
-    var color = colorByCycle ? cycleColor(tIdx, files.length) : 'rgba(0,180,220,0.8)';
+    var color = cycleColor(i, files.length);
 
     var posV = [], posI = [], negV = [], negI = [];
     for (var j = 0; j < f.voltage.length; j++) {
@@ -2720,12 +2754,50 @@ function drawIVPlot(deviceInfo) {
     if (isSingleSweep) break;
   }
 
-  // Color bar trace for cycle index when colorByCycle is on
-  if (colorByCycle && files.length > 1 && !isSingleSweep) {
+  // Time-colored segments for single-cycle mode
+  if (isSingleSweep) {
+    var f = files[sweepIdx];
+    if (f.voltage && f.current && f.voltage.length > 2) {
+      var n = f.voltage.length;
+      var groupSize = Math.max(1, Math.floor(n / 30));
+      for (var si = 0; si < n - 1; si += groupSize) {
+        var ei = Math.min(si + groupSize + 1, n);
+        var segV = [], segI = [];
+        for (var j = si; j < ei; j++) {
+          var absI = Math.abs(f.current[j]);
+          if (absI < 1e-14) continue;
+          segV.push(f.voltage[j]);
+          segI.push(absI);
+        }
+        if (segV.length < 2) continue;
+        var t = si / (n - 1);
+        var r = Math.round(20 + 210 * t);
+        var g = Math.round(180 - 140 * t);
+        var b = Math.round(220 - 200 * t);
+        traces.push({
+          x: segV, y: segI, type: 'scatter', mode: 'lines',
+          line: { color: 'rgba(' + r + ',' + g + ',' + b + ',0.9)', width: 1.8 },
+          showlegend: false, hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+        });
+      }
+      // Color bar
+      traces.push({
+        x: [null], y: [null], type: 'scatter', mode: 'markers',
+        marker: {
+          colorscale: [[0, 'rgb(20,180,220)'], [1, 'rgb(230,40,20)']],
+          cmin: 0, cmax: 1,
+          colorbar: { title: { text: 'Time →', font: { size: 9 } }, tickfont: { size: 8 }, len: 0.3, thickness: 8 },
+          size: 0
+        },
+        showlegend: false, hoverinfo: 'none'
+      });
+    }
+  } else if (files.length > 1) {
+    // Color bar for overlay mode
     traces.push({
       x: [null], y: [null], type: 'scatter', mode: 'markers',
       marker: {
-        colorscale: [[0, 'rgb(30,180,220]'], [1, 'rgb(230,60,40)']],
+        colorscale: [[0, 'rgb(30,180,220)'], [1, 'rgb(230,60,40)']],
         cmin: 1, cmax: files.length,
         colorbar: { title: { text: 'Cycle', font: { size: 9 } }, tickfont: { size: 8 }, len: 0.4, thickness: 8 },
         size: 0
