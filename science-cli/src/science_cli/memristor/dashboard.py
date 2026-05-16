@@ -2700,7 +2700,7 @@ function setIVScale(mode) {
   document.querySelectorAll('.scale-btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.scale === mode);
   });
-  if (currentDevice) drawIVPlot(currentDevice);
+  if (selectedCell) drawIVPlot(selectedCell);
 }
 
 function drawIVPlot(deviceInfo) {
