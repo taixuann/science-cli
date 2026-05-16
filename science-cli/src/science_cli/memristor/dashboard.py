@@ -3018,6 +3018,10 @@ function init() {
     switchMaterial(mats[0]).then(function() {
       drawHeatmap(document.getElementById('heatmap-metric').value);
       drawHistograms();
+    }).catch(function(e) {
+      console.error('Failed to load data:', e);
+      var info = document.getElementById('selected-device-info');
+      if (info) info.innerHTML = '<span style="color:var(--red)">Error loading data: ' + e + '</span>';
     });
   } else {
     drawHeatmap();
@@ -3044,6 +3048,5 @@ window.addEventListener('resize', function() {
     if (el && el.layout) Plotly.Plots.resize(el);
   });
   if (selectedCell) drawIVPlot(selectedCell);
-});
 });
 """
