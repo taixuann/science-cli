@@ -188,6 +188,17 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
         ratio = fentry.get("on_off_ratio")
         switching = v_set is not None or v_reset is not None
 
+        # Compute i_set/i_reset on-the-fly from voltage/current
+        i_set = fentry.get("i_set")
+        i_reset = fentry.get("i_reset")
+        if i_set is None and v_set is not None and voltage is not None:
+            idx = int(np.argmin(np.abs(voltage - v_set))) if len(voltage) else -1
+            i_set = float(current[idx]) if idx >= 0 else None
+        if i_reset is None and v_reset is not None and voltage is not None:
+            r_abs = abs(v_reset)
+            idx = int(np.argmin(np.abs(np.abs(voltage) - r_abs))) if len(voltage) else -1
+            i_reset = float(current[idx]) if idx >= 0 else None
+
         # Extract material+batch
         mb = extract_material_batch(filename)
         if mb:
@@ -215,6 +226,8 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
             "current": current.tolist(),
             "v_set": v_set,
             "v_reset": v_reset,
+            "i_set": i_set,
+            "i_reset": i_reset,
             "ratio": ratio,
         })
         total_iv_files += 1
@@ -652,7 +665,7 @@ def _build_html(
           </div>
           <div class="panel-body" style="padding-top:6px">
             <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
-            <div id="selected-device-info" style="margin-top:4px;padding:8px 10px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.8;min-height:24px">
+            <div id="selected-device-info" style="margin-top:3px;padding:4px 8px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.5;min-height:18px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
           </div>
