@@ -2533,7 +2533,7 @@ function drawHeatmap(metric) {
     paper_bgcolor: PAPER_BG, plot_bgcolor: PLOT_BG,
     font: { color: FONT_COLOR, family: 'JetBrains Mono, monospace', size: 10 },
     margin: { t: 22, r: 70, b: 26, l: 30 },
-    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Column', tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0, tickmode: 'array', tickvals: labels.slice(0, cols), ticktext: labels.slice(0, cols) },
+    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: { text: 'Column', standoff: 12 }, tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0 },
     yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
     height: 300
   }, plotConfig);
@@ -2588,8 +2588,8 @@ function updateSelectedDevice(d) {
       '</div>';
   }
   document.getElementById('iv-device-badge').textContent = rc;
-  drawIVPlot(d);
-  // Populate sweep cycle selector
+
+  // Populate sweep cycle selector FIRST, then draw IV plot
   var cellId = rc + '_' + (d.material || '');
   var files = IV_RAW_DATA[cellId] || [];
   var sel = document.getElementById('sweep-select');
@@ -2615,6 +2615,7 @@ function updateSelectedDevice(d) {
   } else if (sel) {
     nav.style.display = 'none';
   }
+  drawIVPlot(d);
 }
 
 // ── Heatmap metric selector
