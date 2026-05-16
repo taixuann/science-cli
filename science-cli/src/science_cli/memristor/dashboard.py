@@ -663,15 +663,18 @@ def _build_html(
             <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer">
               <input type="checkbox" id="toggle-log" checked style="accent-color:var(--accent)"> Log
             </label>
-            <select class="ctrl-select" id="heatmap-metric">
-              <option>ON/OFF Ratio</option>
-              <option>Vset (V)</option>
-              <option>Vreset (V)</option>
-              <option>Yield (%)</option>
-            </select>
           </div>
           <div class="panel-body" style="padding-top:6px">
             <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
+            <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
+              <select id="heatmap-metric" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:2px 6px;border-radius:4px;font-size:10px">
+                <option>ON/OFF Ratio</option>
+                <option>Vset (V)</option>
+                <option>Vreset (V)</option>
+                <option>Yield (%)</option>
+              </select>
+              <span style="font-size:9px;color:var(--text-dim)">Color map</span>
+            </div>
             <div id="selected-device-info" style="margin-top:4px;padding:8px 10px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.8;min-height:24px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
@@ -2525,8 +2528,8 @@ function drawHeatmap(metric) {
     },
     {
       type: 'scatter',
-      x: selectedCell ? [selectedCell.col] : [],
-      y: selectedCell ? [(rows - 1 - selectedCell.row)] : [],
+      x: selectedCell ? [selectedCell.col + 1] : [],
+      y: selectedCell ? [rows - selectedCell.row] : [],
       mode: 'markers',
       marker: { color: 'rgba(0,212,255,0)', size: 24, line: { color: '#00d4ff', width: 2.5 } },
       hoverinfo: 'skip', showlegend: false
@@ -2537,7 +2540,7 @@ function drawHeatmap(metric) {
     margin: { t: 22, r: 70, b: 26, l: 30 },
     xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: { text: 'Column', standoff: 12 }, tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0 },
     yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
-    height: 360
+    height: 400
   }, plotConfig);
 
   var heatmapEl = document.getElementById('heatmap-plot');
@@ -2726,13 +2729,12 @@ function drawIVPlot(deviceInfo) {
       if (v >= 0) { posV.push(v); posI.push(absI); }
       else { negV.push(v); negI.push(absI); }
     }
-    var traceName = f.label || ('#'+ (i+1));
-    fileName = traceName;
     if (posV.length > 0) {
       traces.push({
         x: posV, y: posI, type: 'scatter', mode: 'lines',
         line: { color: color, width: isSingleSweep ? 1.8 : 1.2 },
-        name: traceName, legendgroup: 'iv',
+        name: isSingleSweep ? (f.label || ('#'+ (i+1))) : 'IV',
+        showlegend: isSingleSweep,
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
       });
     }
@@ -2740,18 +2742,19 @@ function drawIVPlot(deviceInfo) {
       traces.push({
         x: negV, y: negI, type: 'scatter', mode: 'lines',
         line: { color: color, width: isSingleSweep ? 1.8 : 1.2, dash: 'dash' },
-        showlegend: false, legendgroup: 'iv',
+        showlegend: false,
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
       });
     }
 
-    // Per-file Vset/Vreset markers
+    // Per-file Vset/Vreset markers (only show legend in single-cycle mode)
+    var showMarkerLegend = isSingleSweep;
     if (f.v_set != null && f.i_set != null) {
       traces.push({
         x: [f.v_set], y: [Math.abs(f.i_set)], type: 'scatter', mode: 'markers+text',
         marker: { color: '#ef4444', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
         text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
-        name: 'Vset', showlegend: traces.length === 0,
+        name: 'Vset', showlegend: showMarkerLegend,
         hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_set).toFixed(3) + ' A<extra></extra>'
       });
     }
@@ -2761,7 +2764,7 @@ function drawIVPlot(deviceInfo) {
         x: [rSign], y: [Math.abs(f.i_reset)], type: 'scatter', mode: 'markers+text',
         marker: { color: '#3b82f6', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
         text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
-        name: 'Vreset', showlegend: traces.length === 0,
+        name: 'Vreset', showlegend: showMarkerLegend,
         hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_reset).toFixed(3) + ' A<extra></extra>'
       });
     }
@@ -2822,7 +2825,7 @@ function drawIVPlot(deviceInfo) {
 
   Plotly.react('iv-plot', traces, {
     ...baseLayout,
-    height: 320,
+    height: 400,
     margin: { t: 10, r: 140, b: 40, l: 60 },
     xaxis: {
       ...baseLayout.xaxis, title: { text: 'Voltage (V)', font: { size: 10 } },
