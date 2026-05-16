@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Data file suffixes (same as device.py DATA_SUFFIXES)
 DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS files (
     -- Computed analysis values (populated by analyze)
     v_set REAL,
     v_reset REAL,
+    i_set REAL,
+    i_reset REAL,
     on_off_ratio REAL,
     current_compliance REAL,
     compliance_confidence TEXT,
@@ -153,6 +155,14 @@ def _run_migrations(conn: sqlite3.Connection, from_version: int, to_version: int
         conn.execute("DROP TABLE IF EXISTS files")
         conn.execute(CREATE_FILES)
 
+    if from_version < 3 <= to_version:
+        # v2 → v3: add i_set and i_reset columns for precise marker plotting
+        for col in ("i_set", "i_reset"):
+            try:
+                conn.execute(f"ALTER TABLE files ADD COLUMN {col} REAL")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
 
 # ── CRUD helpers ───────────────────────────────────────────────────────
 
@@ -172,6 +182,8 @@ def insert_file(
     suffix: Optional[int] = None,
     v_set: Optional[float] = None,
     v_reset: Optional[float] = None,
+    i_set: Optional[float] = None,
+    i_reset: Optional[float] = None,
     on_off_ratio: Optional[float] = None,
     current_compliance: Optional[float] = None,
     compliance_confidence: Optional[str] = None,
@@ -185,15 +197,15 @@ def insert_file(
             protocol, step, filename, technique_id, device_id,
             date_code, material, matrix,
             row, col, suffix,
-            v_set, v_reset, on_off_ratio,
+            v_set, v_reset, i_set, i_reset, on_off_ratio,
             current_compliance, compliance_confidence,
             parse_error, file_size, mtime
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             protocol, step, filename, technique_id, device_id,
             date_code, material, matrix,
             row, col, suffix,
-            v_set, v_reset, on_off_ratio,
+            v_set, v_reset, i_set, i_reset, on_off_ratio,
             current_compliance, compliance_confidence,
             parse_error, file_size, mtime,
         ),
@@ -296,22 +308,26 @@ def update_file_analysis(
     filename: str,
     v_set: Optional[float] = None,
     v_reset: Optional[float] = None,
+    i_set: Optional[float] = None,
+    i_reset: Optional[float] = None,
     on_off_ratio: Optional[float] = None,
     current_compliance: Optional[float] = None,
     compliance_confidence: Optional[str] = None,
 ) -> None:
     """Update analysis results for a file row.
 
-    Updates Vset, Vreset, on/off ratio, current compliance, and
+    Updates Vset, Vreset, switching currents, on/off ratio, current compliance, and
     compliance confidence for the matching file.
     """
     conn.execute(
         """UPDATE files SET
-            v_set = ?, v_reset = ?, on_off_ratio = ?,
+            v_set = ?, v_reset = ?, i_set = ?, i_reset = ?,
+            on_off_ratio = ?,
             current_compliance = ?, compliance_confidence = ?
            WHERE protocol = ? AND step = ? AND filename = ?""",
         (
-            v_set, v_reset, on_off_ratio,
+            v_set, v_reset, i_set, i_reset,
+            on_off_ratio,
             current_compliance, compliance_confidence,
             protocol, step, filename,
         ),

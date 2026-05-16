@@ -112,6 +112,16 @@ def _weibull_voltage_fit(voltages: np.ndarray, label: str) -> dict:
         }
 
 
+def _current_at_voltage(v_target, voltage, current):
+    """Return the current at the point closest to v_target."""
+    if v_target is None:
+        return None
+    voltage = np.asarray(voltage, dtype=float)
+    current = np.asarray(current, dtype=float)
+    idx = int(np.argmin(np.abs(voltage - v_target)))
+    return float(current[idx])
+
+
 def extract_iv_parameters(voltage, current, v_read=0.1) -> dict:
     """Extract IV parameters: Vset, Vreset, ON/OFF ratio.
 
@@ -124,6 +134,8 @@ def extract_iv_parameters(voltage, current, v_read=0.1) -> dict:
     return {
         "v_set": v_set,
         "v_reset": v_reset,
+        "i_set": _current_at_voltage(v_set, voltage, current),
+        "i_reset": _current_at_voltage(v_reset, voltage, current),
         "on_off_ratio": ratio_data.get("ratio"),
         "v_read": v_read,
         "i_on": ratio_data.get("i_on"),

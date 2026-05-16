@@ -1137,6 +1137,8 @@ def cmd_analyze(args: argparse.Namespace) -> None:
                 filename=filename,
                 v_set=params.get("v_set"),
                 v_reset=params.get("v_reset"),
+                i_set=params.get("i_set"),
+                i_reset=params.get("i_reset"),
                 on_off_ratio=params.get("on_off_ratio"),
                 current_compliance=params.get("compliance"),
                 compliance_confidence="high" if params.get("switching_detected") else "low",

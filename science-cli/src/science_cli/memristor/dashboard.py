@@ -92,6 +92,8 @@ def _collect_device_data(config, results_dir: Path) -> dict:
             "current": current.tolist(),
             "v_set": params["v_set"],
             "v_reset": params["v_reset"],
+            "i_set": params.get("i_set"),
+            "i_reset": params.get("i_reset"),
             "ratio": params["on_off_ratio"],
         })
         total_iv_files += 1
@@ -419,6 +421,10 @@ def generate_dashboard(
             {
                 "voltage": f["voltage"],
                 "current": f["current"],
+                "v_set": f["v_set"],
+                "v_reset": f["v_reset"],
+                "i_set": f.get("i_set"),
+                "i_reset": f.get("i_reset"),
                 "label": f"#{i + 1:02d}",
             }
             for i, f in enumerate(device["files"])
@@ -499,27 +505,7 @@ def _build_html(
 
     <!-- Navigation -->
     <div class="sb-section">
-      <div class="sb-section-title">Navigation</div>
-      <div class="nav-item active">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        Overview
-      </div>
-      <div class="nav-item">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        Device Explorer
-      </div>
-      <div class="nav-item">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Statistics
-      </div>
-      <div class="nav-item">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-        Batch Analysis
-      </div>
-      <div class="nav-item">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
-        Settings
-      </div>
+      <div class="sb-section-title">Overview</div>
     </div>
 
     <!-- Filters -->
@@ -546,14 +532,6 @@ def _build_html(
         <input type="range" id="cycle-range" min="1" max="200" value="200" oninput="document.getElementById('cycle-val').textContent=this.value">
       </div>
       <div class="filter-group">
-        <div class="filter-label">Sweep Direction</div>
-        <select class="filter-select">
-          <option>All</option>
-          <option>Forward</option>
-          <option>Reverse</option>
-        </select>
-      </div>
-      <div class="filter-group">
         <div class="filter-label">Compliance (A)</div>
         <select class="filter-select">
           <option>All</option>
@@ -564,8 +542,16 @@ def _build_html(
       </div>
       <div style="margin-top:8px">
         <div class="toggle-row"><span>Log Scale</span><label class="toggle"><input type="checkbox" id="toggle-log" checked><span class="toggle-slider"></span></label></div>
-        <div class="toggle-row"><span>Overlay Mode</span><label class="toggle"><input type="checkbox" id="toggle-overlay" checked><span class="toggle-slider"></span></label></div>
         <div class="toggle-row"><span>Highlight Outliers</span><label class="toggle"><input type="checkbox" id="toggle-outliers"><span class="toggle-slider"></span></label></div>
+      </div>
+      <!-- Cycle Navigation -->
+      <div class="filter-group" id="cycle-nav" style="display:none">
+        <div class="filter-label">Sweep Cycle</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+          <button class="cy-btn" id="sweep-prev" style="padding:2px 8px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:4px">&#9664;</button>
+          <select id="sweep-select" style="flex:1;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:2px 4px;border-radius:4px;font-size:11px"></select>
+          <button class="cy-btn" id="sweep-next" style="padding:2px 8px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:4px">&#9654;</button>
+        </div>
       </div>
     </div>
 
@@ -2546,6 +2532,26 @@ function updateSelectedDevice(d) {
     'Selected: R'+(d.row+1)+'C'+(d.col+1)+' · ON/OFF = '+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+
     ' · Vset = '+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A');
   drawIVPlot(d);
+  // Populate sweep cycle selector
+  var cellId = 'R'+(d.row+1)+'C'+(d.col+1);
+  var files = IV_RAW_DATA[cellId] || [];
+  var sel = document.getElementById('sweep-select');
+  var nav = document.getElementById('cycle-nav');
+  if (files.length > 1 && sel) {
+    nav.style.display = '';
+    sel.innerHTML = '';
+    for (var si = 0; si < files.length; si++) {
+      var opt = document.createElement('option');
+      opt.value = si;
+      opt.textContent = '#' + (si+1);
+      if (files[si].label && files[si].label !== '#'+(si+1))
+        opt.textContent = files[si].label;
+      sel.appendChild(opt);
+    }
+    sel.value = '-1'; // overlay all
+  } else if (sel) {
+    nav.style.display = 'none';
+  }
 }
 
 // ── Heatmap metric selector
@@ -2570,6 +2576,27 @@ document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(
     document.getElementById('heatmap-metric').value = metric;
     drawHeatmap(metric);
   });
+});
+
+// ── Sweep cycle navigation
+document.getElementById('sweep-select').addEventListener('change', function() {
+  if (selectedCell) drawIVPlot(selectedCell);
+});
+document.getElementById('sweep-prev').addEventListener('click', function() {
+  var sel = document.getElementById('sweep-select');
+  var idx = parseInt(sel.value);
+  if (isNaN(idx) || idx < 0) idx = sel.options.length - 1;
+  else idx = Math.max(0, idx - 1);
+  sel.value = idx;
+  if (selectedCell) drawIVPlot(selectedCell);
+});
+document.getElementById('sweep-next').addEventListener('click', function() {
+  var sel = document.getElementById('sweep-select');
+  var idx = parseInt(sel.value);
+  if (isNaN(idx) || idx < 0) idx = 0;
+  else idx = Math.min(sel.options.length - 1, idx + 1);
+  sel.value = idx;
+  if (selectedCell) drawIVPlot(selectedCell);
 });
 
 // ══════════════════════════════════════════════════════
@@ -2604,10 +2631,14 @@ function drawIVPlot(deviceInfo) {
     'rgba(140,200,160,0.7)',
   ];
 
+  var currentSweepIdx = document.getElementById('sweep-select') ? parseInt(document.getElementById('sweep-select').value) : -1;
+  var isSingleSweep = currentSweepIdx >= 0 && currentSweepIdx < files.length;
+  var sweepIdx = isSingleSweep ? currentSweepIdx : -1;
+
   for (var i = 0; i < files.length; i++) {
+    if (isSingleSweep && i !== sweepIdx) continue;
     var f = files[i];
     var color = colors[i % colors.length];
-    // Separate positive and negative voltage for log scale
     var posV = [], posI = [], negV = [], negI = [];
     for (var j = 0; j < f.voltage.length; j++) {
       var v = f.voltage[j];
@@ -2619,7 +2650,7 @@ function drawIVPlot(deviceInfo) {
     if (posV.length > 0) {
       traces.push({
         x: posV, y: posI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: 1.0 },
+        line: { color: color, width: isSingleSweep ? 1.8 : 1.0, shape: 'spline' },
         name: f.label || ('#'+ (i+1)),
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
       });
@@ -2627,33 +2658,34 @@ function drawIVPlot(deviceInfo) {
     if (negV.length > 0) {
       traces.push({
         x: negV, y: negI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: 1.0, dash: 'dash' },
+        line: { color: color, width: isSingleSweep ? 1.8 : 1.0, dash: 'dash' },
         showlegend: false,
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
       });
     }
-  }
 
-  // Vset / Vreset markers
-  if (vset != null) {
-    traces.push({
-      x: [vset], y: [1e-3], type: 'scatter', mode: 'markers+text',
-      marker: { color: '#ef4444', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
-      text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444' },
-      name: 'Vset', showlegend: true,
-      hovertemplate: 'Vset = ' + vset.toFixed(3) + ' V<extra></extra>'
-    });
-  }
-  if (vreset != null) {
-    var vresetAbs = Math.abs(vreset);
-    var vresetSign = vreset < 0 ? vreset : -vreset;
-    traces.push({
-      x: [vresetSign], y: [1e-3], type: 'scatter', mode: 'markers+text',
-      marker: { color: '#3b82f6', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
-      text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6' },
-      name: 'Vreset', showlegend: true,
-      hovertemplate: 'Vreset = ' + vreset.toFixed(3) + ' V<extra></extra>'
-    });
+    // Per-file Vset/Vreset markers at actual switching current
+    if (f.v_set != null && f.i_set != null) {
+      var iAbs = Math.abs(f.i_set);
+      traces.push({
+        x: [f.v_set], y: [iAbs], type: 'scatter', mode: 'markers+text',
+        marker: { color: '#ef4444', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+        text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
+        name: 'Vset', showlegend: i === 0,
+        hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + iAbs.toFixed(3) + ' A<extra></extra>'
+      });
+    }
+    if (f.v_reset != null && f.i_reset != null) {
+      var rAbs = Math.abs(f.i_reset);
+      var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
+      traces.push({
+        x: [rSign], y: [rAbs], type: 'scatter', mode: 'markers+text',
+        marker: { color: '#3b82f6', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+        text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
+        name: 'Vreset', showlegend: i === 0,
+        hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + rAbs.toFixed(3) + ' A<extra></extra>'
+      });
+    }
   }
 
   Plotly.react('iv-plot', traces, {
