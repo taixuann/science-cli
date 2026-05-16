@@ -699,10 +699,11 @@ def _build_html(
               <option>Yield (%)</option>
             </select>
           </div>
-          <div class="panel-body" style="padding-top:8px">
-            <div id="heatmap-plot" style="height:300px"></div>
-            <div class="hint-text" style="margin-top:4px">Click any cell to explore device details</div>
-            <div class="selected-cell-info" id="selected-cell-label" style="margin-top:2px">Selected: —</div>
+          <div class="panel-body" style="padding-top:6px">
+            <div id="heatmap-plot" style="height:300px;width:100%"></div>
+            <div id="selected-device-info" style="display:flex;gap:8px;margin-top:4px;padding:4px 6px;background:var(--bg-card);border-radius:4px;border:1px solid var(--border);font-size:10px;min-height:24px;align-items:center">
+              <span style="color:var(--text-dim)">Click a cell to select</span>
+            </div>
           </div>
         </div>
 
@@ -2486,6 +2487,15 @@ function drawHeatmap(metric) {
 
   var selX = selectedCell ? [selectedCell.col + 0.5] : [];
   var selY = selectedCell ? [selectedCell.row + 0.5] : [];
+  // Build opacity mask: dim unselected cells
+  var opacityMask = [];
+  if (selectedCell) {
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        opacityMask.push((r === selectedCell.row && c === selectedCell.col) ? 1.0 : 0.25);
+      }
+    }
+  }
 
   Plotly.react('heatmap-plot', [
     {
@@ -2499,12 +2509,13 @@ function drawHeatmap(metric) {
         bgcolor: 'rgba(0,0,0,0)',
         title: { text: metricName === 'ON/OFF Ratio' ? 'log10' : '', font: { size: 9, color: '#8ba3c7' }, side: 'right' }
       },
+      opacity: opacityMask.length ? opacityMask : undefined,
       zsmooth: false,
       xgap: 1.5, ygap: 1.5
     },
     {
       type: 'scatter', x: selX, y: selY, mode: 'markers',
-      marker: { color: 'rgba(0,212,255,0)', size: 20, line: { color: '#00d4ff', width: 2 } },
+      marker: { color: 'rgba(0,212,255,0)', size: 24, line: { color: '#00d4ff', width: 2.5 } },
       hoverinfo: 'skip', showlegend: false
     }
   ], {
@@ -2550,23 +2561,29 @@ function drawHeatmap(metric) {
 }
 
 function updateSelectedDevice(d) {
-  document.getElementById('si-id').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
-  document.getElementById('si-rc').textContent = (d.row+1)+' / '+(d.col+1);
-  document.getElementById('si-mat').textContent = d.material || 'unknown';
-  document.getElementById('si-files').textContent = d.n_files || 0;
-  document.getElementById('si-vset').textContent = d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A';
-  document.getElementById('si-vreset').textContent = d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A';
-  document.getElementById('si-ratio').textContent = d.ratio != null ? d.ratio.toExponential(2) : 'N/A';
-  document.getElementById('si-sw').textContent = d.switching ? 'Yes' : 'No';
-  document.getElementById('iv-device-badge').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
-  if (document.getElementById('cycle-device-badge'))
-    document.getElementById('cycle-device-badge').textContent = 'R'+(d.row+1)+'C'+(d.col+1);
-  document.getElementById('selected-cell-label').textContent =
-    'Selected: R'+(d.row+1)+'C'+(d.col+1)+' · ON/OFF = '+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+
-    ' · Vset = '+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A');
+  var rc = 'R'+(d.row+1)+'C'+(d.col+1);
+  // Update info panel under heatmap
+  var infoDiv = document.getElementById('selected-device-info');
+  if (infoDiv) {
+    infoDiv.innerHTML =
+      '<span style="font-weight:600;color:var(--accent)">'+rc+'</span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>'+ (d.material||'unknown') +'</span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>'+ (d.n_files||0)+' files</span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+      '<span style="color:var(--text-dim)">|</span>'+
+      '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>';
+  }
+  document.getElementById('iv-device-badge').textContent = rc;
   drawIVPlot(d);
   // Populate sweep cycle selector
-  var cellId = 'R'+(d.row+1)+'C'+(d.col+1);
+  var cellId = rc + '_' + (d.material || '');
   var files = IV_RAW_DATA[cellId] || [];
   var sel = document.getElementById('sweep-select');
   var nav = document.getElementById('cycle-nav');
