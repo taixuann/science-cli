@@ -413,12 +413,17 @@ def generate_dashboard(
     histograms = _build_histogram_data(collection)
     heatmap = _build_heatmap_matrix(config, collection["per_device"])
 
-    # ── Build per-device dictionary for JS embedding ──
-    devices_js = {}
-    iv_js = {}
+    # ── Build per-device dictionary, grouped by material ──
+    all_materials: set[str] = set()
+    per_mat_devices: dict[str, dict] = {}
+    per_mat_iv: dict[str, dict] = {}
     for (row, col, mat_key), device in collection["per_device"].items():
-        cell_id = f"R{row + 1}C{col + 1}_{mat_key}"
-        devices_js[cell_id] = {
+        all_materials.add(mat_key)
+        if mat_key not in per_mat_devices:
+            per_mat_devices[mat_key] = {}
+            per_mat_iv[mat_key] = {}
+        cell_id = f"R{row + 1}C{col + 1}"
+        per_mat_devices[mat_key][cell_id] = {
             "row": row,
             "col": col,
             "material": mat_key,
@@ -428,7 +433,7 @@ def generate_dashboard(
             "switching": device["switching_detected"],
             "n_files": device["n_files"],
         }
-        iv_js[cell_id] = [
+        per_mat_iv[mat_key][cell_id] = [
             {
                 "voltage": f["voltage"],
                 "current": f["current"],
@@ -441,7 +446,16 @@ def generate_dashboard(
             for i, f in enumerate(device["files"])
         ]
 
-    # ── Build HTML ──
+    # Write per-material JS data files
+    results_dir = Path(output_path).parent
+    all_mat_keys = sorted(all_materials)
+    for mat_key in all_mat_keys:
+        data_js = f"window._MAT_DATA=window._MAT_DATA||{{}};window._MAT_DATA[{json.dumps(mat_key)}]={{devices:{json.dumps(per_mat_devices[mat_key], separators=(',',':'))},iv:{json.dumps(per_mat_iv[mat_key], separators=(',',':'))}}};"
+        data_path = results_dir / f"data_{mat_key.replace('(','').replace(')','').replace('-','_')}.js"
+        data_path.write_text(data_js, encoding="utf-8")
+        logger.info(f"Data chunk written: {data_path}")
+
+    # ── Build HTML (main shell only — data loaded dynamically) ──
     device_label = config.device.label or config.device.id or "Memristor Device"
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -453,8 +467,7 @@ def generate_dashboard(
         aggregate=aggregate,
         heatmap=heatmap,
         histograms=histograms,
-        devices_js=devices_js,
-        iv_js=iv_js,
+        mat_keys=all_mat_keys,
         date_str=date_str,
     )
 
@@ -477,8 +490,7 @@ def _build_html(
     aggregate: dict,
     heatmap: dict,
     histograms: dict,
-    devices_js: dict,
-    iv_js: dict,
+    mat_keys: list[str],
     date_str: str,
 ) -> str:
     """Assemble the full self-contained HTML document."""
@@ -839,12 +851,6 @@ def _build_html(
   </div><!-- /main -->
 </div><!-- /app -->
 
-<script id="iv-data" type="application/json">
-{json.dumps(devices_js, separators=(",", ":"))}
-</script>
-<script id="iv-raw-data" type="application/json">
-{json.dumps(iv_js, separators=(",", ":"))}
-</script>
 <script id="heatmap-data" type="application/json">
 {json.dumps(heatmap, separators=(",", ":"))}
 </script>
@@ -856,6 +862,25 @@ def _build_html(
 </script>
 <script>
 {_JS}
+</script>
+<script>
+(function(){{
+var mats = {json.dumps(mat_keys, separators=(",", ":"))};
+window._MAT_KEYS = mats;
+window._MAT_DATA = {{}};
+var loaded = {{}};
+window._loadMatData = function(mat) {{
+  if (loaded[mat]) return Promise.resolve();
+  return new Promise(function(resolve, reject) {{
+    var key = mat.replace(/\\(/g,'').replace(/\\)/g,'').replace(/-/g,'_');
+    var s = document.createElement('script');
+    s.src = 'data_' + key + '.js';
+    s.onload = function() {{ loaded[mat] = true; resolve(); }};
+    s.onerror = function() {{ reject('Failed to load data for ' + mat); }};
+    document.head.appendChild(s);
+  }});
+}};
+}})();
 </script>
 
 </body>
@@ -2385,21 +2410,40 @@ _JS = r"""
 //  DATA LOADING
 // ══════════════════════════════════════════════════════
 
-var DEVICE_DATA = JSON.parse(document.getElementById('iv-data').textContent);
-var IV_RAW_DATA = JSON.parse(document.getElementById('iv-raw-data').textContent);
+var DEVICE_DATA = {};
+var IV_RAW_DATA = {};
 var HEATMAP_META = JSON.parse(document.getElementById('heatmap-data').textContent);
 var HISTOGRAM_META = JSON.parse(document.getElementById('histogram-data').textContent);
 var AGGREGATE = JSON.parse(document.getElementById('aggregate-data').textContent);
+var CURRENT_MATERIAL = '';
 
-// Default selected cell — pick the first available device
 var selectedCellId = null;
 var selectedCell = null;
-for (var k in DEVICE_DATA) {
-  if (DEVICE_DATA.hasOwnProperty(k)) {
-    selectedCellId = k;
-    selectedCell = DEVICE_DATA[k];
-    break;
-  }
+
+function switchMaterial(mat) {
+  CURRENT_MATERIAL = mat;
+  return window._loadMatData(mat).then(function() {
+    var md = window._MAT_DATA[mat];
+    DEVICE_DATA = md.devices || {};
+    IV_RAW_DATA = md.iv || {};
+    // Select first device
+    selectedCellId = null;
+    selectedCell = null;
+    for (var k in DEVICE_DATA) {
+      if (DEVICE_DATA.hasOwnProperty(k)) {
+        selectedCellId = k;
+        selectedCell = DEVICE_DATA[k];
+        break;
+      }
+    }
+    // Refresh UI
+    var metric = document.getElementById('heatmap-metric').value;
+    drawHeatmap(metric);
+    if (selectedCell) {
+      updateSelectedDevice(selectedCell);
+    }
+    drawHistograms();
+  });
 }
 
 // ── Plotly theme defaults
@@ -2492,7 +2536,7 @@ function drawHeatmap(metric) {
   if (selectedCell) {
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        opacityMask.push((r === selectedCell.row && c === selectedCell.col) ? 1.0 : 0.25);
+        opacityMask.push((r === selectedCell.row && c === selectedCell.col) ? 1.0 : 0.12);
       }
     }
   }
@@ -2638,8 +2682,10 @@ document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(
 // ── Overlay toggle: show/hide cycle nav
 // ── Material selector
 function onMaterialChange() {
-  drawHeatmap(document.getElementById('heatmap-metric').value);
-  if (selectedCell) drawIVPlot(selectedCell);
+  var mat = document.getElementById('header-material').value;
+  if (mat && mat !== 'All') {
+    switchMaterial(mat);
+  }
 }
 document.getElementById('header-material').addEventListener('change', onMaterialChange);
 if (document.getElementById('filter-material'))
@@ -3010,27 +3056,26 @@ function drawHistograms() {
 // ══════════════════════════════════════════════════════
 
 function init() {
-  // Populate material filters
-  var materials = {};
-  for (var k in DEVICE_DATA) {
-    if (!DEVICE_DATA.hasOwnProperty(k)) continue;
-    var m = DEVICE_DATA[k].material;
-    if (m) materials[m] = true;
-  }
-  var matOptions = '<option>All</option>';
-  for (var m in materials) {
-    if (materials.hasOwnProperty(m)) matOptions += '<option>'+m+'</option>';
+  var mats = window._MAT_KEYS || [];
+  var matOptions = '';
+  for (var i = 0; i < mats.length; i++) {
+    matOptions += '<option>' + mats[i] + '</option>';
   }
   var filterMat = document.getElementById('filter-material');
   var headerMat = document.getElementById('header-material');
   if (filterMat) filterMat.innerHTML = matOptions;
   if (headerMat) headerMat.innerHTML = matOptions;
 
-  drawHeatmap();
-  if (selectedCell) {
-    updateSelectedDevice(selectedCell);
+  // Load first material's data
+  if (mats.length > 0) {
+    switchMaterial(mats[0]).then(function() {
+      drawHeatmap(document.getElementById('heatmap-metric').value);
+      drawHistograms();
+    });
+  } else {
+    drawHeatmap();
+    drawHistograms();
   }
-  drawHistograms();
 
   // Placeholder for Cycle Evolution
   Plotly.react('cycle-plot', [], {
