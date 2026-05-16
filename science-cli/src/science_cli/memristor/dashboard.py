@@ -663,9 +663,9 @@ def _build_html(
             </label>
             <span class="panel-badge" id="heatmap-badge">ON/OFF Ratio</span>
           </div>
-          <div class="panel-body" style="padding-top:6px">
+          <div class="panel-body" style="padding:2px 6px 4px 6px">
             <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
-            <div id="selected-device-info" style="margin-top:3px;padding:4px 8px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.5;min-height:18px">
+            <div id="selected-device-info" style="margin-top:2px;padding:3px 6px;background:var(--bg-card2);border-radius:3px;border:1px solid var(--border);font-size:10px;line-height:1.4;min-height:14px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
           </div>
