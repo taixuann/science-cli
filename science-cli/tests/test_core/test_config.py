@@ -34,9 +34,9 @@ class TestConfigDefaults:
         cfg = get_device_config("iv-sweep", "nonexistent-device")
         assert cfg is None
 
-    def test_get_default_device_returns_empty_string(self):
+    def test_get_default_device_returns_hardcoded(self):
         dev = get_default_device("iv-sweep")
-        assert dev == ""
+        assert dev == "keithley-2400", f"Hardcoded default device should be 'keithley-2400', got '{dev}'"
 
     def test_get_projects_root_returns_path(self):
         root = get_projects_root()
@@ -50,13 +50,15 @@ class TestConfigDefaults:
         cfg = get_technique_config("nonexistent-technique")
         assert cfg is None
 
-    def test_get_file_naming_patterns_empty(self):
+    def test_get_file_naming_patterns_includes_hardcoded(self):
         patterns = get_file_naming_patterns()
-        assert patterns == []
+        assert len(patterns) >= 1, f"Should have >=1 hardcoded patterns, got {len(patterns)}"
+        assert any(p.get("id") == "rNcN" for p in patterns), "Should include rNcN pattern"
 
-    def test_get_file_naming_grammar_empty(self):
+    def test_get_file_naming_grammar_includes_hardcoded(self):
         grammar = get_file_naming_grammar()
-        assert grammar == {"separator": "_", "patterns": []}
+        assert grammar.get("separator") == "_"
+        assert len(grammar.get("patterns", [])) >= 1, f"Should have >=1 hardcoded patterns, got {len(grammar.get('patterns', []))}"
 
     def test_list_technique_names_includes_hardcoded(self):
         names = list_technique_names()

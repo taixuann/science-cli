@@ -307,6 +307,12 @@ science-cli/
 3. Import it in `src/science_cli/cli/commands/__init__.py`
 4. Add it to `COMMAND_TREE` dict in `__init__.py`
 
+### Adding a New CLI Flag to Protocol/Metadata Commands
+The `-d`/`--device` flag pattern mirrors `-t`/`--technique` for step metadata:
+- In `add.py`/`edit_cmd.py`: parse comma-separated `-d`/`--device`, store as `device` key in each step entry alongside `name` and `technique`
+- In `ls_cmd.py`: add a Device column to the Rich table when listing steps
+- This creates a **step → technique → device** triplet as first-class properties
+
 ### Adding a New Plot Type
 1. Create `src/science_cli/plot/<technique>.py`
 2. Define a `plot_<technique>(fig, ax, df, flags)` function
@@ -476,6 +482,10 @@ from science_cli.core.technique import (
 | Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
 | PLAN files created | cleanup/architecture-guardrails | 4 PLANs created with cross-PLAN relationships |
 | Sprint 8: Global Config Registry | Sprint 8 | 4-tier config, global device/technique registry, sync/analyze split, SQLite v2 auto-construction |
+| Config merge fix — `get_global_device_config()` / `get_device_config()` | 2026-05-16 | Properly overlay user config.yaml over hardcoded defaults instead of returning early |
+| `-d`/`--device` flag for protocol steps | 2026-05-16 | First-class `device` property for each step; mirrors `-t`/`--technique` pattern |
+| `memristor init --matrix` shorthand | 2026-05-16 | `--matrix r6-c6` as shorthand for `--rows 6 --cols 6`; `--label` auto-generates |
+| fzf TUI subprocess dispatch | 2026-05-16 | `tui/app.py` uses subprocess.run with stop/start application mode; `fzf_utils.py` uses `/dev/tty` stderr |
 
 ### Active Gaps (Need Execution)
 
@@ -524,7 +534,7 @@ from science_cli.core.technique import (
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. The `refactor/2.1.0` branch contains all implementations.
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. The `refactor/2.1.0` branch contains all implementations.
 
 **When creating a new PLAN, check if it relates to any future considerations above.**
 

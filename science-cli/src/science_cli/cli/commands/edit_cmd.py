@@ -88,6 +88,7 @@ def _edit_protocol(args: list) -> None:
     new_desc = flags.get("desc") or flags.get("description")
     steps_raw = flags.get("step")
     techs_raw = flags.get("t") or flags.get("technique")
+    devs_raw = flags.get("d") or flags.get("device")
 
     if new_name:
         safe_new = "".join(c if c.isalnum() or c in "-_" else "_" for c in new_name)
@@ -157,10 +158,13 @@ def _edit_protocol(args: list) -> None:
     if steps_raw:
         step_names = [s.strip() for s in steps_raw.split(",") if s.strip()]
         techs = [t.strip() for t in techs_raw.split(",") if t.strip()] if techs_raw else []
+        devs = [d.strip() for d in devs_raw.split(",") if d.strip()] if devs_raw else []
         for i, sn in enumerate(step_names):
             entry = {"name": sn}
             if i < len(techs):
                 entry["technique"] = techs[i]
+            if i < len(devs):
+                entry["device"] = devs[i]
             data.setdefault("steps", []).append(entry)
             step_dir = paths.step_dir(safe_name, sn)
             step_dir.mkdir(parents=True, exist_ok=True)
@@ -171,6 +175,12 @@ def _edit_protocol(args: list) -> None:
         for i, s in enumerate(data.get("steps", [])):
             if i < len(techs):
                 s["technique"] = techs[i]
+    
+    if devs_raw and not steps_raw:
+        devs = [d.strip() for d in devs_raw.split(",") if d.strip()]
+        for i, s in enumerate(data.get("steps", [])):
+            if i < len(devs):
+                s["device"] = devs[i]
 
     if new_name:
         with open(new_path, "w") as f:
@@ -190,6 +200,7 @@ def _edit_metadata(args: list) -> None:
     name = flags.get("n") or flags.get("name")
     step = flags.get("step")
     techs_raw = flags.get("t") or flags.get("technique")
+    devs_raw = flags.get("d") or flags.get("device")
     files_raw = flags.get("files")
 
     if not name:
@@ -222,6 +233,14 @@ def _edit_metadata(args: list) -> None:
                 if s["name"] == sn:
                     if i < len(techs):
                         s["technique"] = techs[i]
+
+    if devs_raw:
+        devs = [d.strip() for d in devs_raw.split(",") if d.strip()]
+        for i, sn in enumerate(step_names):
+            for s in data.get("steps", []):
+                if s["name"] == sn:
+                    if i < len(devs):
+                        s["device"] = devs[i]
 
     if files_raw:
         files = [f.strip() for f in files_raw.split(",") if f.strip()]

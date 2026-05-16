@@ -271,13 +271,20 @@ def get_device_config(
         if device_cfg is None:
             return None
 
+    # Overlay with global device registry (config.yaml → devices:)
+    # so user's global overrides (e.g. header_lines) take effect.
+    global_cfg = load_global_config()
+    global_devices = global_cfg.get("devices", {})
+    global_device_cfg = global_devices.get(device_name)
+    if global_device_cfg:
+        device_cfg = _merge_dicts(device_cfg, global_device_cfg)
+
     # Check per-project devices.yaml for overrides
     if project_root is not None and device_cfg is not None:
         project_devices_path = project_root / "devices.yaml"
         if project_devices_path.exists():
             project_devices = _load_yaml(project_devices_path)
             if device_name in project_devices:
-                # Merge project-level device overrides on top
                 device_cfg = _merge_dicts(device_cfg, project_devices[device_name])
 
     # Merge with defaults so callers don't need to check every key
@@ -409,25 +416,25 @@ def get_device_config_detail(
 def get_global_device_config(device_name: str) -> dict | None:
     """Look up a device config from the global config's ``devices:`` registry.
 
-    Checks:
-        1. Hardcoded default global devices
-        2. Global config (~/.config/science-cli/config.yaml → devices: section)
+    Resolution order:
+        1. Start with hardcoded default global devices
+        2. Overlay with global config (~/.config/science-cli/config.yaml → devices:)
+        3. Return merged result or None if not found in either
 
     Returns dict with: delimiter, decimal, header_lines, encoding, columns
     or None if not found.
     """
-    # Check hardcoded defaults first
-    if device_name in _DEFAULT_GLOBAL_DEVICES:
-        return dict(_DEFAULT_GLOBAL_DEVICES[device_name])
+    # Start with hardcoded defaults as base
+    cfg = dict(_DEFAULT_GLOBAL_DEVICES.get(device_name, {}))
 
-    # Check global config
+    # Overlay with user's global config.yaml
     global_cfg = load_global_config()
     devices_section = global_cfg.get("devices", {})
-    cfg = devices_section.get(device_name)
-    if cfg:
-        return dict(cfg)
+    user_cfg = devices_section.get(device_name)
+    if user_cfg:
+        cfg.update(user_cfg)
 
-    return None
+    return cfg if cfg else None
 
 
 def list_global_devices() -> list[str]:

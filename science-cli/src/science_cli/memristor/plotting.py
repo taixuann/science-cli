@@ -908,9 +908,6 @@ def _plot_time_colored_iv(
     ax.add_collection(lc)
     ax.autoscale()
 
-    ax.scatter(voltage[0], y_vals[0], c="lime", s=30, zorder=5, label="Start")
-    ax.scatter(voltage[-1], y_vals[-1], c="red", s=30, zorder=5, label="End")
-
     cbar_label = "|Current| (A)" if use_log else "Current (A)"
     ax.set_ylabel(cbar_label, fontsize=10)
 

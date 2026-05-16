@@ -88,7 +88,7 @@ def test_config_backward_compat_no_file():
     assert device_cfg is None, "Nonexistent device should return None"
 
     default_dev = get_default_device(tech)
-    assert default_dev == "", f"Default device should be '', got '{default_dev}'"
+    assert default_dev == "keithley-2400", f"Default device should be 'keithley-2400', got '{default_dev}'"
 
     root = get_projects_root()
     assert isinstance(root, Path), f"projects_root should be Path, got {type(root)}"

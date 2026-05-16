@@ -1,13 +1,8 @@
 """fzf integration for interactive file selection with global styling."""
 
 import os
-import re
-import shlex
 import shutil
 import subprocess
-import sys
-import tempfile
-from pathlib import Path
 
 from science_cli.core.session import get_fzf_opts
 
@@ -94,92 +89,62 @@ def fzf_select(
     try:
         input_text = "\n".join(items)
         args = _build_fzf_args(prompt, multi, preview, preview_window, query)
-        return _run_fzf_via_pty(args, input_text, items, prompt, multi)
+        return _run_fzf(args, input_text, items, prompt, multi)
     except (FileNotFoundError, OSError):
         return _fallback_select(items, prompt, multi)
 
 
-def _run_fzf_via_pty(
+def _run_fzf(
     args: list[str],
     input_text: str,
     items: list[str],
     prompt: str,
     multi: bool,
 ) -> list[str]:
-    """Run fzf in a PTY via ``pty.spawn()`` — no external ``script`` needed.
+    """Run fzf — stdout piped (captured), stderr wired to ``/dev/tty``.
 
-    ``pty.spawn()`` creates a PTY, forks, and relays I/O between the
-    real terminal and the PTY. The child (fzf) gets a real TTY in the
-    PTY slave; the parent relays PTY output to the terminal AND captures
-    it for selection parsing.  All synchronous — no async ContextVar
-    interaction, no subprocess module overhead.
+    fzf writes its interactive UI to stderr (or directly to ``/dev/tty``)
+    and the selected item(s) to stdout.  By piping stdout but routing
+    stderr to ``/dev/tty``, the user sees the full fzf UI on the real
+    terminal while we capture the selection result cleanly.
+
+    Opening ``/dev/tty`` explicitly guarantees fzf gets the real
+    controlling terminal, regardless of any Textual / asyncio / PTY
+    wrappers around sys.stdout or sys.stderr.
     """
-    import pty
-    import tempfile
-
-    # Write items to a temp file for fzf to read via < redirect
-    item_fd, item_path = tempfile.mkstemp(prefix="sci-fzf-items-", suffix=".txt")
-    with os.fdopen(item_fd, "w") as f:
-        f.write(input_text)
-
-    # Build the command: bash -c "fzf < items"
-    fzf_args_str = " ".join(shlex.quote(a) for a in args)
-    cmd = ["bash", "-c", f"{fzf_args_str} < {shlex.quote(item_path)}"]
-
-    # pty.spawn relays terminal I/O through a PTY.
-    # The child gets a real TTY; the parent reads PTY output and forwards
-    # it to stdout.  We capture all PTY output to extract the selection.
-    output_chunks: list[bytes] = []
-
-    def master_read(fd: int) -> bytes:
-        data = os.read(fd, 65536)
-        if data:
-            output_chunks.append(data)
-        return data
+    try:
+        tty_fd = os.open("/dev/tty", os.O_RDWR)
+    except OSError:
+        return _fallback_select(items, prompt, multi)
 
     try:
-        pty.spawn(cmd, master_read=master_read)
+        proc = subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=tty_fd,
+        )
     except FileNotFoundError:
+        os.close(tty_fd)
         return _fallback_select(items, prompt, multi)
-    finally:
-        try:
-            os.unlink(item_path)
-        except OSError:
-            pass
 
-    if not output_chunks:
+    os.close(tty_fd)
+
+    stdout_data, _ = proc.communicate(input=input_text.encode())
+
+    if not stdout_data:
         return []
 
-    # Decode and parse the selection from captured PTY output
-    content = b"".join(output_chunks).decode("utf-8", errors="replace")
-
-    if not content.strip():
+    result = stdout_data.decode("utf-8", errors="replace").strip()
+    if not result:
         return []
 
-    # Strip ANSI escape sequences
-    cleaned = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", content)
-    cleaned = re.sub(r"\x1b\][^\x07]*\x07", "", cleaned)
-    cleaned = re.sub(r"\x1b[][()#;]", "", cleaned)
-    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", cleaned)
+    selected = [line.strip() for line in result.split("\n") if line.strip()]
 
-    lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
-
-    # Scan from end for items that match the original list
     item_set = set(items)
-    matches: list[str] = []
-    seen: set[str] = set()
-    for line in reversed(lines):
-        if line in item_set and line not in seen:
-            matches.append(line)
-            seen.add(line)
-            if not multi:
-                break
+    filtered = [s for s in selected if s in item_set]
 
-    if matches:
-        matches.reverse()
-        return matches
-
-    return [lines[-1]] if lines else []
+    return filtered if filtered else selected[:1] if selected else []
 
 
 def _fallback_select(

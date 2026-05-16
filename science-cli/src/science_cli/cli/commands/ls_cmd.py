@@ -177,12 +177,14 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
         table = Table(title=f"Protocol: {py.stem}", border_style="cyan", show_lines=True)
         table.add_column("Step", style="bold white")
         table.add_column("Technique", style="green")
+        table.add_column("Device", style="yellow")
         table.add_column("Files", style="dim", justify="right")
         table.add_column("Description", style="bright_black")
 
         for s in steps:
             sn = s.get("name", "?")
             t = s.get("technique", "")
+            d = s.get("device", "")
             sfiles = s.get("files", [])
             n_files = len(sfiles)
             file_badge = f"{n_files} files" if n_files else "—"
@@ -210,7 +212,8 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
                     else:
                         display_desc = details
 
-            table.add_row(sn, t, file_badge, display_desc)
+            dev_display = d or "—"
+            table.add_row(sn, t, dev_display, file_badge, display_desc)
 
         console.print(table)
         console.print(f"  [dim]{desc}[/dim]")

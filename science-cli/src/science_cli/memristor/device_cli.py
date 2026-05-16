@@ -311,6 +311,26 @@ def _device_data_files_recursive(proto_dir: Path) -> list[tuple[str, str, Path]]
 
 
 def cmd_init(args: argparse.Namespace) -> None:
+    import re
+
+    # Resolve rows/cols from --matrix shorthand or explicit --rows/--cols
+    rows, cols = getattr(args, "rows", None), getattr(args, "cols", None)
+    matrix_str = getattr(args, "matrix", "") or ""
+    if matrix_str:
+        m = re.match(r"r(\d+)[-.]c(\d+)", matrix_str)
+        if m:
+            rows, cols = int(m.group(1)), int(m.group(2))
+        else:
+            print(f"  Error: --matrix format should be rN-cN (e.g. r6-c6), got '{matrix_str}'")
+            sys.exit(1)
+    elif rows is None or cols is None:
+        print("  Error: provide --matrix rN-cN or --rows N --cols N")
+        sys.exit(1)
+
+    label = getattr(args, "label", "") or ""
+    if not label:
+        label = f"{rows}x{cols} crossbar"
+
     pdir = _resolve_protocol_dir(args)
     yaml_path = pdir / "devices.yaml"
     if yaml_path.exists():
@@ -340,10 +360,10 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     config = DeviceConfig(
         device=DeviceGeometry(
-            id=f"crossbar-{args.rows}x{args.cols}",
-            label=args.label,
-            rows=args.rows,
-            cols=args.cols,
+            id=f"crossbar-{rows}x{cols}",
+            label=label,
+            rows=rows,
+            cols=cols,
         ),
         points=[],
         steps=steps,
@@ -1455,9 +1475,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.required = True
 
     p_init = sub.add_parser("init", help="Scaffold a devices.yaml")
-    p_init.add_argument("--rows", type=int, required=True)
-    p_init.add_argument("--cols", type=int, required=True)
-    p_init.add_argument("--label", required=True)
+    p_init.add_argument("--rows", type=int, default=None)
+    p_init.add_argument("--cols", type=int, default=None)
+    p_init.add_argument("--matrix", default="",
+        help="Shorthand: --matrix r6-c6 (sets rows=6, cols=6)")
+    p_init.add_argument("--label", default="")
     p_init.add_argument(
         "--steps", default="",
         help="Step dirs: 4_iv-characterization or iv:4_iv,endurance:5_end",

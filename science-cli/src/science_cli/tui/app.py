@@ -14,12 +14,11 @@ import re
 import sys
 import inspect
 import shlex
+import subprocess
 from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 
 from rich.console import Console as RichConsole
-from rich.text import Text as RichText
-
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Static, Input
@@ -37,37 +36,6 @@ from science_cli.tui.banner import SCIBanner
 from science_cli.tui.output_panel import OutputPanel
 from science_cli.tui.status_bar import StatusBar
 from science_cli.tui.input_bar import CommandInput, SLASH_COMMANDS
-
-
-class _TeeWriter:
-    """Writes to two streams simultaneously — terminal + capture buffer.
-
-    Used during TUI suspend for fzf commands: output goes to both the
-    real terminal (visible during interactive fzf) and a StringIO buffer
-    (captured for RichLog after the TUI resumes).
-    """
-
-    def __init__(self, primary, secondary):
-        self.primary = primary
-        self.secondary = secondary
-
-    def write(self, data):
-        self.primary.write(data)
-        self.secondary.write(data)
-
-    def flush(self):
-        self.primary.flush()
-        self.secondary.flush()
-
-    def fileno(self):
-        return self.primary.fileno()
-
-    def isatty(self):
-        return self.primary.isatty()
-
-    @property
-    def encoding(self):
-        return getattr(self.primary, "encoding", "utf-8")
 
 
 #: Maximum number of command history entries to store.
@@ -348,38 +316,26 @@ class SCIApp(App):
 
         # --- COMMAND_TREE dispatch ---
         if cmd_name in COMMAND_TREE:
-            # Interactive fzf commands need the real terminal.
+            # Interactive fzf commands: run the handler in a separate
+            # Python process with the real terminal.  This avoids ALL
+            # asyncio nesting issues (questionary calls asyncio.run()),
+            # terminal-state corruption, and TTY-wrangling problems.
             if _is_fzf_command(cmd_args):
-                handler = COMMAND_TREE[cmd_name]["handler"]
+                self._driver.stop_application_mode()
                 try:
-                    with self.suspend():
-                        buf = io.StringIO()
-                        old_stdout = sys.stdout
-                        sys.stdout = _TeeWriter(sys.stdout, buf)
-
-                        import science_cli.app as app_mod
-                        original_console = app_mod.console
-                        tee_file = _TeeWriter(original_console.file, buf)
-                        app_mod.console = RichConsole(
-                            file=tee_file, force_terminal=True,
-                            color_system="standard", width=80,
-                        )
-
-                        try:
-                            handler(cmd_args)
-                        finally:
-                            sys.stdout = old_stdout
-                            app_mod.console = original_console
-
-                        captured = buf.getvalue()
+                    subprocess.run(
+                        [sys.executable, "-m", "science_cli", cmd_name] + cmd_args,
+                    )
+                except KeyboardInterrupt:
+                    pass
                 except Exception as exc:
                     output.write_error(f"Error running '{cmd_name}': {exc}")
                     return
+                finally:
+                    self.refresh()
+                    self._driver.start_application_mode()
 
                 output.write_command_header(line)
-                if captured.strip():
-                    output.write(RichText.from_ansi(captured))
-
                 self.refresh_status_bar()
                 return
 

@@ -13,13 +13,33 @@
 | `protocol.py` | Protocol YAML management | No |
 | `sweep_metadata.py` | IV sweep segment auto-detection (forward/reverse) | No |
 | `file_utils.py` | File I/O helpers | No |
-| `fzf_utils.py` | fzf integration for file selection | No |
+| `fzf_utils.py` | fzf integration for file selection via `script -q` PTY; falls back to numbered-list if fzf unavailable | No |
 | `legacy.py` | Backward-compatibility shims | No |
 | `manifest.py` | Manifest management | No |
 | `parquet_store.py` | Parquet storage for processed analysis data (write/read/append features) | No |
 
 **Core modules must never import from `cli/` or `plot/`.** They are the
 foundation layer — CLI and plot depend on core, not the reverse.
+
+## fzf Integration (/dev/tty Approach)
+
+`fzf_utils.py` provides interactive file selection powered by [fzf](https://github.com/junegunn/fzf). fzf renders its UI on stderr (or directly to `/dev/tty`) and writes the selected item(s) to stdout. The implementation uses `subprocess.Popen` with stderr wired to `/dev/tty`:
+
+1. fzf is launched via `subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=tty_fd)`
+2. Items are written to stdin via `proc.communicate(input=input_text)`
+3. fzf's interactive UI appears on the real terminal via `/dev/tty`
+4. Selected item(s) are read from stdout — clean, no ANSI stripping needed
+5. If `/dev/tty` is unavailable, falls back to `_fallback_select()` (numbered list)
+
+**Why this approach**: Opening `/dev/tty` explicitly guarantees fzf gets the real controlling terminal regardless of any Textual / asyncio / PTY wrappers around `sys.stdout` or `sys.stderr`. Previous approaches used `script -q` (via PLAN-tui-fzf-pty) and `pty.spawn()` — both required ANSI escape sequence stripping and had platform-specific issues.
+
+**Platform differences**: None — works identically on macOS and Linux via standard Unix `/dev/tty`.
+
+If fzf is unavailable, `_fallback_select()` presents a simple numbered list. The `SCI_TUI_ACTIVE` env var guard was removed in PLAN-tui-fzf-pty — fzf now works everywhere (CLI, TUI suspend mode via subprocess dispatch, and REPL).
+
+### TUI Subprocess Dispatch
+
+When fzf commands are run inside the Textual TUI, `tui/app.py` stops application mode, launches a separate Python process (`subprocess.run([sys.executable, "-m", "science_cli", ...])`) that has direct access to the real terminal, then re-enters application mode. This avoids all asyncio nesting issues with questionary and fzf.
 
 ## Session Lifecycle
 
@@ -111,6 +131,21 @@ defaults:
 
 **Note:** Config is additive, never replacement. All hardcoded defaults remain as
 fallbacks when no config file exists.
+
+**Config merge fix (2026-05-16):** The `get_global_device_config()` and
+`get_device_config()` functions now properly merge user config values over
+hardcoded defaults:
+- `get_global_device_config(device_name)`: starts with hardcoded defaults
+  (`_DEFAULT_GLOBAL_DEVICES`), then overlays the user's
+  `~/.config/science-cli/config.yaml → devices:` section. Previously it
+  returned early from whichever source matched first.
+- `get_device_config(technique, device_name)`: after resolving the
+  per-technique device config, it now overlays the global device registry
+  (from `config.yaml → devices:`) before applying per-project `devices.yaml`
+  overrides. Previously the global registry was skipped for per-technique
+  lookups.
+- **Effect**: a user setting `header_lines: 21` in config.yaml now correctly
+  overrides the hardcoded `23` for `keithley-2400`.
 
 ## Data Loading Flow
 

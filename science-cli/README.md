@@ -43,8 +43,8 @@ sci add -m project -n my-experiment
 # Open it
 sci open -m project -n my-experiment
 
-# Create a protocol with steps
-sci add -m protocol -n 1_iv-test --step "1_set,2_reset" -t iv,iv
+# Create a protocol with steps (optionally with technique + device per step)
+sci add -m protocol -n 1_iv-test --step "1_set,2_reset" -t iv,iv -d keithley-2400,keithley-2400
 
 # Assign data files to steps
 sci add -m data --fzf
@@ -94,13 +94,43 @@ config grammar list                   # List grammar patterns
 config grammar edit                   # Edit grammar patterns
 ```
 
+### Protocol Step Metadata Flags
+
+Protocol steps now support a **step → technique → device** triplet. The `-d`/`--device` flag mirrors the `-t`/`--technique` pattern:
+
+```bash
+# Create protocol with device per step
+sci add -m protocol -n 1_iv-test --step "1_set,2_reset" -t iv,iv -d keithley-2400,keithley-2400
+
+# Add metadata with device
+sci add -m metadata -pt 1_iv-test --step "1_set" -d keithley-2400
+
+# Edit existing step devices (without adding new steps)
+sci edit -m protocol -n 1_iv-test -d keithley-2400,keysight-b1500
+
+# Edit metadata device
+sci edit -m metadata -n 1_iv-test -d keithley-2400
+
+# List protocol steps with Device column
+sci ls -m protocol --step
+
+# Output:
+# ┌─────────┬────────────┬────────────────┬───────┬─────────────┐
+# │ Step    │ Technique  │ Device         │ Files │ Description │
+# ├─────────┼────────────┼────────────────┼───────┼─────────────┤
+# │ 1_set   │ iv         │ keithley-2400  │ 2     │ ...         │
+# │ 2_reset │ iv         │ keithley-2400  │ 3     │ ...         │
+# └─────────┴────────────┴────────────────┴───────┴─────────────┘
+```
+
 ## Memristor Device Management
 
 For crossbar device characterization:
 
 ```bash
-# Initialize a device matrix
-sci memristor init --rows 4 --cols 4 --label "My Device"
+# Initialize a device matrix (--matrix shorthand or --rows/--cols)
+sci memristor init --matrix r6-c6 --label "My Device"
+sci memristor init --rows 4 --cols 4                        # label auto: "4x4 crossbar"
 
 # Add data files to matrix points
 sci memristor add --fzf
@@ -232,6 +262,8 @@ Per-protocol metadata (protocol/<name>/...)
 ```
 
 The global config acts as a central "library" for instrument configs (Keithley 2400, Keysight B1500A), technique templates (iv-sweep, endurance), and file naming grammar patterns. Project configs inherit from it and only override what's different.
+
+**Config merge fix (2026-05-16):** `get_global_device_config()` and `get_device_config()` now properly merge user's `~/.config/science-cli/config.yaml` values over hardcoded defaults instead of returning early. For example, setting `header_lines: 21` in config.yaml for `keithley-2400` now correctly overrides the hardcoded `23`.
 
 ## Global Device & Technique Registry (Sprint 8)
 

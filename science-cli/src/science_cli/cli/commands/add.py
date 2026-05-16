@@ -151,14 +151,20 @@ def _add_protocol(args: list) -> None:
     desc = flags.get("desc") or flags.get("description", "")
     steps_raw = flags.get("step", "")
     techs_raw = flags.get("t") or flags.get("technique", "")
+    devs_raw = flags.get("d") or flags.get("device", "")
 
     steps = []
     if steps_raw:
         step_names = [s.strip() for s in steps_raw.split(",") if s.strip()]
         techs = [t.strip() for t in techs_raw.split(",") if t.strip()] if techs_raw else []
+        devs = [d.strip() for d in devs_raw.split(",") if d.strip()] if devs_raw else []
         for i, sn in enumerate(step_names):
-            t = techs[i] if i < len(techs) else ""
-            steps.append({"name": sn, "technique": t})
+            entry = {"name": sn}
+            if i < len(techs):
+                entry["technique"] = techs[i]
+            if i < len(devs):
+                entry["device"] = devs[i]
+            steps.append(entry)
             step_dir = paths.step_dir(safe_name, sn)
             step_dir.mkdir(parents=True, exist_ok=True)
             (step_dir / "results").mkdir(parents=True, exist_ok=True)
@@ -184,15 +190,13 @@ def _add_metadata(args: list) -> None:
     steps_raw = flags.get("step")
     protocol_name = flags.get("pt") or flags.get("protocol")
     techs_raw = flags.get("t") or flags.get("technique")
+    devs_raw = flags.get("d") or flags.get("device")
 
     if not steps_raw:
         console.print("[yellow]Required: --step (step ID(s), comma-separated)[/yellow]")
         return
     if not protocol_name:
         console.print("[yellow]Required: -pt / --protocol (protocol name)[/yellow]")
-        return
-    if not techs_raw:
-        console.print("[yellow]Required: -t / --technique (technique(s))[/yellow]")
         return
 
     from science_cli.core.project import get_current_project_path
@@ -214,14 +218,22 @@ def _add_metadata(args: list) -> None:
 
     step_names = [s.strip() for s in steps_raw.split(",") if s.strip()]
     techs = [t.strip() for t in techs_raw.split(",") if t.strip()] if techs_raw else []
+    devs = [d.strip() for d in devs_raw.split(",") if d.strip()] if devs_raw else []
 
     existing = {s["name"]: s for s in protocol.get("steps", [])}
     for i, sn in enumerate(step_names):
-        t = techs[i] if i < len(techs) else ""
         if sn in existing:
-            existing[sn]["technique"] = t
+            if i < len(techs):
+                existing[sn]["technique"] = techs[i]
+            if i < len(devs):
+                existing[sn]["device"] = devs[i]
         else:
-            protocol.setdefault("steps", []).append({"name": sn, "technique": t})
+            entry = {"name": sn}
+            if i < len(techs):
+                entry["technique"] = techs[i]
+            if i < len(devs):
+                entry["device"] = devs[i]
+            protocol.setdefault("steps", []).append(entry)
         step_dir = paths.step_dir(safe_name, sn)
         step_dir.mkdir(parents=True, exist_ok=True)
         (step_dir / "results").mkdir(parents=True, exist_ok=True)
@@ -229,8 +241,13 @@ def _add_metadata(args: list) -> None:
     with open(yaml_path, "w") as f:
         yaml.dump(protocol, f, default_flow_style=False, sort_keys=False)
     
-    rprint(f"[bold green]✓[/bold green] Metadata updated for '{safe_name}': {', '.join(step_names)}")
-    rprint(f"  [dim]Techniques: {', '.join(techs)}[/dim]")
+    parts = [f"steps: {', '.join(step_names)}"]
+    if techs:
+        parts.append(f"techniques: {', '.join(techs)}")
+    if devs:
+        parts.append(f"devices: {', '.join(devs)}")
+    rprint(f"[bold green]✓[/bold green] Metadata updated for '{safe_name}'")
+    rprint(f"  [dim]{' | '.join(parts)}[/dim]")
 
 
 def _add_data(args: list) -> None:

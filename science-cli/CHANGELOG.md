@@ -98,3 +98,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Banner truncated by generic `Horizontal { height: 1 }` — now shows full SCI ASCII art
 - Input row gap restored with `#input-row { height: 1 }`
 - TUI separators restored and dimmed
+
+## [2.1.1] - 2026-05-16
+
+### Added
+- **`-d`/`--device` flag for step metadata** — first-class `device` property on protocol steps, matching `-t`/`--technique`:
+  - `add -m protocol`: comma-separated `-d`/`--device` per step
+  - `add -m metadata`: set device for existing or new steps (technique no longer required)
+  - `edit -m protocol`: set device on steps; `-d` without `--step` modifies existing steps
+  - `edit -m metadata`: update device by step name
+  - `ls -m protocol --step`: shows Device column in the Rich table
+- **`memristor init --matrix` shorthand**: `--matrix r6-c6` as alternative to `--rows 6 --cols 6`
+- **`memristor init --label` optional**: auto-generates `"NxM crossbar"` from dimensions when omitted
+- **Config merge fix**: `get_global_device_config()` and `get_device_config()` now properly overlay user's `~/.config/science-cli/config.yaml` values over hardcoded defaults
+
+### Changed
+- **fzf TUI dispatch**: `tui/app.py` now uses `subprocess.run()` with stop/start application mode instead of `_TeeWriter` capture — avoids asyncio nesting issues
+- **fzf execution**: `fzf_utils.py` uses `subprocess.Popen` with `/dev/tty` stderr instead of `pty.spawn()` — cleaner, cross-platform, no ANSI stripping needed
+- `memristor/plotting.py`: removed start/end scatter markers (lime/red dots) from time-colored IV plots
+
+### Fixed
+- Config merge bug: `get_global_device_config()` and `get_device_config()` returned early from hardcoded defaults, ignoring user's `config.yaml` settings (e.g. `header_lines: 21` was silently overridden by hardcoded `23`)
