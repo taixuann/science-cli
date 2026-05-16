@@ -535,21 +535,6 @@ def _build_html(
     <div class="sb-section">
       <div class="sb-section-title">Filters</div>
       <div class="filter-group">
-        <div class="filter-label">Measurement Type</div>
-        <select class="filter-select">
-          <option>IV Sweep</option>
-          <option>Pulse</option>
-          <option>Retention</option>
-          <option>Endurance</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <div class="filter-label">Material</div>
-        <select class="filter-select" id="filter-material">
-          <option>All</option>
-        </select>
-      </div>
-      <div class="filter-group">
         <div class="filter-label">Cycle Range</div>
         <div class="range-row"><span>1</span><span id="cycle-val">All</span></div>
         <input type="range" id="cycle-range" min="1" max="200" value="200" oninput="document.getElementById('cycle-val').textContent=this.value">
@@ -565,32 +550,6 @@ def _build_html(
       </div>
       <div style="margin-top:8px">
         <div class="toggle-row"><span>Highlight Outliers</span><label class="toggle"><input type="checkbox" id="toggle-outliers"><span class="toggle-slider"></span></label></div>
-      </div>
-    </div>
-
-    <!-- Color Map By -->
-    <div class="sb-section">
-      <div class="sb-section-title">Color Map By</div>
-      <div class="radio-group" id="colormap-radio">
-        <label class="radio-item active"><input type="radio" name="colormap" value="ratio" checked> ON/OFF Ratio</label>
-        <label class="radio-item"><input type="radio" name="colormap" value="vset"> Vset (V)</label>
-        <label class="radio-item"><input type="radio" name="colormap" value="vreset"> Vreset (V)</label>
-        <label class="radio-item"><input type="radio" name="colormap" value="yield"> Yield (%)</label>
-      </div>
-    </div>
-
-    <!-- Device Info -->
-    <div class="sb-section">
-      <div class="sb-section-title">Selected Device</div>
-      <div id="sb-device-info" class="info-grid">
-        <div class="info-row"><span class="info-key">Device ID</span><span class="info-val" id="si-id">—</span></div>
-        <div class="info-row"><span class="info-key">Row/Col</span><span class="info-val" id="si-rc">—</span></div>
-        <div class="info-row"><span class="info-key">Material</span><span class="info-val" id="si-mat">—</span></div>
-        <div class="info-row"><span class="info-key">Files</span><span class="info-val" id="si-files">—</span></div>
-        <div class="info-row"><span class="info-key">Vset</span><span class="info-val" id="si-vset">—</span></div>
-        <div class="info-row"><span class="info-key">Vreset</span><span class="info-val" id="si-vreset">—</span></div>
-        <div class="info-row"><span class="info-key">ON/OFF</span><span class="info-val" id="si-ratio">—</span></div>
-        <div class="info-row"><span class="info-key">Switching</span><span class="info-val" id="si-sw">—</span></div>
       </div>
     </div>
 
@@ -2489,12 +2448,18 @@ function getMetricValue(d, metric) {
 function buildHeatmapData(metric) {
   var rows = HEATMAP_META.rows;
   var cols = HEATMAP_META.cols;
-  var matrix = HEATMAP_META.matrix;
   var z = [], hovertext = [];
   for (var r = 0; r < rows; r++) {
     var zr = [], ht = [];
     for (var c = 0; c < cols; c++) {
-      var d = matrix[r] ? matrix[r][c] : null;
+      // Look up device in current DEVICE_DATA
+      var d = null;
+      for (var k in DEVICE_DATA) {
+        if (DEVICE_DATA.hasOwnProperty(k) && DEVICE_DATA[k].row === r && DEVICE_DATA[k].col === c) {
+          d = DEVICE_DATA[k];
+          break;
+        }
+      }
       var v = getMetricValue(d, metric);
       zr.push(v);
       if (!d) {
@@ -2506,7 +2471,7 @@ function buildHeatmapData(metric) {
           'Vset: ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Vreset: ' + (d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A') + '<br>' +
           'Switching: ' + (d.switching ? 'Yes' : 'No') + '<br>' +
-          'Material: ' + (d.material || 'unknown')
+          'Files: ' + (d.n_files || 0)
         );
       }
     }
@@ -2544,7 +2509,7 @@ function drawHeatmap(metric) {
   Plotly.react('heatmap-plot', [
     {
       type: 'heatmap',
-      z: data.z, x: labels.slice(0, cols), y: labels.slice(0, rows),
+      z: data.z, x: labels.slice(0, cols), y: labels.slice(0, rows).reverse(),
       colorscale: colorscale, hovertext: data.hovertext, hovertemplate: '%{hovertext}<extra></extra>',
       colorbar: {
         thickness: 10, len: 0.8,
@@ -2554,20 +2519,22 @@ function drawHeatmap(metric) {
         title: { text: metricName === 'ON/OFF Ratio' ? 'log10' : '', font: { size: 9, color: '#8ba3c7' }, side: 'right' }
       },
       opacity: opacityMask.length ? opacityMask : undefined,
-      zsmooth: false,
-      xgap: 1.5, ygap: 1.5
+      zsmooth: false, xgap: 1.5, ygap: 1.5
     },
     {
-      type: 'scatter', x: selX, y: selY, mode: 'markers',
+      type: 'scatter',
+      x: selectedCell ? [selectedCell.col + 0.5] : [],
+      y: selectedCell ? [(rows - 1 - selectedCell.row) + 0.5] : [],
+      mode: 'markers',
       marker: { color: 'rgba(0,212,255,0)', size: 24, line: { color: '#00d4ff', width: 2.5 } },
       hoverinfo: 'skip', showlegend: false
     }
   ], {
     paper_bgcolor: PAPER_BG, plot_bgcolor: PLOT_BG,
     font: { color: FONT_COLOR, family: 'JetBrains Mono, monospace', size: 10 },
-    margin: { t: 8, r: 70, b: 30, l: 30 },
-    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: '', tickfont: { size: 8 }, showgrid: false },
-    yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: '', tickfont: { size: 8 }, showgrid: false, autorange: true },
+    margin: { t: 22, r: 70, b: 26, l: 30 },
+    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Column', tickfont: { size: 8 }, showgrid: false, side: 'top' },
+    yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
     height: 300
   }, plotConfig);
 
@@ -2576,7 +2543,7 @@ function drawHeatmap(metric) {
   heatmapEl.on('plotly_click', function(eventData) {
     if (eventData.points && eventData.points.length > 0 && eventData.points[0].curveNumber === 0) {
       var p = eventData.points[0];
-      var rIdx = parseInt(p.y) - 1;
+      var rIdx = HEATMAP_META.rows - 1 - (parseInt(p.y) - 1);
       var cIdx = parseInt(p.x) - 1;
       // Find device for this cell matching the selected material
       var mat = document.getElementById('header-material').value;
@@ -2660,24 +2627,7 @@ document.getElementById('heatmap-metric').addEventListener('change', function() 
   drawHeatmap(this.value);
 });
 
-// ── Colormap radio buttons
-document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(radio) {
-  radio.addEventListener('change', function() {
-    document.querySelectorAll('#colormap-radio .radio-item').forEach(function(item) {
-      item.classList.remove('active');
-    });
-    this.parentElement.classList.add('active');
-    var metricMap = {
-      'ratio': 'ON/OFF Ratio',
-      'vset': 'Vset (V)',
-      'vreset': 'Vreset (V)',
-      'yield': 'Yield (%)'
-    };
-    var metric = metricMap[this.value] || 'ON/OFF Ratio';
-    document.getElementById('heatmap-metric').value = metric;
-    drawHeatmap(metric);
-  });
-});
+
 
 // ── Overlay toggle: show/hide cycle nav
 // ── Material selector
@@ -2688,8 +2638,6 @@ function onMaterialChange() {
   }
 }
 document.getElementById('header-material').addEventListener('change', onMaterialChange);
-if (document.getElementById('filter-material'))
-  document.getElementById('filter-material').addEventListener('change', onMaterialChange);
 
 document.getElementById('toggle-overlay').addEventListener('change', function() {
   var nav = document.getElementById('cycle-nav');
@@ -3061,9 +3009,7 @@ function init() {
   for (var i = 0; i < mats.length; i++) {
     matOptions += '<option>' + mats[i] + '</option>';
   }
-  var filterMat = document.getElementById('filter-material');
   var headerMat = document.getElementById('header-material');
-  if (filterMat) filterMat.innerHTML = matOptions;
   if (headerMat) headerMat.innerHTML = matOptions;
 
   // Load first material's data
