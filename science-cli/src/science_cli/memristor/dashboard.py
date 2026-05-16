@@ -2489,12 +2489,13 @@ function drawHeatmap(metric) {
   var cols = HEATMAP_META.cols;
   var labels = Array.from({length: Math.max(rows, cols)}, function(_,i){return ''+(i+1)});
 
+  var useLog = document.getElementById('toggle-log') ? document.getElementById('toggle-log').checked : true;
   var colorscale = metricName === 'ON/OFF Ratio' ?
     [[0,'#0a0f1f'],[0.2,'#0d2040'],[0.4,'#0e3d60'],[0.6,'#1a6b7a'],[0.75,'#24a88c'],[0.88,'#6ec96f'],[1.0,'#fde74c']] :
     [[0,'#0a0f1f'],[0.3,'#1a3a6e'],[0.6,'#2196c8'],[0.8,'#5ed4e6'],[1.0,'#e2f3ff']];
 
-  var selX = selectedCell ? [selectedCell.col + 0.5] : [];
-  var selY = selectedCell ? [selectedCell.row + 0.5] : [];
+  var cbarTitle = metricName;
+  if (metricName === 'ON/OFF Ratio') cbarTitle = useLog ? 'log10' : 'Ratio';
   // Build opacity mask: dim unselected cells
   var opacityMask = [];
   if (selectedCell) {
@@ -2515,7 +2516,7 @@ function drawHeatmap(metric) {
         tickfont: { size: 9, color: '#8ba3c7', family: 'JetBrains Mono' },
         outlinecolor: 'rgba(32,70,130,0.4)', outlinewidth: 1,
         bgcolor: 'rgba(0,0,0,0)',
-        title: { text: metricName === 'ON/OFF Ratio' ? 'log10' : '', font: { size: 9, color: '#8ba3c7' }, side: 'right' }
+        title: { text: cbarTitle, font: { size: 9, color: '#8ba3c7' }, side: 'right' }
       },
       opacity: opacityMask.length ? opacityMask : undefined,
       zsmooth: false, xgap: 1.5, ygap: 1.5
@@ -2576,15 +2577,13 @@ function updateSelectedDevice(d) {
   var infoDiv = document.getElementById('selected-device-info');
   if (infoDiv) {
     infoDiv.innerHTML =
-      '<div style="font-family:\'DM Sans\',sans-serif;font-size:10px;line-height:1.8">'+
-        '<div style="font-weight:600;color:var(--accent);font-size:12px;margin-bottom:2px">'+rc+' — '+(d.material||'unknown')+'</div>'+
-        '<div style="display:grid;grid-template-columns:auto 1fr;gap:1px 10px">'+
-          '<span style="color:var(--text-dim)">Files</span><span>'+(d.n_files||0)+'</span>'+
-          '<span style="color:var(--text-dim)">ON/OFF</span><span><b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
-          '<span style="color:var(--text-dim)">Vset</span><span><b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
-          '<span style="color:var(--text-dim)">Vreset</span><span><b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
-          '<span style="color:var(--text-dim)">Switching</span><span>'+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
-        '</div>'+
+      '<div style="font-size:10px;line-height:1.6">'+
+        '<div style="font-weight:600;color:var(--accent);margin-bottom:1px">'+rc+' &mdash; '+(d.material||'')+'</div>'+
+        '<span>Files: '+(d.n_files||0)+' &nbsp;|&nbsp; </span>'+
+        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
+        '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
+        '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b> &nbsp;|&nbsp; </span>'+
+        '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
       '</div>';
   }
   document.getElementById('iv-device-badge').textContent = rc;
