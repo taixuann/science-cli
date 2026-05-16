@@ -703,8 +703,8 @@ def _build_html(
             </div>
           </div>
           <div class="panel-body" style="padding:0;flex:1;min-height:0">
-            <div id="iv-plot" style="width:100%;height:100%;min-height:280px"></div>
-            <div id="tab-placeholder" style="display:none;width:100%;height:100%;min-height:280px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-family:'DM Sans',sans-serif"></div>
+            <div id="iv-plot" style="width:100%;height:100%;min-height:300px"></div>
+            <div id="tab-placeholder" style="display:none;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-family:'DM Sans',sans-serif">No IV data available</div>
           </div>
         </div>
 
@@ -2577,13 +2577,13 @@ function updateSelectedDevice(d) {
   var infoDiv = document.getElementById('selected-device-info');
   if (infoDiv) {
     infoDiv.innerHTML =
-      '<div style="display:flex;flex-wrap:wrap;gap:3px 12px">'+
-        '<span style="font-weight:600;color:var(--accent)">'+rc+'</span>'+
-        '<span>'+ (d.material||'unknown') +'</span>'+
-        '<span>'+ (d.n_files||0)+' files</span>'+
-        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
-        '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
-        '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+      '<div style="font-size:10px;line-height:1.7">'+
+        '<span style="font-weight:600;color:var(--accent);font-size:11px">'+rc+'</span><br>'+
+        '<span>'+ (d.material||'unknown') +'</span><br>'+
+        '<span>'+ (d.n_files||0)+' files</span><br>'+
+        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span><br>'+
+        '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span><br>'+
+        '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span><br>'+
         '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
       '</div>';
   }
@@ -2818,10 +2818,9 @@ function drawIVPlot(deviceInfo) {
     });
   }
 
-  var plotHeight = Math.max(280, document.getElementById('iv-plot').clientHeight || 330);
   Plotly.react('iv-plot', traces, {
     ...baseLayout,
-    height: plotHeight,
+    height: 320,
     margin: { t: 10, r: 140, b: 40, l: 60 },
     xaxis: {
       ...baseLayout.xaxis, title: { text: 'Voltage (V)', font: { size: 10 } },
