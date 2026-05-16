@@ -542,6 +542,8 @@ def _build_html(
       </div>
       <div style="margin-top:8px">
         <div class="toggle-row"><span>Log Scale</span><label class="toggle"><input type="checkbox" id="toggle-log" checked><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row"><span>Overlay Mode</span><label class="toggle"><input type="checkbox" id="toggle-overlay" checked><span class="toggle-slider"></span></label></div>
+        <div class="toggle-row"><span>Color by Cycle</span><label class="toggle"><input type="checkbox" id="toggle-colorcycle" checked><span class="toggle-slider"></span></label></div>
         <div class="toggle-row"><span>Highlight Outliers</span><label class="toggle"><input type="checkbox" id="toggle-outliers"><span class="toggle-slider"></span></label></div>
       </div>
       <!-- Cycle Navigation -->
@@ -2149,6 +2151,10 @@ input[type=range]::-webkit-slider-thumb {
 
 /* ── MAIN AREA ── */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+#main .panel-body { flex: 1; min-height: 0; }
+#main .panel-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#heatmap { width: 100%; height: 100%; min-height: 300px; }
+#iv-plot { width: 100%; height: 100%; min-height: 280px; }
 
 /* ── HEADER ── */
 #header {
@@ -2537,9 +2543,16 @@ function updateSelectedDevice(d) {
   var files = IV_RAW_DATA[cellId] || [];
   var sel = document.getElementById('sweep-select');
   var nav = document.getElementById('cycle-nav');
+  var overlayToggle = document.getElementById('toggle-overlay');
+  var overlayMode = overlayToggle ? overlayToggle.checked : true;
   if (files.length > 1 && sel) {
-    nav.style.display = '';
+    nav.style.display = overlayMode ? 'none' : '';
     sel.innerHTML = '';
+    // Add "All" option for overlay
+    var allOpt = document.createElement('option');
+    allOpt.value = '-1';
+    allOpt.textContent = 'All';
+    sel.appendChild(allOpt);
     for (var si = 0; si < files.length; si++) {
       var opt = document.createElement('option');
       opt.value = si;
@@ -2548,7 +2561,7 @@ function updateSelectedDevice(d) {
         opt.textContent = files[si].label;
       sel.appendChild(opt);
     }
-    sel.value = '-1'; // overlay all
+    sel.value = overlayMode ? '-1' : '0';
   } else if (sel) {
     nav.style.display = 'none';
   }
@@ -2576,6 +2589,18 @@ document.querySelectorAll('#colormap-radio input[type=radio]').forEach(function(
     document.getElementById('heatmap-metric').value = metric;
     drawHeatmap(metric);
   });
+});
+
+// ── Overlay toggle: show/hide cycle nav
+document.getElementById('toggle-overlay').addEventListener('change', function() {
+  var nav = document.getElementById('cycle-nav');
+  if (nav) nav.style.display = this.checked ? 'none' : '';
+  if (selectedCell) drawIVPlot(selectedCell);
+});
+
+// ── Color by cycle toggle
+document.getElementById('toggle-colorcycle').addEventListener('change', function() {
+  if (selectedCell) drawIVPlot(selectedCell);
 });
 
 // ── Sweep cycle navigation
@@ -2619,26 +2644,32 @@ function drawIVPlot(deviceInfo) {
     return;
   }
 
-  var traces = [];
-  var colors = [
-    'rgba(0,180,220,0.7)',
-    'rgba(220,80,80,0.7)',
-    'rgba(100,200,120,0.7)',
-    'rgba(200,180,60,0.7)',
-    'rgba(160,100,220,0.7)',
-    'rgba(100,180,200,0.7)',
-    'rgba(220,140,60,0.7)',
-    'rgba(140,200,160,0.7)',
-  ];
-
+  var overlayMode = document.getElementById('toggle-overlay') ? document.getElementById('toggle-overlay').checked : true;
+  var colorByCycle = document.getElementById('toggle-colorcycle') ? document.getElementById('toggle-colorcycle').checked : true;
   var currentSweepIdx = document.getElementById('sweep-select') ? parseInt(document.getElementById('sweep-select').value) : -1;
-  var isSingleSweep = currentSweepIdx >= 0 && currentSweepIdx < files.length;
+  var isSingleSweep = !overlayMode && currentSweepIdx >= 0 && currentSweepIdx < files.length;
   var sweepIdx = isSingleSweep ? currentSweepIdx : -1;
+  var total = isSingleSweep ? 1 : files.length;
+
+  // Color gradient from blue (early) → cyan → teal → red (late)
+  function cycleColor(idx, total) {
+    var t = total > 1 ? idx / (total - 1) : 0.5;
+    var r = Math.round(30 + 200 * t);
+    var g = Math.round(180 - 120 * t);
+    var b = Math.round(220 - 180 * t);
+    return 'rgba(' + r + ',' + g + ',' + b + ',0.8)';
+  }
+
+  var traces = [];
+  var fileName = '';
 
   for (var i = 0; i < files.length; i++) {
     if (isSingleSweep && i !== sweepIdx) continue;
     var f = files[i];
-    var color = colors[i % colors.length];
+    // Determine trace color: by cycle index if colorByCycle, else by position
+    var tIdx = isSingleSweep ? currentSweepIdx : i;
+    var color = colorByCycle ? cycleColor(tIdx, files.length) : 'rgba(0,180,220,0.8)';
+
     var posV = [], posI = [], negV = [], negI = [];
     for (var j = 0; j < f.voltage.length; j++) {
       var v = f.voltage[j];
@@ -2647,45 +2678,60 @@ function drawIVPlot(deviceInfo) {
       if (v >= 0) { posV.push(v); posI.push(absI); }
       else { negV.push(v); negI.push(absI); }
     }
+    var traceName = f.label || ('#'+ (i+1));
+    fileName = traceName;
     if (posV.length > 0) {
       traces.push({
         x: posV, y: posI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: isSingleSweep ? 1.8 : 1.0, shape: 'spline' },
-        name: f.label || ('#'+ (i+1)),
+        line: { color: color, width: isSingleSweep ? 1.8 : 1.2 },
+        name: traceName, legendgroup: 'iv',
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
       });
     }
     if (negV.length > 0) {
       traces.push({
         x: negV, y: negI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: isSingleSweep ? 1.8 : 1.0, dash: 'dash' },
-        showlegend: false,
+        line: { color: color, width: isSingleSweep ? 1.8 : 1.2, dash: 'dash' },
+        showlegend: false, legendgroup: 'iv',
         hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
       });
     }
 
-    // Per-file Vset/Vreset markers at actual switching current
+    // Per-file Vset/Vreset markers
     if (f.v_set != null && f.i_set != null) {
-      var iAbs = Math.abs(f.i_set);
       traces.push({
-        x: [f.v_set], y: [iAbs], type: 'scatter', mode: 'markers+text',
+        x: [f.v_set], y: [Math.abs(f.i_set)], type: 'scatter', mode: 'markers+text',
         marker: { color: '#ef4444', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
         text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
-        name: 'Vset', showlegend: i === 0,
-        hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + iAbs.toFixed(3) + ' A<extra></extra>'
+        name: 'Vset', showlegend: traces.length === 0,
+        hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_set).toFixed(3) + ' A<extra></extra>'
       });
     }
     if (f.v_reset != null && f.i_reset != null) {
-      var rAbs = Math.abs(f.i_reset);
       var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
       traces.push({
-        x: [rSign], y: [rAbs], type: 'scatter', mode: 'markers+text',
+        x: [rSign], y: [Math.abs(f.i_reset)], type: 'scatter', mode: 'markers+text',
         marker: { color: '#3b82f6', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
         text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
-        name: 'Vreset', showlegend: i === 0,
-        hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + rAbs.toFixed(3) + ' A<extra></extra>'
+        name: 'Vreset', showlegend: traces.length === 0,
+        hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_reset).toFixed(3) + ' A<extra></extra>'
       });
     }
+    if (isSingleSweep) break;
+  }
+
+  // Color bar trace for cycle index when colorByCycle is on
+  if (colorByCycle && files.length > 1 && !isSingleSweep) {
+    traces.push({
+      x: [null], y: [null], type: 'scatter', mode: 'markers',
+      marker: {
+        colorscale: [[0, 'rgb(30,180,220]'], [1, 'rgb(230,60,40)']],
+        cmin: 1, cmax: files.length,
+        colorbar: { title: { text: 'Cycle', font: { size: 9 } }, tickfont: { size: 8 }, len: 0.4, thickness: 8 },
+        size: 0
+      },
+      showlegend: false, hoverinfo: 'none'
+    });
   }
 
   Plotly.react('iv-plot', traces, {
