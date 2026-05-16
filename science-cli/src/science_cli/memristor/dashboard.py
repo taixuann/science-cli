@@ -672,7 +672,7 @@ def _build_html(
           </div>
           <div class="panel-body" style="padding-top:6px">
             <div id="heatmap-plot" style="height:300px;width:100%"></div>
-            <div id="selected-device-info" style="display:flex;gap:8px;margin-top:4px;padding:4px 6px;background:var(--bg-card);border-radius:4px;border:1px solid var(--border);font-size:10px;min-height:24px;align-items:center">
+            <div id="selected-device-info" style="margin-top:4px;padding:6px 8px;background:var(--bg-card);border-radius:4px;border:1px solid var(--border);font-size:10px;min-height:20px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
           </div>
@@ -689,7 +689,7 @@ def _build_html(
               <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer">
                 <input type="checkbox" id="toggle-overlay" checked style="accent-color:var(--accent)"> Overlay
               </label>
-              <div id="cycle-nav" style="display:none;display:flex;align-items:center;gap:3px">
+              <div id="cycle-nav" style="display:none;align-items:center;gap:3px">
                 <button id="sweep-prev" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9664;</button>
                 <select id="sweep-select" style="width:60px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);padding:1px 2px;border-radius:3px;font-size:10px"></select>
                 <button id="sweep-next" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9654;</button>
@@ -702,9 +702,9 @@ def _build_html(
               <div class="tab" onclick="switchTab('raw', this)">Raw</div>
             </div>
           </div>
-          <div class="panel-body" style="padding:0">
-            <div id="iv-plot" style="height:330px"></div>
-            <div id="tab-placeholder" style="display:none;height:330px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-family:'DM Sans',sans-serif"></div>
+          <div class="panel-body" style="padding:0;flex:1;min-height:0">
+            <div id="iv-plot" style="width:100%;height:100%;min-height:280px"></div>
+            <div id="tab-placeholder" style="display:none;width:100%;height:100%;min-height:280px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:12px;font-family:'DM Sans',sans-serif"></div>
           </div>
         </div>
 
@@ -2533,7 +2533,7 @@ function drawHeatmap(metric) {
     paper_bgcolor: PAPER_BG, plot_bgcolor: PLOT_BG,
     font: { color: FONT_COLOR, family: 'JetBrains Mono, monospace', size: 10 },
     margin: { t: 22, r: 70, b: 26, l: 30 },
-    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Column', tickfont: { size: 8 }, showgrid: false, side: 'top' },
+    xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Column', tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0, tickmode: 'array', tickvals: labels.slice(0, cols), ticktext: labels.slice(0, cols) },
     yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
     height: 300
   }, plotConfig);
@@ -2577,19 +2577,15 @@ function updateSelectedDevice(d) {
   var infoDiv = document.getElementById('selected-device-info');
   if (infoDiv) {
     infoDiv.innerHTML =
-      '<span style="font-weight:600;color:var(--accent)">'+rc+'</span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>'+ (d.material||'unknown') +'</span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>'+ (d.n_files||0)+' files</span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
-      '<span style="color:var(--text-dim)">|</span>'+
-      '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>';
+      '<div style="display:flex;flex-wrap:wrap;gap:3px 12px">'+
+        '<span style="font-weight:600;color:var(--accent)">'+rc+'</span>'+
+        '<span>'+ (d.material||'unknown') +'</span>'+
+        '<span>'+ (d.n_files||0)+' files</span>'+
+        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
+        '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+        '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+        '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
+      '</div>';
   }
   document.getElementById('iv-device-badge').textContent = rc;
   drawIVPlot(d);
@@ -2601,9 +2597,8 @@ function updateSelectedDevice(d) {
   var overlayToggle = document.getElementById('toggle-overlay');
   var overlayMode = overlayToggle ? overlayToggle.checked : true;
   if (files.length > 1 && sel) {
-    nav.style.display = overlayMode ? 'none' : '';
+    nav.style.display = overlayMode ? 'none' : 'flex';
     sel.innerHTML = '';
-    // Add "All" option for overlay
     var allOpt = document.createElement('option');
     allOpt.value = '-1';
     allOpt.textContent = 'All';
@@ -2641,7 +2636,12 @@ document.getElementById('header-material').addEventListener('change', onMaterial
 
 document.getElementById('toggle-overlay').addEventListener('change', function() {
   var nav = document.getElementById('cycle-nav');
-  if (nav) nav.style.display = this.checked ? 'none' : '';
+  if (nav) nav.style.display = this.checked ? 'none' : 'flex';
+  // When turning off overlay, reset sweep to first
+  if (!this.checked) {
+    var sel = document.getElementById('sweep-select');
+    if (sel && sel.options.length > 1) sel.value = '0';
+  }
   if (selectedCell) drawIVPlot(selectedCell);
 });
 
@@ -2817,9 +2817,10 @@ function drawIVPlot(deviceInfo) {
     });
   }
 
+  var plotHeight = Math.max(280, document.getElementById('iv-plot').clientHeight || 330);
   Plotly.react('iv-plot', traces, {
     ...baseLayout,
-    height: 330,
+    height: plotHeight,
     margin: { t: 10, r: 140, b: 40, l: 60 },
     xaxis: {
       ...baseLayout.xaxis, title: { text: 'Voltage (V)', font: { size: 10 } },
@@ -3040,7 +3041,9 @@ window.addEventListener('load', init);
 window.addEventListener('resize', function() {
   ['heatmap-plot','iv-plot','hist-vset','hist-vreset','hist-ratio','cycle-plot','conf-plot'].forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) { try { Plotly.Plots.resize(el); } catch(e) {} }
+    if (el && el.layout) Plotly.Plots.resize(el);
   });
+  if (selectedCell) drawIVPlot(selectedCell);
+});
 });
 """
