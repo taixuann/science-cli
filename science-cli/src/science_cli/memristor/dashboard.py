@@ -655,7 +655,7 @@ def _build_html(
       <div class="main-row">
 
         <!-- HEATMAP -->
-        <div class="panel-card">
+        <div class="panel-card heatmap-card">
           <div class="panel-header">
             <div class="panel-title">Crossbar Heatmap</div>
             <div class="panel-badge" id="heatmap-badge">ON/OFF Ratio</div>
@@ -671,15 +671,15 @@ def _build_html(
             </select>
           </div>
           <div class="panel-body" style="padding-top:6px">
-            <div id="heatmap-plot" style="height:300px;width:100%"></div>
-            <div id="selected-device-info" style="margin-top:4px;padding:6px 8px;background:var(--bg-card);border-radius:4px;border:1px solid var(--border);font-size:10px;min-height:20px">
+            <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
+            <div id="selected-device-info" style="margin-top:4px;padding:8px 10px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.8;min-height:24px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
           </div>
         </div>
 
         <!-- IV OVERLAY -->
-        <div class="panel-card">
+        <div class="panel-card iv-card">
           <div class="panel-header">
             <div class="panel-title">Device Explorer</div>
             <span id="iv-device-badge" class="panel-badge">—</span>
@@ -2150,7 +2150,9 @@ input[type=range]::-webkit-slider-thumb {
 /* ── MAIN AREA ── */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 #main .panel-body { flex: 1; min-height: 0; }
-#main .panel-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#main .panel-card { display: flex; flex-direction: column; min-height: 0; }
+#main .panel-card.heatmap-card { flex: 4; }
+#main .panel-card.iv-card { flex: 6; }
 #heatmap { width: 100%; height: 100%; min-height: 300px; }
 #iv-plot { width: 100%; height: 100%; min-height: 280px; }
 
@@ -2535,7 +2537,7 @@ function drawHeatmap(metric) {
     margin: { t: 22, r: 70, b: 26, l: 30 },
     xaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: { text: 'Column', standoff: 12 }, tickfont: { size: 8 }, showgrid: false, side: 'top', tickangle: 0 },
     yaxis: { gridcolor: GRID_COLOR, zerolinecolor: AXIS_COLOR, linecolor: AXIS_COLOR, tickcolor: AXIS_COLOR, title: 'Row', tickfont: { size: 8 }, showgrid: false, autorange: false, range: [-0.5, rows - 0.5] },
-    height: 300
+    height: Math.max(300, document.getElementById('heatmap-plot').clientHeight || 380)
   }, plotConfig);
 
   var heatmapEl = document.getElementById('heatmap-plot');
@@ -2577,21 +2579,21 @@ function updateSelectedDevice(d) {
   var infoDiv = document.getElementById('selected-device-info');
   if (infoDiv) {
     infoDiv.innerHTML =
-      '<div style="font-size:10px;line-height:1.7">'+
-        '<span style="font-weight:600;color:var(--accent);font-size:11px">'+rc+'</span><br>'+
-        '<span>'+ (d.material||'unknown') +'</span><br>'+
-        '<span>'+ (d.n_files||0)+' files</span><br>'+
-        '<span>ON/OFF: <b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span><br>'+
-        '<span>Vset: <b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span><br>'+
-        '<span>Vreset: <b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span><br>'+
-        '<span>Switching: '+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
+      '<div style="font-family:\'DM Sans\',sans-serif;font-size:10px;line-height:1.8">'+
+        '<div style="font-weight:600;color:var(--accent);font-size:12px;margin-bottom:2px">'+rc+' — '+(d.material||'unknown')+'</div>'+
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:1px 10px">'+
+          '<span style="color:var(--text-dim)">Files</span><span>'+(d.n_files||0)+'</span>'+
+          '<span style="color:var(--text-dim)">ON/OFF</span><span><b>'+(d.ratio != null ? d.ratio.toExponential(2) : 'N/A')+'</b></span>'+
+          '<span style="color:var(--text-dim)">Vset</span><span><b style="color:#ef4444">'+(d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+          '<span style="color:var(--text-dim)">Vreset</span><span><b style="color:#3b82f6">'+(d.v_reset != null ? d.v_reset.toFixed(2)+' V' : 'N/A')+'</b></span>'+
+          '<span style="color:var(--text-dim)">Switching</span><span>'+(d.switching ? '<b style="color:#22c55e">Yes</b>' : '<b style="color:#ef4444">No</b>')+'</span>'+
+        '</div>'+
       '</div>';
   }
   document.getElementById('iv-device-badge').textContent = rc;
 
   // Populate sweep cycle selector FIRST, then draw IV plot
-  var cellId = rc + '_' + (d.material || '');
-  var files = IV_RAW_DATA[cellId] || [];
+  var files = IV_RAW_DATA[rc] || [];
   var sel = document.getElementById('sweep-select');
   var nav = document.getElementById('cycle-nav');
   var overlayToggle = document.getElementById('toggle-overlay');
