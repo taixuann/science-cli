@@ -638,23 +638,20 @@ def _build_html(
         <div class="panel-card heatmap-card">
           <div class="panel-header">
             <div class="panel-title">Crossbar Heatmap</div>
-            <div class="panel-badge" id="heatmap-badge">ON/OFF Ratio</div>
             <div class="panel-spacer"></div>
-            <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;margin-right:8px;cursor:pointer">
+            <select id="heatmap-metric" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:1px 6px;border-radius:4px;font-size:10px;margin-right:6px">
+              <option>ON/OFF Ratio</option>
+              <option>Vset (V)</option>
+              <option>Vreset (V)</option>
+              <option>Yield (%)</option>
+            </select>
+            <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;margin-right:6px;cursor:pointer">
               <input type="checkbox" id="toggle-log" checked style="accent-color:var(--accent)"> Log
             </label>
+            <span class="panel-badge" id="heatmap-badge">ON/OFF Ratio</span>
           </div>
           <div class="panel-body" style="padding-top:6px">
             <div id="heatmap-plot" style="height:100%;width:100%;min-height:300px"></div>
-            <div style="display:flex;gap:8px;margin-top:4px;align-items:center">
-              <select id="heatmap-metric" style="background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:2px 6px;border-radius:4px;font-size:10px">
-                <option>ON/OFF Ratio</option>
-                <option>Vset (V)</option>
-                <option>Vreset (V)</option>
-                <option>Yield (%)</option>
-              </select>
-              <span style="font-size:9px;color:var(--text-dim)">Color map</span>
-            </div>
             <div id="selected-device-info" style="margin-top:4px;padding:8px 10px;background:var(--bg-card2);border-radius:4px;border:1px solid var(--border);font-size:10px;line-height:1.8;min-height:24px">
               <span style="color:var(--text-dim)">Click a cell to select</span>
             </div>
@@ -2731,26 +2728,32 @@ function drawIVPlot(deviceInfo) {
       });
     }
 
-    // Per-file Vset/Vreset markers (only show legend in single-cycle mode)
+    // Per-file Vset/Vreset markers — visible in both modes, legend only in single-cycle
     var showMarkerLegend = isSingleSweep;
     if (f.v_set != null && f.i_set != null) {
-      traces.push({
-        x: [f.v_set], y: [Math.abs(f.i_set)], type: 'scatter', mode: 'markers+text',
-        marker: { color: '#ef4444', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
-        text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
-        name: 'Vset', showlegend: showMarkerLegend,
-        hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_set).toFixed(3) + ' A<extra></extra>'
-      });
+      var iAbs = Math.abs(f.i_set);
+      if (iAbs > 0) {
+        traces.push({
+          x: [f.v_set], y: [iAbs], type: 'scatter', mode: 'markers+text',
+          marker: { color: '#ef4444', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+          text: [isSingleSweep ? 'Vset' : ''], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
+          name: 'Vset', showlegend: showMarkerLegend,
+          hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + iAbs.toFixed(3) + ' A<extra></extra>'
+        });
+      }
     }
     if (f.v_reset != null && f.i_reset != null) {
-      var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
-      traces.push({
-        x: [rSign], y: [Math.abs(f.i_reset)], type: 'scatter', mode: 'markers+text',
-        marker: { color: '#3b82f6', size: 10, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
-        text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
-        name: 'Vreset', showlegend: showMarkerLegend,
-        hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + Math.abs(f.i_reset).toFixed(3) + ' A<extra></extra>'
-      });
+      var rAbs = Math.abs(f.i_reset);
+      if (rAbs > 0) {
+        var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
+        traces.push({
+          x: [rSign], y: [rAbs], type: 'scatter', mode: 'markers+text',
+          marker: { color: '#3b82f6', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
+          text: [isSingleSweep ? 'Vreset' : ''], textposition: 'top center', textfont: { size: 9, color: '#3b82f6', weight: 'bold' },
+          name: 'Vreset', showlegend: showMarkerLegend,
+          hovertemplate: 'Vreset = ' + f.v_reset.toFixed(3) + ' V<br>I = ' + rAbs.toFixed(3) + ' A<extra></extra>'
+        });
+      }
     }
     if (isSingleSweep) break;
   }
