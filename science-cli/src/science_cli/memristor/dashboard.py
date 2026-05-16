@@ -585,14 +585,10 @@ def _build_html(
     <!-- HEADER -->
     <header id="header">
       <div>
-        <div class="header-title">{device_label}</div>
-        <div class="header-subtitle">{device_id} / {rows}x{cols} Crossbar / IV Measurement</div>
+        <div class="header-title" id="header-title">{rows}x{cols} Crossbar</div>
+        <div class="header-subtitle" id="header-subtitle">IV Sweep Characterization</div>
       </div>
       <div class="header-sep"></div>
-      <div class="header-label">
-        <span>Meas. Type</span>
-        <select class="header-select"><option>IV</option><option>Pulse</option><option>Retention</option></select>
-      </div>
       <div class="header-label">
         <span>Material</span>
         <select class="header-select" id="header-material"><option>All</option></select>
@@ -601,23 +597,7 @@ def _build_html(
         <span>Matrix</span>
         <select class="header-select"><option>{rows}x{cols}</option></select>
       </div>
-      <div class="header-label">
-        <span>Generated</span>
-        <select class="header-select"><option>{date_str}</option></select>
-      </div>
       <div class="header-spacer"></div>
-      <div class="search-box">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" id="device-search" placeholder="Search device..." oninput="onSearch(this.value)">
-      </div>
-      <button class="icon-btn" onclick="location.reload()">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-8.64"/></svg>
-        Refresh
-      </button>
-      <button class="export-btn">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export Report
-      </button>
       <div class="device-badge">
         <div class="badge-dot"></div>
         <span class="badge-text" id="badge-count">{aggregate["measured_cells"]} Devices</span>
@@ -2400,6 +2380,9 @@ function switchMaterial(mat) {
         break;
       }
     }
+    // Update header title to show current material
+    var titleEl = document.getElementById('header-title');
+    if (titleEl) titleEl.textContent = mat;
     // Refresh UI
     var metric = document.getElementById('heatmap-metric').value;
     drawHeatmap(metric);
@@ -2443,7 +2426,8 @@ var plotConfig = {
 function getMetricValue(d, metric) {
   if (!d) return null;
   if (d.failed) return null;
-  if (metric === 'ON/OFF Ratio') return d.ratio ? Math.log10(d.ratio) : null;
+  var useLog = document.getElementById('toggle-log') ? document.getElementById('toggle-log').checked : true;
+  if (metric === 'ON/OFF Ratio') return d.ratio ? (useLog ? Math.log10(d.ratio) : d.ratio) : null;
   if (metric === 'Vset (V)') return d.v_set;
   if (metric === 'Vreset (V)') return d.v_reset;
   if (metric === 'Yield (%)') return d.switching ? 100 : 0;
