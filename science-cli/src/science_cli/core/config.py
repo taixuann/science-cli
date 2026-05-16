@@ -452,24 +452,45 @@ def list_global_devices() -> list[str]:
 def get_global_technique_config(technique_name: str) -> dict | None:
     """Look up a technique config from the global registry.
 
-    Checks:
-        1. Hardcoded default technique configs
-        2. Global config (~/.config/science-cli/config.yaml → techniques: section)
+    Resolution order:
+        1. Start with hardcoded default technique configs
+        2. Overlay with global config (~/.config/science-cli/config.yaml → techniques:)
 
     Returns dict with: patterns, label, grammar_codes, types, default_device
     or None if not found.
     """
-    # Check hardcoded defaults
-    if technique_name in _DEFAULT_GLOBAL_TECHNIQUES:
-        return dict(_DEFAULT_GLOBAL_TECHNIQUES[technique_name])
-
-    # Check global config
+    cfg = dict(_DEFAULT_GLOBAL_TECHNIQUES.get(technique_name, {}))
     global_cfg = load_global_config()
     tech_section = global_cfg.get("techniques", {})
-    cfg = tech_section.get(technique_name)
-    if cfg:
-        return dict(cfg)
+    user_cfg = tech_section.get(technique_name)
+    if user_cfg:
+        cfg.update(user_cfg)
+    return cfg if cfg else None
 
+
+def resolve_technique_from_grammar(
+    grammar_code: str, project_root: Path | None = None
+) -> str | None:
+    """Map a grammar code (e.g. 'iv', 'iv-sweep', 'iv_dc') to a technique config key.
+
+    Checks:
+        1. Global technique registry (hardcoded + config.yaml) for grammar_codes match
+        2. Direct technique name match as fallback
+    Returns the technique key (e.g. 'iv-sweep') or None.
+    """
+    # Collect all technique configs from hardcoded + global config
+    techs: dict[str, dict] = dict(_DEFAULT_GLOBAL_TECHNIQUES)
+    global_cfg = load_global_config()
+    for key, val in global_cfg.get("techniques", {}).items():
+        if key in techs:
+            techs[key].update(val)
+        else:
+            techs[key] = val
+
+    for tech_name, tech_cfg in techs.items():
+        codes = tech_cfg.get("grammar_codes", [])
+        if grammar_code in codes or grammar_code == tech_name:
+            return tech_name
     return None
 
 

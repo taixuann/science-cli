@@ -340,6 +340,12 @@ def cmd_init(args: argparse.Namespace) -> None:
     from science_cli.core.technique import detect_technique
     tech_map = _build_tech_map()
 
+    # Read protocol YAML to auto-resolve step → technique/device
+    import yaml
+    proto_yaml = pdir / f"{pdir.name}.yaml"
+    proto_data = yaml.safe_load(open(proto_yaml)) if proto_yaml.exists() else {}
+    step_meta = {s["name"]: s for s in proto_data.get("steps", [])}
+
     steps: dict[str, str] = {}
     raw = getattr(args, "steps", "") or ""
     if raw:
@@ -351,12 +357,17 @@ def cmd_init(args: argparse.Namespace) -> None:
                 tech, step_dir_name = part.split(":", 1)
                 steps[tech.strip()] = step_dir_name.strip()
             else:
-                ft = detect_technique(part)
-                tech = tech_map.get(ft, "")
-                if tech:
-                    steps[tech] = part
+                # Try protocol YAML metadata first
+                meta = step_meta.get(part)
+                if meta and meta.get("technique"):
+                    steps[meta["technique"]] = part
                 else:
-                    print(f"  Warning: could not infer technique from '{part}', skipping")
+                    ft = detect_technique(part)
+                    tech = tech_map.get(ft, "")
+                    if tech:
+                        steps[tech] = part
+                    else:
+                        print(f"  Warning: could not infer technique from '{part}', skipping")
 
     config = DeviceConfig(
         device=DeviceGeometry(
@@ -1432,14 +1443,18 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
         sys.exit(1)
     config = read_devices(pdir)
 
-    # Resolve results directory
-    step_dir_name = config.steps.get("iv", "4_iv-characterization")
+    # Resolve results directory: try the first step from mapping
+    step_dir_name = "4_iv"
+    for tech_key in ("iv-sweep", "iv"):
+        if tech_key in config.steps:
+            step_dir_name = config.steps[tech_key]
+            break
+
     results_dir = pdir / step_dir_name / "results"
 
     if not results_dir.exists():
-        print(f"Results directory not found: {results_dir}")
-        print("Run 'memristor plot --all' first.")
-        sys.exit(1)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        print(f"  Created results directory: {results_dir}")
 
     # Determine output path
     if args.output:
