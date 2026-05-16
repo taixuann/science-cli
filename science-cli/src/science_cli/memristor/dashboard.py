@@ -688,6 +688,10 @@ def _build_html(
                 <button id="sweep-next" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9654;</button>
               </div>
             </div>
+            <div style="display:flex;align-items:center;gap:2px;margin-right:6px">
+              <span class="scale-btn active" data-scale="iv" onclick="setIVScale('iv')">IV</span>
+              <span class="scale-btn" data-scale="lnln" onclick="setIVScale('lnln')">ln-ln</span>
+            </div>
             <div class="tab-bar">
               <div class="tab active" onclick="switchTab('iv', this)">IV</div>
               <div class="tab" onclick="switchTab('params', this)">Params</div>
@@ -2282,6 +2286,14 @@ input[type=range]::-webkit-slider-thumb {
 }
 .tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
 .tab.active { background: rgba(0,212,255,0.1); color: var(--cyan); border-color: rgba(0,212,255,0.2); }
+.scale-btn {
+  padding: 3px 8px; border-radius: 4px; cursor: pointer;
+  font-size: 10px; color: var(--text-dim); transition: all 0.15s;
+  border: 1px solid var(--border); background: var(--bg-surface);
+  user-select: none;
+}
+.scale-btn:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.scale-btn.active { background: rgba(0,212,255,0.12); color: var(--cyan); border-color: var(--cyan); }
 
 /* ── HISTOGRAM ROW ── */
 .hist-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -2373,6 +2385,7 @@ var CURRENT_MATERIAL = '';
 
 var selectedCellId = null;
 var selectedCell = null;
+var ivScaleMode = 'iv';
 
 function switchMaterial(mat) {
   CURRENT_MATERIAL = mat;
@@ -2682,7 +2695,13 @@ document.getElementById('sweep-next').addEventListener('click', function() {
 //  IV OVERLAY PLOT (Real Data)
 // ══════════════════════════════════════════════════════
 
-var currentTab = 'iv';
+function setIVScale(mode) {
+  ivScaleMode = mode;
+  document.querySelectorAll('.scale-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.scale === mode);
+  });
+  if (currentDevice) drawIVPlot(currentDevice);
+}
 
 function drawIVPlot(deviceInfo) {
   var cellId = 'R'+(deviceInfo.row+1)+'C'+(deviceInfo.col+1);
@@ -2698,6 +2717,7 @@ function drawIVPlot(deviceInfo) {
     return;
   }
 
+  var isLn = ivScaleMode === 'lnln';
   var overlayMode = document.getElementById('toggle-overlay') ? document.getElementById('toggle-overlay').checked : true;
   var currentSweepIdx = document.getElementById('sweep-select') ? parseInt(document.getElementById('sweep-select').value) : -1;
   var isSingleSweep = !overlayMode && currentSweepIdx >= 0 && currentSweepIdx < files.length;
@@ -2731,22 +2751,36 @@ function drawIVPlot(deviceInfo) {
       else { negV.push(v); negI.push(absI); }
     }
     if (!isSingleSweep) {
-      // Overlay mode: draw regular traces
-      if (posV.length > 0) {
-        traces.push({
-          x: posV, y: posI, type: 'scatter', mode: 'lines',
-          line: { color: color, width: 1.2 },
-          name: 'IV', showlegend: false,
-          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
-        });
-      }
-      if (negV.length > 0) {
-        traces.push({
-          x: negV, y: negI, type: 'scatter', mode: 'lines',
-          line: { color: color, width: 1.2, dash: 'dash' },
-          showlegend: false,
-          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
-        });
+      if (isLn) {
+        // ln-ln: merge both branches into single |V| trace
+        var allV = [], allI = [];
+        for (var j = 0; j < posV.length; j++) { allV.push(posV[j]); allI.push(posI[j]); }
+        for (var j = 0; j < negV.length; j++) { allV.push(Math.abs(negV[j])); allI.push(negI[j]); }
+        if (allV.length > 0) {
+          traces.push({
+            x: allV, y: allI, type: 'scatter', mode: 'lines',
+            line: { color: color, width: 1.2 },
+            name: 'IV', showlegend: false,
+            hovertemplate: '|V|: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+          });
+        }
+      } else {
+        if (posV.length > 0) {
+          traces.push({
+            x: posV, y: posI, type: 'scatter', mode: 'lines',
+            line: { color: color, width: 1.2 },
+            name: 'IV', showlegend: false,
+            hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+          });
+        }
+        if (negV.length > 0) {
+          traces.push({
+            x: negV, y: negI, type: 'scatter', mode: 'lines',
+            line: { color: color, width: 1.2, dash: 'dash' },
+            showlegend: false,
+            hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+          });
+        }
       }
     }
 
@@ -2764,7 +2798,7 @@ function drawIVPlot(deviceInfo) {
     var vsetI = f.i_set != null ? Math.abs(f.i_set) : traceCurrentAt(f.v_set, f.voltage, f.current);
     if (f.v_set != null && vsetI != null && vsetI > 0) {
       traces.push({
-        x: [f.v_set], y: [vsetI], type: 'scatter', mode: 'markers+text',
+        x: [isLn ? Math.abs(f.v_set) : f.v_set], y: [vsetI], type: 'scatter', mode: 'markers+text',
         marker: { color: '#ef4444', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
         text: [isSingleSweep ? 'Vset' : ''], textposition: 'top center', textfont: { size: 9, color: '#ef4444', weight: 'bold' },
         name: 'Vset', showlegend: showMarkerLegend,
@@ -2773,7 +2807,7 @@ function drawIVPlot(deviceInfo) {
     }
     var vresetI = f.i_reset != null ? Math.abs(f.i_reset) : traceCurrentAt(f.v_reset, f.voltage, f.current);
     if (f.v_reset != null && vresetI != null && vresetI > 0) {
-      var rSign = f.v_reset < 0 ? f.v_reset : -f.v_reset;
+      var rSign = isLn ? Math.abs(f.v_reset) : (f.v_reset < 0 ? f.v_reset : -f.v_reset);
       traces.push({
         x: [rSign], y: [vresetI], type: 'scatter', mode: 'markers+text',
         marker: { color: '#3b82f6', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
@@ -2797,7 +2831,7 @@ function drawIVPlot(deviceInfo) {
         for (var j = si; j < ei; j++) {
           var absI = Math.abs(f.current[j]);
           if (absI < 1e-14) continue;
-          segV.push(f.voltage[j]);
+          segV.push(isLn ? Math.abs(f.voltage[j]) : f.voltage[j]);
           segI.push(absI);
         }
         if (segV.length < 2) continue;
@@ -2808,7 +2842,7 @@ function drawIVPlot(deviceInfo) {
         traces.push({
           x: segV, y: segI, type: 'scatter', mode: 'lines',
           line: { color: 'rgba(' + r + ',' + g + ',' + b + ',0.9)', width: 1.8 },
-          showlegend: false, hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+          showlegend: false, hovertemplate: (isLn ? '|V|' : 'V') + ': %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
         });
       }
       // Color bar
@@ -2842,7 +2876,8 @@ function drawIVPlot(deviceInfo) {
     height: 400,
     margin: { t: 10, r: 140, b: 40, l: 60 },
     xaxis: {
-      ...baseLayout.xaxis, title: { text: 'Voltage (V)', font: { size: 10 } },
+      ...baseLayout.xaxis, title: { text: isLn ? '|Voltage| (V)' : 'Voltage (V)', font: { size: 10 } },
+      type: isLn ? 'log' : 'linear',
       zeroline: true, zerolinecolor: 'rgba(100,150,200,0.3)',
       tickfont: { size: 9 }
     },
