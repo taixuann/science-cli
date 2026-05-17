@@ -16,11 +16,10 @@
 !/.codegraph
 !/documentation
 
-# Ignore AGENTS.md, PLAN files, test artifacts
+# Ignore AGENTS.md files, generated PLAN files at root level, test artifacts
 AGENTS.md
 **/AGENTS.md
-PLAN-*.md
-documentation/plans/
+/PLAN-*.md
 tests/
 test_*.py
 theme-previews/

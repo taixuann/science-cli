@@ -378,9 +378,15 @@ Separator is hardcoded to `_` (underscore) — not configurable.
 # Install in editable mode
 pip install -e .
 
-# Run tests (140 total — 78 unit + 19 guardrail + 43 integration)
+# Run tests
 pytest tests/ -v
 ```
+
+## Acknowledgments
+
+This project was developed with assistance from [OpenCode](https://opencode.ai) —
+an AI-powered coding assistant that helped implement features, write tests,
+refactor code, and maintain documentation throughout the development lifecycle.
 
 ## License
 
