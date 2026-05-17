@@ -76,7 +76,8 @@ def _add_project(args: list) -> None:
     from science_cli.core.project import _get_projects_root
     from science_cli.core.session import set_last_project
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name).strip().lower().replace(" ", "_")
+    from science_cli.core.paths import sanitize_name, sanitize_project_name
+    safe_name = sanitize_project_name(name).strip().lower().replace(" ", "_")
     if not safe_name:
         console.print("[red]Invalid project name.[/red]")
         return
@@ -137,7 +138,8 @@ def _add_protocol(args: list) -> None:
         console.print("[yellow]No project open. Use 'add -m project <name>' to create one, or 'open -m project <name>' to open one.[/yellow]")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     paths = ProjectPaths(proj)
     paths.protocol_dir.mkdir(parents=True, exist_ok=True)
 
@@ -196,7 +198,10 @@ def _add_metadata(args: list) -> None:
         console.print("[yellow]Required: --step (step ID(s), comma-separated)[/yellow]")
         return
     if not protocol_name:
-        console.print("[yellow]Required: -pt / --protocol (protocol name)[/yellow]")
+        from science_cli.core.session import load_session
+        protocol_name = load_session().get("last_protocol", "")
+    if not protocol_name:
+        console.print("[yellow]Required: -pt / --protocol (protocol name), or open a protocol first[/yellow]")
         return
 
     from science_cli.core.project import get_current_project_path
@@ -206,7 +211,8 @@ def _add_metadata(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in protocol_name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(protocol_name)
     paths = ProjectPaths(proj)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():

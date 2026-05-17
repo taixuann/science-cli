@@ -74,7 +74,8 @@ def _edit_protocol(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     paths = ProjectPaths(proj)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():
@@ -91,7 +92,7 @@ def _edit_protocol(args: list) -> None:
     devs_raw = flags.get("d") or flags.get("device")
 
     if new_name:
-        safe_new = "".join(c if c.isalnum() or c in "-_" else "_" for c in new_name)
+        safe_new = sanitize_protocol_name(new_name)
         data["name"] = safe_new
         new_path = paths.protocol_yaml_new(safe_new)
         new_path.parent.mkdir(parents=True, exist_ok=True)
@@ -204,7 +205,10 @@ def _edit_metadata(args: list) -> None:
     files_raw = flags.get("files")
 
     if not name:
-        console.print("[yellow]Required: -n / --name (protocol name)[/yellow]")
+        from science_cli.core.session import load_session
+        name = load_session().get("last_protocol", "")
+    if not name:
+        console.print("[yellow]Required: -n / --name (protocol name), or open a protocol first[/yellow]")
         return
 
     from science_cli.core.project import get_current_project_path
@@ -214,7 +218,8 @@ def _edit_metadata(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     paths = ProjectPaths(proj)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():

@@ -80,7 +80,8 @@ def _open_project(name: str) -> None:
         restore_context_state,
     )
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name).strip().lower().replace(" ", "_")
+    from science_cli.core.paths import sanitize_project_name
+    safe_name = sanitize_project_name(name).strip().lower().replace(" ", "_")
     if not safe_name:
         console.print("[red]Invalid project name.[/red]")
         return
@@ -123,7 +124,8 @@ def _open_protocol(name: str) -> None:
         return
     paths = ProjectPaths(proj)
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():
         console.print(f"[red]Protocol '{safe_name}' not found.[/red]")

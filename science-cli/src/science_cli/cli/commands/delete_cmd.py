@@ -71,7 +71,8 @@ def _delete_protocol(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     paths = ProjectPaths(proj)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():
@@ -143,7 +144,8 @@ def _delete_metadata(args: list) -> None:
         rprint("[bold green]✓[/bold green] Cleared all file assignments")
         return
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(name)
     paths = ProjectPaths(proj)
     yaml_path = paths.protocol_yaml(safe_name)
     if not yaml_path.exists():

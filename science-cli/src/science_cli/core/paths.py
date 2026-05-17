@@ -8,6 +8,50 @@ from pathlib import Path
 from typing import Optional
 
 
+def sanitize_name(name: str, extra_chars: str = "") -> str:
+    """Sanitize a name for use as a directory/filename.
+
+    Keeps alphanumeric, ``-``, ``_``, and any extra_chars.
+    Other characters are replaced with ``_``.
+    """
+    base = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+    allowed = set(base + extra_chars)
+    return "".join(c if c in allowed else "_" for c in name)
+
+
+def sanitize_protocol_name(name: str) -> str:
+    """Sanitize a protocol name — allows alphanumeric, ``-``, ``_``, ``.``, ``(``, ``)``."""
+    return sanitize_name(name, "._()")
+
+
+def sanitize_project_name(name: str) -> str:
+    """Sanitize a project name — alphanumeric, ``-``, ``_``, ``.`` only."""
+    return sanitize_name(name, ".")
+
+
+def sanitize_name_legacy(name: str) -> str:
+    """Old sanitization (no dot/paren support) — used for backward-compat lookups."""
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+
+
+def resolve_protocol_yaml(protocol_dir: Path, name: str) -> Path | None:
+    """Find a protocol YAML by name, trying exact and legacy sanitized forms."""
+    candidates = [
+        protocol_dir / name / f"{name}.yaml",           # exact, new format
+        protocol_dir / f"{name}.yaml",                   # exact, old flat format
+    ]
+    legacy = sanitize_name_legacy(name)
+    if legacy != name:
+        candidates += [
+            protocol_dir / legacy / f"{legacy}.yaml",    # legacy, new format
+            protocol_dir / f"{legacy}.yaml",              # legacy, old flat format
+        ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]  # return the first candidate even if it doesn't exist
+
+
 class ProjectPaths:
     """Path resolution for a science-cli project.
 
@@ -46,13 +90,11 @@ class ProjectPaths:
     def protocol_yaml(self, name: str) -> Path:
         """Protocol descriptor YAML path.
 
-        Checks new location (inside protocol folder) first,
-        falls back to legacy flat location.
+        Resolves name (supports ``.`` and ``()`` in names) with
+        backward-compatible fallback to old sanitization.
         """
-        new_loc = self.protocol_dir / name / f"{name}.yaml"
-        if new_loc.exists():
-            return new_loc
-        return self.protocol_dir / f"{name}.yaml"
+        result = resolve_protocol_yaml(self.protocol_dir, name)
+        return result
 
     def protocol_yaml_new(self, name: str) -> Path:
         """New protocol YAML location (inside protocol folder).
