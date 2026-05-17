@@ -76,8 +76,8 @@ def _run_tui():
 
 
 def _run_repl():
-    from science_cli.repl import SCIRepl
-    SCIRepl().run()
+    from science_cli.repl import run_repl
+    run_repl()
 
 
 
