@@ -99,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Input row gap restored with `#input-row { height: 1 }`
 - TUI separators restored and dimmed
 
-## [2.1.1] - 2026-05-16
+## [2.1.1] - 2026-05-17
 
 ### Added
 - **`-d`/`--device` flag for step metadata** — first-class `device` property on protocol steps, matching `-t`/`--technique`:
@@ -110,12 +110,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ls -m protocol --step`: shows Device column in the Rich table
 - **`memristor init --matrix` shorthand**: `--matrix r6-c6` as alternative to `--rows 6 --cols 6`
 - **`memristor init --label` optional**: auto-generates `"NxM crossbar"` from dimensions when omitted
-- **Config merge fix**: `get_global_device_config()` and `get_device_config()` now properly overlay user's `~/.config/science-cli/config.yaml` values over hardcoded defaults
+- **Consolidate devices.yaml into protocol YAML** (`core/protocol.py`):
+  - New `device:` section in protocol YAML replaces legacy `devices.yaml`
+  - `read_devices()` dispatches to protocol YAML first, falls back to `devices.yaml`
+  - `memristor init --matrix` writes device geometry directly to protocol YAML
+  - `write_devices()` deprecated with `DeprecationWarning`
+  - SQLite schema v4: `sweep_order`, `sweep_type`, `sweep_segments`, `temperature` columns
+- **`memristor sync --reconcile`**: 3-phase sync — populate SQLite → sync sweep metadata to YAML → prune stale files
+- **Memristor-only technique filter**: DB skips EC techniques (CV, CA, EIS) and fabrication steps (PVD, AFM)
+- **Grammar regex fix**: `(?P<technique>...)` named capture groups added to `cv-deposition` and `ca-doping` patterns
+- **Matrix display**: R/C labels (R1→R6 top→bottom, C1→C6 left→right), column headers on top, file counts per cell from SQLite
 
 ### Changed
 - **fzf TUI dispatch**: `tui/app.py` now uses `subprocess.run()` with stop/start application mode instead of `_TeeWriter` capture — avoids asyncio nesting issues
 - **fzf execution**: `fzf_utils.py` uses `subprocess.Popen` with `/dev/tty` stderr instead of `pty.spawn()` — cleaner, cross-platform, no ANSI stripping needed
+- **Repo restructured**: `git mv science-cli/* .` — repo root IS science-cli content, no more nested `science-cli/` prefix
+- **`extensions/` removed from git tracking** (integrated as built-in modules)
+- **`theme-previews/` removed from git tracking** (generated artifacts, gitignored)
+- `.gitignore` switched to allowlist-based (`/*` + exceptions)
 - `memristor/plotting.py`: removed start/end scatter markers (lime/red dots) from time-colored IV plots
 
 ### Fixed
 - Config merge bug: `get_global_device_config()` and `get_device_config()` returned early from hardcoded defaults, ignoring user's `config.yaml` settings (e.g. `header_lines: 21` was silently overridden by hardcoded `23`)
+- `ls_cmd.py`: handle enriched file entries (dicts with `file` key) in matrix display
+- Matrix grid rendering: inverted axes, missing column headers
