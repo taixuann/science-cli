@@ -785,6 +785,8 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
             circuit_model = fit.get("circuit", "best")
 
         if "error" not in fit:
+            import json
+
             fz = np.array(fit.get("fit_Z_real", []))
             fzi = np.array(fit.get("fit_Z_imag", []))
             if len(fz) > 0:
@@ -796,6 +798,29 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
                 plt.close(fig)
                 console.print(f"[bold green]✓[/bold green] Fit overlay saved: {fit_path}")
                 output_files.append(str(fit_path))
+
+            # Save fit results as JSON
+            fit_json = {
+                "file": Path(filepath).name,
+                "circuit": circuit_model,
+                "r_squared": fit.get("r_squared", 0),
+                "reduced_chi": fit.get("reduced_chi", 0),
+                "nfev": fit.get("nfev", 0),
+                "parameters": {
+                    n: {"value": v, "stderr": s}
+                    for n, v, s in zip(
+                        fit.get("parameter_names", []),
+                        fit.get("fitted_params", []),
+                        fit.get("param_stderr", []),
+                    )
+                },
+            }
+            json_name = f"ec-eis-fit-nyquist_{stem}.json"
+            json_path = out_dir / json_name
+            with open(json_path, "w") as jf:
+                json.dump(fit_json, jf, indent=2)
+            console.print(f"[bold green]✓[/bold green] Fit results saved: {json_path}")
+            output_files.append(str(json_path))
 
             # Print fit results
             console.print(f"\n  [bold]Circuit fit:[/bold] {circuit_model}  (R²={fit.get('r_squared', 0):.4f})")
