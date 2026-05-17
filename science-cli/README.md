@@ -18,21 +18,15 @@ pip install -e .
 
 `numpy`, `pandas`, `matplotlib`, `scipy`, `lmfit`, `plotly`, `textual`, `pyyaml`, `rich`, `prompt_toolkit`, `questionary`, `pyarrow`
 
-## Usage Modes
+## Three Interfaces
 
-Three ways to use science-cli:
+science-cli provides three interaction modes:
 
-```bash
-# (1) Full TUI — interactive terminal UI
-sci
-
-# (2) REPL — raw prompt_toolkit shell
-sci --repl
-
-# (3) Direct — run one command and exit
-sci add -m project -n my-experiment
-sci plot data/sample_IV.csv
-```
+| Mode | Command | Description |
+|------|---------|-------------|
+| **CLI** | `sci <command> [args]` | Run one command and exit. Scriptable, pipeable. |
+| **CLI-REPL** | `sci --repl` | `prompt_toolkit` interactive shell with persistent session state, tab-completion, and command history. Stays in a project context across commands. |
+| **TUI** | `sci` (no args) | Full Textual terminal UI with live data browser, plot preview, fzf-integrated file picking, and mouse support. |
 
 ## Quick Start
 
@@ -222,8 +216,10 @@ sci plot data/sample_IV.csv    # → PDF with Nature styling
 
 ## Architecture
 
+All functionality is built-in — no separate extension packages needed.
+
 ```
-science-cli/                       ← Core CLI + plotting + themes
+science-cli/
 ├── src/science_cli/
 │   ├── cli/commands/              ← CLI command handlers
 │   │   └── config.py              ← config edit --global, config devices, config grammar
@@ -233,7 +229,7 @@ science-cli/                       ← Core CLI + plotting + themes
 │   │   ├── technique.py           ← Grammar-based filename parsing (4-tier resolution)
 │   │   ├── parquet_store.py       ← Parquet storage for analysis results
 │   │   └── paths.py               ← Directory layout resolution
-│   ├── memristor/                 ← Memristor analysis + dashboard
+│   ├── memristor/                 ← Memristor analysis + dashboard (integrated library)
 │   │   ├── dashboard.py           ← Plotly interactive HTML dashboard (SQLite fast path)
 │   │   ├── device.py              ← DeviceConfig, devices.yaml I/O
 │   │   ├── device_cli.py          ← CLI commands (sync/analyze split)
@@ -245,7 +241,7 @@ science-cli/                       ← Core CLI + plotting + themes
 │   ├── electrochem/               ← CV, CA, EIS analysis
 │   ├── iv/                        ← IV analysis models
 │   ├── theme/                     ← 7 themes + per-technique templates
-│   └── tui/                       ← Textual TUI
+│   └── tui/                       ← Textual TUI (full-screen UI)
 └── test_guardrails.py             ← 58 architecture guardrail tests
 ```
 
@@ -308,8 +304,6 @@ pip install -e .
 
 # Run tests (78 total)
 pytest tests/ -v
-
-# Branch: main (stable), refactor/2.1.0 (development)
 ```
 
 ## License
