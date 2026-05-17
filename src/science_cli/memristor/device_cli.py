@@ -1581,101 +1581,183 @@ def _sqlite_reindex(pdir: Path) -> None:
 # ── Command: analyze ────────────────────────────────────────
 
 
+def _analyze_protocol(
+    conn: sqlite3.Connection,
+    proj: Path,
+    protocol_name: str,
+    step_filter: str = "",
+    force: bool = False,
+    single_file: str = "",
+) -> dict:
+    """Analyze all files in one protocol: read CSV, extract IV params, update DB.
+
+    Returns dict with: protocol, total, analyzed, skipped, errors.
+    """
+    from science_cli.memristor.db import query_files, update_file_analysis
+    from science_cli.memristor.plotting import read_iv_csv
+    from science_cli.memristor.switching import extract_iv_parameters
+
+    pdir = proj / "protocol" / protocol_name
+    if not pdir.exists():
+        return {"protocol": protocol_name, "total": 0, "analyzed": 0, "skipped": 0, "errors": 0,
+                "message": f"directory not found"}
+
+    files = query_files(conn, protocol=protocol_name)
+    target_files = [f for f in files if not f.get("parse_error")]
+
+    if not target_files:
+        return {"protocol": protocol_name, "total": 0, "analyzed": 0, "skipped": 0, "errors": 0,
+                "message": "no parseable files"}
+
+    analyzed = 0
+    skipped = 0
+    errors = 0
+
+    for fentry in target_files:
+        step = fentry["step"]
+        filename = fentry["filename"]
+
+        # Step filter
+        if step_filter and step != step_filter:
+            skipped += 1
+            continue
+
+        # Single-file filter
+        if single_file and filename != single_file:
+            skipped += 1
+            continue
+
+        # Skip if already analyzed (unless --force)
+        # compliance_confidence is always set after analysis, even when
+        # no switching is detected (v_set remains NULL).
+        if not force and fentry.get("compliance_confidence") is not None:
+            skipped += 1
+            continue
+
+        # Resolve file path
+        filepath = pdir / step / filename
+        if not filepath.exists():
+            skipped += 1
+            continue
+
+        try:
+            voltage, current, info = read_iv_csv(str(filepath))
+            params = extract_iv_parameters(voltage, current)
+        except Exception as exc:
+            print(f"  [ERR]  {protocol_name}/{step}/{filename}: {exc}")
+            # Mark as failed so it won't be retried
+            update_file_analysis(
+                conn,
+                protocol=protocol_name,
+                step=step,
+                filename=filename,
+                compliance_confidence="error",
+            )
+            errors += 1
+            continue
+
+        update_file_analysis(
+            conn,
+            protocol=protocol_name,
+            step=step,
+            filename=filename,
+            v_set=params.get("v_set"),
+            v_reset=params.get("v_reset"),
+            i_set=params.get("i_set"),
+            i_reset=params.get("i_reset"),
+            on_off_ratio=params.get("on_off_ratio"),
+            current_compliance=params.get("compliance"),
+            compliance_confidence="high" if params.get("switching_detected") else "low",
+        )
+        analyzed += 1
+
+    return {
+        "protocol": protocol_name,
+        "total": len(target_files),
+        "analyzed": analyzed,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
 def cmd_analyze(args: argparse.Namespace) -> None:
     """Analyze: read CSVs, compute Vset/Vreset/ratio/compliance, update SQLite.
 
     Depends on 'memristor sync' having populated the metadata.
+
+    Modes:
+        --all: analyze ALL protocols in the database.
+        --pt <name>: analyze a specific protocol by name.
+        (default): analyze the current session protocol.
+        --step <name>: filter to a specific step within the protocol(s).
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, query_files, update_file_analysis, close_db
-    from science_cli.memristor.plotting import read_iv_csv
-    from science_cli.memristor.switching import extract_iv_parameters
-
-    pdir = _resolve_protocol_dir(args)
-    if not _validate_protocol_dir(pdir):
-        sys.exit(1)
+    from science_cli.memristor.db import open_db, close_db
 
     proj = get_current_project_path()
     if not proj:
         print("No project open. Use 'open -m project <path>' first.")
         sys.exit(1)
 
-    protocol_name = pdir.name
+    force = getattr(args, "force", False)
+    single_file = getattr(args, "file", "") or ""
+    step_filter = getattr(args, "step", "") or ""
+
     conn = open_db(proj)
 
     try:
-        files = query_files(conn, protocol=protocol_name)
+        # ── --all mode: analyze all protocols in DB ──
+        if getattr(args, "all", False):
+            protocol_rows = conn.execute(
+                "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+            ).fetchall()
+            if not protocol_rows:
+                print("No protocols found in database. Run 'memristor sync --all' first.")
+                close_db(conn)
+                return
 
-        # Filter to files with no parse_error
-        target_files = [
-            f for f in files
-            if not f.get("parse_error")
-        ]
+            protocols = [r[0] for r in protocol_rows]
+            results: list[dict] = []
+            for pt in protocols:
+                print(f"\n── Analyzing '{pt}' ──")
+                r = _analyze_protocol(conn, proj, pt, step_filter, force, single_file)
+                results.append(r)
 
-        if not target_files:
-            print("No parseable files found. Run 'memristor sync' first.")
-            close_db(conn)
-            return
+            conn.commit()
+            print(f"\n── Analyze (--all) complete ──")
+            total_a = sum(r["analyzed"] for r in results)
+            total_s = sum(r["skipped"] for r in results)
+            total_e = sum(r["errors"] for r in results)
+            for r in results:
+                msg = f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped"
+                if r.get("message"):
+                    msg += f" ({r['message']})"
+                print(msg)
+            print(f"  TOTAL: {total_a} analyzed, {total_s} skipped, {total_e} errors")
 
-        force = getattr(args, "force", False)
-        single_file = getattr(args, "file", "") or ""
+        # ── --pt mode: analyze a named protocol ──
+        elif getattr(args, "protocol", "") or getattr(args, "pt", ""):
+            protocol_name = getattr(args, "protocol", "") or getattr(args, "pt", "")
+            pdir = proj / "protocol" / protocol_name
+            if not pdir.exists():
+                print(f"Protocol directory not found: {pdir}")
+                sys.exit(1)
+            print(f"\n── Analyzing '{protocol_name}' ──")
+            r = _analyze_protocol(conn, proj, protocol_name, step_filter, force, single_file)
+            conn.commit()
+            print(f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped, {r['errors']} errors")
 
-        analyzed = 0
-        skipped = 0
-        errors = 0
-
-        print(f"Analyzing {len(target_files)} file(s) in protocol '{protocol_name}'...")
-
-        for fentry in target_files:
-            step = fentry["step"]
-            filename = fentry["filename"]
-
-            # Single-file filter
-            if single_file and filename != single_file:
-                skipped += 1
-                continue
-
-            # Skip if already analyzed (unless --force)
-            if not force and fentry.get("v_set") is not None:
-                skipped += 1
-                continue
-
-            # Resolve file path
-            filepath = pdir / step / filename
-            if not filepath.exists():
-                print(f"  [SKIP] File not found: {filename}")
-                skipped += 1
-                continue
-
-            try:
-                voltage, current, info = read_iv_csv(str(filepath))
-                params = extract_iv_parameters(voltage, current)
-            except Exception as exc:
-                print(f"  [ERR]  {filename}: {exc}")
-                errors += 1
-                continue
-
-            update_file_analysis(
-                conn,
-                protocol=protocol_name,
-                step=step,
-                filename=filename,
-                v_set=params.get("v_set"),
-                v_reset=params.get("v_reset"),
-                i_set=params.get("i_set"),
-                i_reset=params.get("i_reset"),
-                on_off_ratio=params.get("on_off_ratio"),
-                current_compliance=params.get("compliance"),
-                compliance_confidence="high" if params.get("switching_detected") else "low",
-            )
-            analyzed += 1
-
-        conn.commit()
-
-        print(f"\nAnalyze complete:")
-        print(f"  Analyzed: {analyzed}")
-        print(f"  Skipped:  {skipped}")
-        print(f"  Errors:   {errors}")
+        # ── Default: session protocol ──
+        else:
+            pdir = _resolve_protocol_dir(args)
+            if not _validate_protocol_dir(pdir):
+                sys.exit(1)
+            protocol_name = pdir.name
+            print(f"\n── Analyzing '{protocol_name}' ──")
+            r = _analyze_protocol(conn, proj, protocol_name, step_filter, force, single_file)
+            conn.commit()
+            print(f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped, {r['errors']} errors")
+            set_last_step(pdir.name)
 
     except Exception as e:
         conn.rollback()
@@ -1683,8 +1765,6 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         sys.exit(1)
     finally:
         close_db(conn)
-
-    set_last_step(pdir.name)
 
 
 # ── Command: validate ───────────────────────────────────────
@@ -2136,6 +2216,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")
     p_analyze.add_argument("--step-dir", default="")
+    p_analyze.add_argument("--all", "-A", action="store_true", help="Analyze all protocols in the database")
+    p_analyze.add_argument("--pt", "--protocol", default="", dest="protocol",
+                           help="Protocol name to analyze (e.g. '5_cu-c_ta-cu')")
+    p_analyze.add_argument("--step", default="", help="Filter to a specific step name (e.g. '4_iv')")
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze all files (ignore cached analysis)")
     p_analyze.add_argument("--file", default="", help="Single-file re-analysis")
     p_analyze.set_defaults(func=cmd_analyze)

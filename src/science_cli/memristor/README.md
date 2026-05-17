@@ -56,9 +56,12 @@ Writes the `device:` section (rows, cols, label) into the **protocol YAML** (`pr
 ```
 memristor sync
 memristor sync --reconcile    # 3-phase: populate → sync sweep → prune stale
+memristor sync --force         # Clear stale DB entries first, re-scan from scratch
 ```
 
 Scans step directories, parses every filename against the [grammar patterns](../core/technique.py) to extract `date_code`, `material`, `batch`, `technique`, `matrix` (row-col), and `suffix`. Only processes files matching **memristor-only techniques** (`iv-sweep`, `iv-breakdown`, `iv-leakage`, `mem-endurance`, `mem-retention`, `mem-switching`) — EC techniques (CV, CA, EIS) and fabrication steps (PVD, AFM) are skipped. Fills the SQLite `files` table with metadata only — **no CSV content is read**. The `cells` table is also computed (aggregated per-cell stats).
+
+**Symlink resolution:** `populate_from_grammar()` now resolves working symlinks to their real targets in `data/raw/`. Broken symlinks are silently skipped with a `continue`. This ensures symlinked data files are properly indexed by their target filename rather than the symlink name.
 
 **New in v2.1.1:** After populating SQLite from filenames, `sync` also sweeps CSV headers for sweep metadata (sweep segments, sweep_type, temperature) and stores them in the new `sweep_order`, `sweep_type`, `sweep_segments`, and `temperature` columns. Then writes enriched file entries back to the protocol YAML via `sync_sweep_to_protocol_yaml()`. The `--reconcile` flag runs all three phases: (1) populate SQLite from step dirs, (2) sync sweep metadata back to protocol YAML, (3) prune stale files from both SQLite and YAML. The full data flow is:
 
@@ -81,6 +84,22 @@ memristor dashboard --open
 ```
 
 Generates a self-contained Plotly HTML dashboard (no server needed). Shows KPI cards, clickable cell heatmaps, IV curve overlays, and histograms. Reads from SQLite first (fast path), falls back to YAML if unavailable.
+
+## Matrix Display (`memristor matrix`)
+
+The `memristor matrix` command renders a device grid from SQLite data using Rich Table:
+
+```
+memristor matrix [--all] [--material <name>] [--technique <name>]
+                 [--grid r6-c6] [--status]
+```
+
+- **Rich Table styling:** `bold cyan` headers, `bold green` numbers for populated cells, `dim ----` for empty cells, with borders and `show_lines=True`
+- **Grid dimensions** come from the protocol YAML `device:` section by default
+- **`--grid r6-c6`** overrides the grid dimensions (independent of sync/workflow)
+- **`--status`** shows a summary table of protocols, materials, cells, and files
+- **`--all`** renders matrices for every protocol in the project database
+- Material and technique filtering apply to which cells are shown
 
 ## Key Design Decisions
 

@@ -237,8 +237,7 @@ PLAN-config-expansion
 │   │   │   ├── metadata.py / open_cmd.py / parse.py
 │   │   │   ├── plot.py / protocol.py / results.py
 │   │   │   ├── status.py / techniques.py
-│   │   │   └── help.py                ← Help text rendering
-│   │   └── help.py
+│   │   └── help.py                    ← Help text rendering
 │   ├── core/                          ← Core library — no CLI coupling
 │   │   ├── config.py                  ← 4-tier device-aware config
 │   │   ├── data_loader.py / file_utils.py / fzf_utils.py

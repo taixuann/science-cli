@@ -61,6 +61,9 @@ sci add -m protocol -n 1_iv-test --step "1_set,2_reset" -t iv,iv -d keithley-240
 # Assign data files to steps
 sci add -m data --fzf
 
+# Remove files from protocol step lists
+sci delete -m data --fzf [--step <name>]
+
 # Plot a file
 sci plot protocol/1_iv-test/1_set/IV_data.csv
 
@@ -73,7 +76,7 @@ sci memristor dashboard --open
 ```
 GROUP 1: FILE MANAGEMENT
   add       Add project/protocol/metadata/data
-  delete    Delete protocol/metadata
+  delete    Delete protocol/metadata/data
   edit      Edit protocol/metadata
   ls        List projects/protocols/steps/files
 
@@ -151,6 +154,9 @@ sci memristor add --fzf
 # Sync: pure filename parsing → SQLite metadata (fast, no CSV read)
 sci memristor sync
 
+# Force: clear stale DB entries, re-scan from scratch
+sci memristor sync --force
+
 # Analyze: read CSVs, compute Vset/Vreset/ratio → update SQLite
 sci memristor analyze
 
@@ -165,6 +171,12 @@ sci memristor dashboard --open
 
 # Generate cross-protocol project dashboard
 sci memristor dashboard --all --open
+
+# Show device matrix from SQLite (Rich Table with styled output)
+sci memristor matrix
+
+# Filter by technique with grid override
+sci memristor matrix --grid r6-c6 --technique iv-sweep
 ```
 
 ### sync/analyze Split (Sprint 8)
@@ -322,20 +334,31 @@ steps:
 
 ### Matrix Display (v2.1.1)
 
-The `memristor ls --matrix` command displays a grid of matrix cells:
+Both `memristor ls --matrix` and `memristor matrix` display a grid of matrix cells:
 
-```
-┌─────┬──────┬──────┬──────┬──────┬──────┬──────┐
-│     │  C1  │  C2  │  C3  │  C4  │  C5  │  C6  │
-├─────┼──────┼──────┼──────┼──────┼──────┼──────┤
-│ R1  │  2   │  0   │  3   │  1   │  0   │  2   │
-│ R2  │  1   │  4   │  0   │  2   │  1   │  0   │
-└─────┴──────┴──────┴──────┴──────┴──────┴──────┘
-```
-
-- R1→R6 rows (top→bottom), C1→C6 columns (left→right)
-- Each cell shows file count from SQLite `cells` table
+- Rendered with **Rich Table** — `bold cyan` headers, `bold green` numbers for populated cells, `dim ----` for empty cells
 - Column headers on TOP, row labels on LEFT
+- Cell counts drawn from SQLite `cells` table (`memristor matrix`) or `devices.yaml` (`memristor ls --matrix`)
+
+**`memristor matrix` flags:**
+| Flag | Description |
+|------|-------------|
+| `--grid r6-c6` | Force specific grid dimensions (overrides protocol YAML) |
+| `--material <name>` | Filter by exact material name |
+| `--technique <name>` | Filter by technique (e.g., `iv-sweep`) |
+| `--all` / `-A` | Show matrix for ALL protocols in the project |
+| `--status` | Show summary of what's loaded in the database |
+
+```bash
+# Default grid from protocol YAML
+sci memristor matrix
+
+# Force 6×6 grid, filter by technique
+sci memristor matrix --grid r6-c6 --technique iv-sweep
+
+# All protocols with status summary
+sci memristor matrix --all --status
+```
 
 ## Global Device & Technique Registry (Sprint 8)
 
