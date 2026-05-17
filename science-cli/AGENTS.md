@@ -286,8 +286,8 @@ science-cli/
     │
     ├── memristor/                     ← Memristor characterization
     │   ├── __init__.py                ← Public API + built-in data
-    │   ├── db.py                      ← ** SQLite query cache (v2 schema with universal grammar columns) **
-    │   ├── device.py                  ← DeviceConfig, MatrixPoint, FileEntry models
+    │   ├── db.py                      ← ** SQLite query cache (v4 schema with sweep metadata columns) **
+    │   ├── device.py                  ← DeviceConfig, protocol YAML integration + devices.yaml fallback
     │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard, sync, analyze)
     │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard (SQLite fast path) **
     │   ├── plotting.py                ← IV CSV reading + SVG generation
@@ -433,7 +433,7 @@ Per-protocol metadata (protocol/<name>/...)
 - `core/data_loader.py` — device-aware loading with global fallback
 - `core/project.py` — consults config for projects_root
 - `cli/commands/config.py` — `config init`, `config show`, `config edit --global`, `config devices`, `config grammar`
-- `memristor/db.py` — schema v2 with universal grammar columns, `populate_from_grammar()`, `update_file_analysis()`
+- `memristor/db.py` — schema v4 with universal grammar columns + sweep metadata (`sweep_order`, `sweep_type`, `sweep_segments`, `temperature`), `populate_from_grammar()`, `update_file_analysis()`, `update_file_sweep_metadata()`
 - `memristor/dashboard.py` — SQLite fast read path via `_collect_device_data_from_sqlite()`
 - `memristor/device_cli.py` — `sync` (pure filename parsing) + `analyze` (CSV computation)
 
@@ -486,6 +486,7 @@ from science_cli.core.technique import (
 | `-d`/`--device` flag for protocol steps | 2026-05-16 | First-class `device` property for each step; mirrors `-t`/`--technique` pattern |
 | `memristor init --matrix` shorthand | 2026-05-16 | `--matrix r6-c6` as shorthand for `--rows 6 --cols 6`; `--label` auto-generates |
 | fzf TUI subprocess dispatch | 2026-05-16 | `tui/app.py` uses subprocess.run with stop/start application mode; `fzf_utils.py` uses `/dev/tty` stderr |
+| Consolidate devices.yaml into protocol YAML | version-2.1.1 | `core/protocol.py` created; SQLite schema v4; `read_devices()` reads protocol YAML first; `write_devices()` deprecated; `memristor init` writes to protocol YAML; sweep metadata sync pipeline |
 
 ### Active Gaps (Need Execution)
 
@@ -534,7 +535,7 @@ from science_cli.core.technique import (
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. The `refactor/2.1.0` branch contains all implementations.
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. The `refactor/2.1.0` branch contains all original implementations.
 
 **When creating a new PLAN, check if it relates to any future considerations above.**
 

@@ -122,9 +122,10 @@ sci ls -m protocol --step
 For crossbar device characterization:
 
 ```bash
-# Initialize a device matrix (--matrix shorthand or --rows/--cols)
+# Initialize a device matrix (writes device: section to protocol YAML)
 sci memristor init --matrix r6-c6 --label "My Device"
 sci memristor init --rows 4 --cols 4                        # label auto: "4x4 crossbar"
+sci memristor init --matrix r6-c6 --pt 1_pda-memristor      # write to specific protocol YAML
 
 # Add data files to matrix points
 sci memristor add --fzf
@@ -174,7 +175,8 @@ The dashboard auto-extracts switching parameters:
 ├── data/raw/                       # Raw measurement files
 ├── protocol/
 │   └── <protocol_name>/
-│       ├── devices.yaml            # Matrix map — optional (grammar-based sync doesn't need it)
+│       ├── <protocol_name>.yaml    # Protocol YAML — now includes device: section + enriched files[]
+│       ├── devices.yaml            # Legacy — still read as fallback (deprecated write path)
 │       ├── <step>/
 │       │   ├── *.csv / *.txt       # Data files (symlinked from data/raw/)
 │       │   └── results/            # Generated plots + per-protocol dashboard
@@ -223,17 +225,18 @@ science-cli/
 ├── src/science_cli/
 │   ├── cli/commands/              ← CLI command handlers
 │   │   └── config.py              ← config edit --global, config devices, config grammar
-│   ├── core/                      ← Config, data loading, technique detection
+│   ├── core/                      ← Config, data loading, technique detection, protocol YAML
 │   │   ├── config.py              ← 4-tier config + global device/technique registry
 │   │   ├── data_loader.py         ← Device-aware file → DataFrame (global fallback)
 │   │   ├── technique.py           ← Grammar-based filename parsing (4-tier resolution)
+│   │   ├── protocol.py            ← Protocol YAML read/write helpers (device section, enriched files)
 │   │   ├── parquet_store.py       ← Parquet storage for analysis results
 │   │   └── paths.py               ← Directory layout resolution
 │   ├── memristor/                 ← Memristor analysis + dashboard (integrated library)
 │   │   ├── dashboard.py           ← Plotly interactive HTML dashboard (SQLite fast path)
-│   │   ├── device.py              ← DeviceConfig, devices.yaml I/O
+│   │   ├── device.py              ← DeviceConfig, protocol YAML integration + devices.yaml fallback
 │   │   ├── device_cli.py          ← CLI commands (sync/analyze split)
-│   │   ├── db.py                  ← SQLite query cache (v2 schema, grammar population)
+│   │   ├── db.py                  ← SQLite query cache (v4 schema, sweep metadata columns)
 │   │   ├── switching.py           ← Vset/Vreset extraction
 │   │   ├── endurance.py           ← Endurance analysis
 │   │   ├── retention.py           ← Retention analysis
@@ -260,6 +263,43 @@ Per-protocol metadata (protocol/<name>/...)
 The global config acts as a central "library" for instrument configs (Keithley 2400, Keysight B1500A), technique templates (iv-sweep, endurance), and file naming grammar patterns. Project configs inherit from it and only override what's different.
 
 **Config merge fix (2026-05-16):** `get_global_device_config()` and `get_device_config()` now properly merge user's `~/.config/science-cli/config.yaml` values over hardcoded defaults instead of returning early. For example, setting `header_lines: 21` in config.yaml for `keithley-2400` now correctly overrides the hardcoded `23`.
+
+### Protocol YAML Device Section (2026-05-17)
+
+Device geometry is now stored in the protocol YAML itself rather than a separate `devices.yaml`:
+
+```yaml
+# protocol/<name>/<name>.yaml
+name: 1_pda-memristor
+description: "PDA memristor characterization"
+
+device:                          # NEW: optional device geometry
+  rows: 6
+  cols: 6
+  label: "6x6 PDA Crossbar"
+  cell_area_um2: 2500
+
+steps:
+  - name: 4_iv
+    technique: iv-sweep
+    device: keithley-2400
+    files:
+      - file: 0505_Ta-PDA-ITO(1)_r0c0_IV-DC_uc_01.csv
+        sweep_order: 1           # NEW: sweep metadata enriched in file entries
+        sweep_type: uc
+        temperature: 300.0
+```
+
+**Device configuration resolution order:**
+1. Protocol YAML `device:` section (new primary source for geometry)
+2. Legacy `devices.yaml` (fallback — maintained for backward compat)
+3. `read_devices()` dispatches: protocol YAML first → legacy fallback
+
+**Key changes:**
+- `memristor init --matrix r6-c6` writes the `device:` section to the protocol YAML
+- `memristor sync` now also syncs sweep metadata back to protocol YAML `steps[].files[]` entries
+- SQLite schema v4 adds `sweep_order`, `sweep_type`, `sweep_segments`, `temperature` columns
+- `write_devices()` deprecated (warning emitted, still functional for backward compat)
 
 ## Global Device & Technique Registry (Sprint 8)
 
@@ -302,7 +342,7 @@ Separator is hardcoded to `_` (underscore) — not configurable.
 # Install in editable mode
 pip install -e .
 
-# Run tests (78 total)
+# Run tests (97 total — 78 unit + 19 guardrail)
 pytest tests/ -v
 ```
 

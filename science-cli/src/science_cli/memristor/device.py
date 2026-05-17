@@ -12,8 +12,18 @@ from datetime import datetime
 from pathlib import Path
 import re
 from typing import Optional
+import warnings
 
 import yaml
+
+from science_cli.core.protocol import (
+    read_device_section,
+    write_device_section,
+    has_device_section,
+    read_step_enriched_files,
+    write_step_enriched_files,
+    migrate_from_devices_yaml,
+)
 
 
 # ── Sweep segment metadata ─────────────────────────────────
@@ -347,19 +357,29 @@ def extract_material_batch(filename: str, project_root=None) -> tuple[str, str] 
 
 
 def read_devices(dir_path: Path | str) -> Optional[DeviceConfig]:
-    """Load devices.yaml from a directory.
+    """Load crossbar device configuration from a protocol directory.
 
-    Supports two formats:
-    - Protocol-level (new): has ``steps:`` mapping key
-    - Step-level (legacy): no ``steps:`` key, files relative to dir
+    Resolution order:
+    1. Try protocol YAML ``device:`` section (new)
+    2. Fall back to legacy ``devices.yaml``
 
-    Returns None if the file doesn't exist.
+    Returns None if neither source has device info.
     """
-    path = Path(dir_path) / "devices.yaml"
-    if not path.exists():
+    path = Path(dir_path)
+
+    # ── Try protocol YAML first ──
+    protocol_yaml = path / f"{path.name}.yaml"
+    if protocol_yaml.exists() and has_device_section(protocol_yaml):
+        config = _read_from_protocol_yaml(path, protocol_yaml)
+        if config is not None:
+            return config
+
+    # ── Fall back to legacy devices.yaml ──
+    devices_yaml = path / "devices.yaml"
+    if not devices_yaml.exists():
         return None
 
-    with open(path) as f:
+    with open(devices_yaml) as f:
         data = yaml.safe_load(f) or {}
 
     dev_data = data.get("device", {})
@@ -417,12 +437,110 @@ def read_devices(dir_path: Path | str) -> Optional[DeviceConfig]:
     )
 
 
+def _read_from_protocol_yaml(
+    protocol_dir: Path, yaml_path: Path
+) -> Optional[DeviceConfig]:
+    """Read DeviceConfig from protocol YAML device section + steps.
+
+    Also attempts to load per-cell MatrixPoints from SQLite if available.
+
+    Args:
+        protocol_dir: The protocol subdirectory (e.g., ``protocol/1_pda/``).
+        yaml_path: Path to the protocol YAML file.
+
+    Returns:
+        DeviceConfig or None if no device section found.
+    """
+    with open(yaml_path) as f:
+        data = yaml.safe_load(f) or {}
+
+    if not isinstance(data, dict):
+        return None
+
+    dev_data = data.get("device", {})
+    if not dev_data:
+        return None
+
+    device = DeviceGeometry(
+        id=dev_data.get("id", f"crossbar-{dev_data.get('rows',1)}x{dev_data.get('cols',1)}"),
+        label=dev_data.get("label", f"{dev_data.get('rows',1)}x{dev_data.get('cols',1)} Crossbar"),
+        rows=dev_data.get("rows", 1),
+        cols=dev_data.get("cols", 1),
+        description=dev_data.get("description", ""),
+        cell_area_um2=dev_data.get("cell_area_um2"),
+        row_labels=dev_data.get("row_labels", []),
+        col_labels=dev_data.get("col_labels", []),
+    )
+
+    # Build steps mapping: technique → step_name (reverse of protocol YAML)
+    steps: dict[str, str] = {}
+    for step in data.get("steps", []) or []:
+        if isinstance(step, dict) and step.get("name") and step.get("technique"):
+            steps[step["technique"]] = step["name"]
+
+    # Try to read points from SQLite if available
+    points: list[MatrixPoint] = []
+    try:
+        from science_cli.core.project import get_current_project_path
+        from science_cli.memristor.db import open_db, query_files, close_db
+
+        proj = get_current_project_path()
+        if proj:
+            conn = open_db(proj)
+            try:
+                files_data = query_files(conn, protocol=protocol_dir.name)
+                # Group by (row, col)
+                point_map: dict[tuple[int, int], MatrixPoint] = {}
+                for fd in files_data:
+                    r = fd.get("row")
+                    c = fd.get("col")
+                    if r is None or c is None:
+                        continue
+                    key = (r, c)
+                    if key not in point_map:
+                        point_map[key] = MatrixPoint(row=r, col=c)
+                    pt = point_map[key]
+                    tech = fd.get("technique_id") or "iv"
+                    if tech not in pt.techniques:
+                        pt.techniques[tech] = TechniqueGroup(technique=tech)
+                    fe = FileEntry(
+                        file=fd.get("filename", ""),
+                        sweep_order=fd.get("sweep_order"),
+                        sweep_type=fd.get("sweep_type"),
+                        temperature=fd.get("temperature"),
+                    )
+                    pt.techniques[tech].files.append(fe)
+                points = list(point_map.values())
+            finally:
+                close_db(conn)
+    except Exception:
+        pass  # SQLite not available; return empty points
+
+    return DeviceConfig(
+        device=device,
+        points=points,
+        steps=steps,
+        _meta=data.get("_meta", {}),
+    )
+
+
 def write_devices(dir_path: Path | str, config: DeviceConfig) -> bool:
     """Save a DeviceConfig to devices.yaml.
 
     Writes the protocol-level format with a ``steps:`` mapping if
     the config has steps defined.
+
+    .. deprecated::
+        Use protocol YAML write functions instead
+        (``memristor init --matrix``).
     """
+    warnings.warn(
+        "write_devices() is deprecated. "
+        "Use protocol YAML write functions instead (memristor init --matrix).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     data: dict = {
         "device": {
             "id": config.device.id,
@@ -700,6 +818,184 @@ def sync_devices(protocol_dir: Path | str) -> dict:
     }
 
 
+def sync_sweep_to_protocol_yaml(
+    protocol_dir: Path, conn
+) -> dict:
+    """Sync sweep metadata from SQLite back to protocol YAML file entries.
+
+    Steps:
+        1. Read protocol YAML
+        2. For each step, query sweep metadata from SQLite
+        3. Update protocol YAML file entries with sweep data
+        4. Save protocol YAML
+
+    Args:
+        protocol_dir: Path to the protocol subdirectory
+            (e.g. ``protocol/1_pda/``).
+        conn: Open SQLite connection.
+
+    Returns:
+        Report dict: ``{steps_updated: int, files_updated: int,
+        errors: list[str]}``.
+    """
+    import sqlite3
+
+    from science_cli.memristor.db import query_sweep_metadata
+
+    proto_path = Path(protocol_dir)
+    yaml_path = proto_path / f"{proto_path.name}.yaml"
+
+    result: dict = {
+        "steps_updated": 0,
+        "files_updated": 0,
+        "errors": [],
+    }
+
+    if not yaml_path.exists():
+        result["errors"].append(f"Protocol YAML not found: {yaml_path}")
+        return result
+
+    try:
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:
+        result["errors"].append(f"Failed to read protocol YAML: {e}")
+        return result
+
+    if not isinstance(data, dict):
+        result["errors"].append("Protocol YAML is not a dict")
+        return result
+
+    for step in data.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        step_name = step.get("name", "")
+        if not step_name:
+            continue
+
+        try:
+            sweep_data = query_sweep_metadata(
+                conn, protocol=proto_path.name, step=step_name
+            )
+        except (sqlite3.OperationalError, sqlite3.ProgrammingError) as e:
+            result["errors"].append(f"SQLite error for step '{step_name}': {e}")
+            continue
+
+        if not sweep_data:
+            continue
+
+        # Normalize existing files
+        existing_files = _normalize_step_files(
+            step.get("files", []) or []
+        )
+
+        # Build index of existing files by filename
+        existing_by_name: dict[str, int] = {}
+        for i, fe in enumerate(existing_files):
+            fname = fe.get("file", "")
+            if fname:
+                existing_by_name[fname] = i
+
+        step_updated = False
+        for sd in sweep_data:
+            fname = sd.get("filename", "")
+            if not fname:
+                continue
+
+            entry: dict = {"file": fname}
+
+            if sd.get("sweep_order") is not None:
+                entry["sweep_order"] = sd["sweep_order"]
+            if sd.get("sweep_type"):
+                entry["sweep_type"] = sd["sweep_type"]
+            if sd.get("temperature") is not None:
+                entry["temperature"] = sd["temperature"]
+
+            # Parse sweep_segments JSON if present
+            sweep_segments_raw = sd.get("sweep_segments")
+            if sweep_segments_raw:
+                try:
+                    import json
+                    entry["sweep"] = json.loads(sweep_segments_raw)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            if fname in existing_by_name:
+                # Merge with existing entry (preserve extra keys)
+                idx = existing_by_name[fname]
+                old_entry = existing_files[idx]
+                for k, v in old_entry.items():
+                    if k not in entry and k != "file":
+                        entry[k] = v
+                existing_files[idx] = entry
+            else:
+                existing_files.append(entry)
+
+            result["files_updated"] += 1
+            step_updated = True
+
+        if step_updated:
+            step["files"] = _denormalize_step_files(existing_files)
+            result["steps_updated"] += 1
+
+    if result["steps_updated"] > 0:
+        try:
+            with open(yaml_path, "w") as f:
+                yaml.dump(data, f, default_flow_style=False,
+                          sort_keys=False, allow_unicode=True, indent=2)
+        except Exception as e:
+            result["errors"].append(f"Failed to write protocol YAML: {e}")
+
+    return result
+
+
+def _normalize_step_files(step_files: list) -> list[dict]:
+    """Normalize a step's files list to list of dicts with 'file' key."""
+    normalized: list[dict] = []
+    for entry in step_files:
+        if isinstance(entry, str):
+            normalized.append({"file": entry})
+        elif isinstance(entry, dict) and "file" in entry:
+            normalized.append(entry)
+    return normalized
+
+
+def _denormalize_step_files(entries: list[dict]) -> list:
+    """Convert normalized entries back: plain string if no extras, dict otherwise."""
+    ENRICHED_KEYS = {"sweep_order", "sweep_type", "sweep", "temperature"}
+    result: list = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            result.append(entry)
+            continue
+        extra_keys = set(entry.keys()) - {"file"}
+        if extra_keys & ENRICHED_KEYS or len(extra_keys) > 0:
+            result.append(entry)
+        else:
+            result.append(entry.get("file", ""))
+    return result
+
+
+def _migrate_devices_yaml(protocol_dir: str | Path) -> dict:
+    """Migrate legacy devices.yaml to protocol YAML.
+
+    Calls ``migrate_from_devices_yaml()`` with the correct paths
+    for the given protocol directory.
+
+    Args:
+        protocol_dir: Path to the protocol subdirectory
+            (e.g. ``protocol/1_pda/``).
+
+    Returns:
+        Report dict from ``migrate_from_devices_yaml()``.
+    """
+    pd = Path(protocol_dir)
+    devices_yaml_path = pd / "devices.yaml"
+    protocol_yaml_path = pd / f"{pd.name}.yaml"
+
+    return migrate_from_devices_yaml(devices_yaml_path, protocol_yaml_path)
+
+
 # ── Grid display ────────────────────────────────────────────
 
 TECH_LETTERS = {
@@ -887,6 +1183,8 @@ __all__ = [
     "write_devices",
     "validate",
     "sync_devices",
+    "sync_sweep_to_protocol_yaml",
+    "_migrate_devices_yaml",
     "generate_device_grid",
     "generate_rich_grid",
     "find_orphaned_files",

@@ -11,6 +11,8 @@ from science_cli.memristor.device import (
     write_devices,
     validate,
     sync_devices,
+    sync_sweep_to_protocol_yaml,
+    _migrate_devices_yaml,
     generate_device_grid,
 )
 
@@ -22,6 +24,7 @@ __all__ = [
     "SweepSegment", "FileEntry", "TechniqueGroup", "MatrixPoint",
     "DeviceGeometry", "DeviceConfig",
     "read_devices", "write_devices", "validate", "sync_devices",
+    "sync_sweep_to_protocol_yaml", "_migrate_devices_yaml",
     "generate_device_grid",
     "analyze_endurance", "analyze_retention", "analyze_switching",
     "extract_iv_parameters",

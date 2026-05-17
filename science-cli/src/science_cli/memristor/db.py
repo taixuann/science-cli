@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Data file suffixes (same as device.py DATA_SUFFIXES)
 DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS files (
     on_off_ratio REAL,
     current_compliance REAL,
     compliance_confidence TEXT,
+    -- Sweep metadata (v4)
+    sweep_order INTEGER,
+    sweep_type TEXT,
+    sweep_segments TEXT,
+    temperature REAL,
     -- Metadata
     file_size INTEGER,
     mtime TEXT,
@@ -170,6 +175,20 @@ def _run_migrations(conn: sqlite3.Connection, from_version: int, to_version: int
             except sqlite3.OperationalError:
                 pass  # column already exists
 
+    if from_version < 4 <= to_version:
+        # v3 → v4: add sweep metadata columns (sweep_order, sweep_type,
+        # sweep_segments, temperature)
+        for col, col_type in [
+            ("sweep_order", "INTEGER"),
+            ("sweep_type", "TEXT"),
+            ("sweep_segments", "TEXT"),
+            ("temperature", "REAL"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE files ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
 
 # ── CRUD helpers ───────────────────────────────────────────────────────
 
@@ -187,6 +206,10 @@ def insert_file(
     date_code: Optional[str] = None,
     matrix: Optional[str] = None,
     suffix: Optional[int] = None,
+    sweep_order: Optional[int] = None,
+    sweep_type: Optional[str] = None,
+    sweep_segments: Optional[str] = None,
+    temperature: Optional[float] = None,
     v_set: Optional[float] = None,
     v_reset: Optional[float] = None,
     i_set: Optional[float] = None,
@@ -204,14 +227,16 @@ def insert_file(
             protocol, step, filename, technique_id, device_id,
             date_code, material, matrix,
             row, col, suffix,
+            sweep_order, sweep_type, sweep_segments, temperature,
             v_set, v_reset, i_set, i_reset, on_off_ratio,
             current_compliance, compliance_confidence,
             parse_error, file_size, mtime
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             protocol, step, filename, technique_id, device_id,
             date_code, material, matrix,
             row, col, suffix,
+            sweep_order, sweep_type, sweep_segments, temperature,
             v_set, v_reset, i_set, i_reset, on_off_ratio,
             current_compliance, compliance_confidence,
             parse_error, file_size, mtime,
@@ -339,6 +364,88 @@ def update_file_analysis(
             protocol, step, filename,
         ),
     )
+
+
+def update_file_sweep_metadata(
+    conn: sqlite3.Connection,
+    protocol: str,
+    step: str,
+    filename: str,
+    sweep_order: Optional[int] = None,
+    sweep_type: Optional[str] = None,
+    sweep_segments: Optional[str] = None,
+    temperature: Optional[float] = None,
+) -> None:
+    """Update sweep metadata for a specific file entry.
+
+    Uses protocol+step+filename as the lookup key.
+    Only updates columns where the value is not None.
+
+    Args:
+        conn: Open SQLite connection.
+        protocol: Protocol name.
+        step: Step name.
+        filename: The filename to update.
+        sweep_order: Sweep order index.
+        sweep_type: Sweep type code (``f``, ``sp``, ``sn``, ``uc``).
+        sweep_segments: JSON string of segment dicts.
+        temperature: Temperature in Kelvin.
+    """
+    sets: list[str] = []
+    params: list = []
+
+    if sweep_order is not None:
+        sets.append("sweep_order = ?")
+        params.append(sweep_order)
+    if sweep_type is not None:
+        sets.append("sweep_type = ?")
+        params.append(sweep_type)
+    if sweep_segments is not None:
+        sets.append("sweep_segments = ?")
+        params.append(sweep_segments)
+    if temperature is not None:
+        sets.append("temperature = ?")
+        params.append(temperature)
+
+    if not sets:
+        return
+
+    params.extend([protocol, step, filename])
+    conn.execute(
+        f"UPDATE files SET {', '.join(sets)} "
+        f"WHERE protocol = ? AND step = ? AND filename = ?",
+        params,
+    )
+
+
+def query_sweep_metadata(
+    conn: sqlite3.Connection,
+    protocol: str,
+    step: Optional[str] = None,
+) -> list[dict]:
+    """Query sweep metadata from the files table.
+
+    Args:
+        conn: Open SQLite connection.
+        protocol: Protocol name.
+        step: Optional step name filter.
+
+    Returns:
+        List of dicts with keys: ``filename``, ``sweep_order``,
+        ``sweep_type``, ``sweep_segments``, ``temperature``.
+    """
+    sql = ("SELECT filename, sweep_order, sweep_type, "
+           "sweep_segments, temperature "
+           "FROM files WHERE protocol = ?")
+    params: list = [protocol]
+
+    if step:
+        sql += " AND step = ?"
+        params.append(step)
+
+    sql += " ORDER BY step, sweep_order"
+    cursor = conn.execute(sql, params)
+    return [{key: row[key] for key in row.keys()} for row in cursor.fetchall()]
 
 
 def prune_stale_files(

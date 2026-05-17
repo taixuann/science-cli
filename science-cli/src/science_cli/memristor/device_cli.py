@@ -332,21 +332,47 @@ def cmd_init(args: argparse.Namespace) -> None:
         label = f"{rows}x{cols} crossbar"
 
     pdir = _resolve_protocol_dir(args)
-    yaml_path = pdir / "devices.yaml"
-    if yaml_path.exists():
-        print(f"devices.yaml already exists at {yaml_path}")
+
+    # ── NEW: Write to protocol YAML instead of devices.yaml ──
+    protocol_yaml = pdir / f"{pdir.name}.yaml"
+
+    # Check if protocol YAML exists
+    if not protocol_yaml.exists():
+        print(f"  Error: protocol YAML not found at {protocol_yaml}")
+        print(f"  Create a protocol first with 'protocol create' or navigate to a protocol directory.")
         sys.exit(1)
 
-    from science_cli.core.technique import detect_technique
-    tech_map = _build_tech_map()
+    # Check if device section already exists
+    from science_cli.core.protocol import has_device_section, write_device_section
+    if has_device_section(protocol_yaml):
+        print(f"  Protocol YAML already has a device section. Use --matrix to update.")
 
-    # Read protocol YAML to auto-resolve step → technique/device
-    import yaml
-    proto_yaml = pdir / f"{pdir.name}.yaml"
-    proto_data = yaml.safe_load(open(proto_yaml)) if proto_yaml.exists() else {}
-    step_meta = {s["name"]: s for s in proto_data.get("steps", [])}
+    # Build geometry dict
+    geometry = {
+        "rows": rows,
+        "cols": cols,
+        "label": label,
+        "id": f"crossbar-{rows}x{cols}",
+    }
+    if not write_device_section(protocol_yaml, geometry):
+        print(f"  Error: Failed to write device section to {protocol_yaml}")
+        sys.exit(1)
 
-    steps: dict[str, str] = {}
+    # Build steps mapping from protocol YAML (or --step arg)
+    proto_data = {}
+    try:
+        import yaml
+        with open(protocol_yaml) as f:
+            proto_data = yaml.safe_load(f) or {}
+    except Exception:
+        pass
+
+    step_techniques = {}
+    for s in proto_data.get("steps", []):
+        if isinstance(s, dict) and s.get("name") and s.get("technique"):
+            step_techniques[s["name"]] = s["technique"]
+
+    steps = {}
     raw = getattr(args, "steps", "") or ""
     if raw:
         for raw_part in raw.split(","):
@@ -357,37 +383,36 @@ def cmd_init(args: argparse.Namespace) -> None:
                 tech, step_dir_name = part.split(":", 1)
                 steps[tech.strip()] = step_dir_name.strip()
             else:
-                # Try protocol YAML metadata first
-                meta = step_meta.get(part)
-                if meta and meta.get("technique"):
-                    steps[meta["technique"]] = part
+                # Look up technique from protocol YAML
+                tech = step_techniques.get(part, "")
+                if tech:
+                    steps[tech] = part
                 else:
+                    # Try auto-detection
+                    from science_cli.core.technique import detect_technique
+                    from science_cli.core.config import resolve_technique_from_grammar
                     ft = detect_technique(part)
-                    tech = tech_map.get(ft, "")
-                    if tech:
-                        steps[tech] = part
-                    else:
-                        print(f"  Warning: could not infer technique from '{part}', skipping")
+                    if ft:
+                        tid = resolve_technique_from_grammar(ft)
+                        if tid:
+                            steps[tid] = part
+                            continue
+                    print(f"  Warning: could not infer technique from '{part}', skipping")
 
-    config = DeviceConfig(
-        device=DeviceGeometry(
-            id=f"crossbar-{rows}x{cols}",
-            label=label,
-            rows=rows,
-            cols=cols,
-        ),
-        points=[],
-        steps=steps,
-    )
-    write_devices(pdir, config)
-    print(f"Initialized {yaml_path}")
-    print(f"  Device: {config.device.label} ({config.device.rows}x{config.device.cols})")
-    print(f"  Cells: {config.device.total_cells}")
+    print(f"Initialized device in {protocol_yaml}")
+    print(f"  Device: {label} ({rows}x{cols})")
+    print(f"  Cells: {rows * cols}")
     if steps:
         print(f"  Steps mapping: {steps}")
-    print(f"  Use 'memristor ls --matrix' to view the grid.")
-    if not steps:
-        print(f"  Tip: add --steps step_dir_name or --steps iv:4_iv,endurance:5_end")
+
+    # Optional: migrate legacy devices.yaml
+    legacy_path = pdir / "devices.yaml"
+    if legacy_path.exists():
+        from science_cli.memristor.device import _migrate_devices_yaml
+        report = _migrate_devices_yaml(pdir)
+        if report.get("migrated"):
+            print(f"  Migrated {report.get('files_migrated', 0)} file(s) from legacy devices.yaml")
+
     set_last_step(pdir.name)
 
 
@@ -399,6 +424,11 @@ def cmd_ls(args: argparse.Namespace) -> None:
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
     config = read_devices(pdir)
+
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        print(f"  (Check for protocol YAML with device section or legacy devices.yaml)")
+        sys.exit(1)
 
     material_filter = getattr(args, "material", "") or ""
     technique = args.technique or ""
@@ -499,6 +529,10 @@ def cmd_info(args: argparse.Namespace) -> None:
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
     config = read_devices(pdir)
+
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        sys.exit(1)
 
     pt = config.get_point(args.row, args.col)
     if pt is None:
@@ -1000,6 +1034,12 @@ def cmd_sync(args: argparse.Namespace) -> None:
         rebuild_cells(conn)
         conn.commit()
 
+        # ── NEW: Sync sweep metadata back to protocol YAML ──
+        from science_cli.memristor.device import sync_sweep_to_protocol_yaml
+        sweep_report = sync_sweep_to_protocol_yaml(pdir, conn)
+        if sweep_report.get("files_updated", 0) > 0:
+            print(f"  Sweep metadata synced to protocol YAML: {sweep_report['files_updated']} file(s)")
+
         # ── Report ──
         if reconcile_report:
             print(f"Reconcile for protocol '{protocol_name}':")
@@ -1141,7 +1181,7 @@ def _sqlite_reindex(pdir: Path) -> None:
 
     config = read_devices(pdir)
     if not config:
-        print(f"No devices.yaml found in {pdir}")
+        print(f"No device configuration found in {pdir}")
         sys.exit(1)
 
     conn = open_db(proj)
@@ -1347,6 +1387,10 @@ def cmd_stats(args: argparse.Namespace) -> None:
         sys.exit(1)
     config = read_devices(pdir)
 
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        sys.exit(1)
+
     total = config.device.total_cells
     print(f"Device: {config.device.id} ({config.device.label})")
     print(f"Geometry: {config.device.rows} rows x {config.device.cols} cols = {total} cells")
@@ -1378,14 +1422,14 @@ def cmd_stats(args: argparse.Namespace) -> None:
 
 
 def cmd_check(args: argparse.Namespace) -> None:
-    """Find data files not tracked in devices.yaml (recursive scan)."""
+    """Find data files not tracked in device configuration (recursive scan)."""
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
 
     orphans = find_orphaned_files(pdir)
     if not orphans:
-        print("All files are assigned in devices.yaml.")
+        print("All files are assigned in device configuration.")
         return
 
     if args.list:
@@ -1427,7 +1471,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         sync_devices(pdir)
         config = read_devices(pdir)
         if config is None:
-            print("Failed to re-read devices.yaml after sync.")
+            print("Failed to re-read device configuration after sync.")
             sys.exit(1)
 
     # Collect all IV files
@@ -1649,12 +1693,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
-    p_init = sub.add_parser("init", help="Scaffold a devices.yaml")
+    p_init = sub.add_parser("init", help="Scaffold device geometry in protocol YAML")
     p_init.add_argument("--rows", type=int, default=None)
     p_init.add_argument("--cols", type=int, default=None)
     p_init.add_argument("--matrix", default="",
         help="Shorthand: --matrix r6-c6 (sets rows=6, cols=6)")
     p_init.add_argument("--label", default="")
+    p_init.add_argument(
+        "--pt", "--protocol",
+        dest="protocol_name",
+        default="",
+        help="Protocol name (default: current session protocol)",
+    )
     p_init.add_argument(
         "--steps", default="",
         help="Step dirs: 4_iv-characterization or iv:4_iv,endurance:5_end",
