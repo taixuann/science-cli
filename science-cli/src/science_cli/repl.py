@@ -10,6 +10,7 @@ import io
 import os
 import sys
 import shlex
+import shutil
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -31,7 +32,19 @@ DIM = "#888888"
 TEXT = "#cccccc"
 PROJECT_COL = "#d4a853"
 PROTOCOL_COL = "#5ea8b5"
-TERM_WIDTH = 80
+
+
+def _term_width() -> int:
+    """Get current terminal width (fallback 80)."""
+    try:
+        return shutil.get_terminal_size().columns
+    except Exception:
+        return 80
+
+
+def _sep() -> str:
+    """Full-width separator line."""
+    return "─" * _term_width()
 
 
 def _capture_handler_output(cmd_name: str, cmd_args: list[str]) -> str:
@@ -83,15 +96,12 @@ def _build_context_prompt() -> FormattedText:
     ft = FormattedText()
     sess = load_session()
 
-    # top separator
-    ft.append((DIM, "  " + "─" * (TERM_WIDTH - 4) + "\n"))
-
-    # session info
+    sep = _sep()
+    ft.append((DIM, sep + "\n"))
     theme = sess.get("theme", "default")
     ft.append((DIM, "  theme: "))
     ft.append((TEXT, theme))
     ft.append((DIM, " │ ctx "))
-
     proj = sess.get("last_project", "")
     prot = sess.get("last_protocol", "")
     step = sess.get("last_step", "")
@@ -103,10 +113,8 @@ def _build_context_prompt() -> FormattedText:
         ft.append((PROTOCOL_COL, f"/{prot}"))
     if step:
         ft.append((DIM, f"/{step}"))
-
-    # bottom separator + prompt
-    ft.append((DIM, "\n  " + "─" * (TERM_WIDTH - 4) + "\n"))
-    ft.append((f"bold {ACCENT}", "sci> "))
+    ft.append((DIM, "\n" + sep + "\n"))
+    ft.append((f"bold {ACCENT}", "> "))
     return ft
 
 
@@ -147,8 +155,7 @@ def run_repl():
             continue
 
         add_history(raw)
-        sep = "  " + "─" * (TERM_WIDTH - 4)
-        print(f"\x1b[0m{sep}")
+        print(f"\x1b[0m{_sep()}")
         print(f">>> {raw}")
 
         try:
