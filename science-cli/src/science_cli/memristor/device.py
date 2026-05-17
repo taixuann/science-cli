@@ -1012,17 +1012,18 @@ def generate_device_grid(
     occupied: set[tuple[int, int]] | None = None,
     technique: str = "",
     title: str = "",
+    cell_counts: dict[tuple[int, int], int] | None = None,
 ) -> str:
-    """Generate ASCII grid showing technique coverage per cell.
+    """Generate ASCII grid showing file count or technique coverage per cell.
 
     Conventions:
-      T=top electrode (1-indexed, T1 at bottom, increases upward)
-      B=bottom electrode (1-indexed, B1 left, increases right)
+      R=row (1-indexed, R1 at top), C=col (1-indexed, C1 left, increases right)
 
     Args:
         occupied: If provided, only these positions are shown as occupied.
         technique: If provided, only check this technique (e.g., ``"iv"``).
         title: Optional title line above the grid.
+        cell_counts: Optional dict of (row,col) → file count. If given, shows count.
     """
     rows, cols = config.device.rows, config.device.cols
     grid: dict[tuple[int, int], str] = {}
@@ -1030,12 +1031,16 @@ def generate_device_grid(
     for pt in config.points:
         if occupied is not None and (pt.row, pt.col) not in occupied:
             continue
-        if technique:
+        if cell_counts is not None:
+            n = cell_counts.get((pt.row, pt.col), 0)
+            grid[(pt.row, pt.col)] = str(n)
+        elif technique:
             letters = (
                 TECH_LETTERS.get(technique, "?")
                 if pt.has_technique(technique)
                 else "-"
             )
+            grid[(pt.row, pt.col)] = letters
         else:
             letters = ""
             for tech in TECH_ORDER:
@@ -1044,24 +1049,27 @@ def generate_device_grid(
                     if pt.has_technique(tech)
                     else "-"
                 )
-        grid[(pt.row, pt.col)] = letters
+            grid[(pt.row, pt.col)] = letters
 
     lines: list[str] = []
     if title:
         lines.append(title)
         lines.append("")
-    for i in reversed(range(rows)):
+
+    col_header = "     " + "  ".join(f"C{j + 1}".ljust(5) for j in range(cols))
+    lines.append(col_header)
+
+    for i in range(rows):
         row_parts: list[str] = []
         for j in range(cols):
             cell = grid.get((i, j), "----")
             row_parts.append(cell.ljust(5))
-        lines.append(f"T{i + 1}   " + "  ".join(row_parts))
-
-    bottom = "     " + "  ".join(f"B{j + 1}".ljust(5) for j in range(cols))
-    lines.append(bottom)
+        lines.append(f"R{i + 1}   " + "  ".join(row_parts))
 
     lines.append("")
-    if technique:
+    if cell_counts is not None:
+        lines.append("File count per cell. '----' = no data")
+    elif technique:
         lines.append(
             f"Legend: {TECH_LETTERS.get(technique, '?')}={technique.upper()}, "
             "-=not measured"
@@ -1071,7 +1079,7 @@ def generate_device_grid(
             "Legend: I=IV, E=Endurance, R=Retention, "
             "S=Switching, -=not measured"
         )
-    lines.append("T=top electrode row, B=bottom electrode col, 1-indexed")
+    lines.append("R=row, C=col, 1-indexed")
     return "\n".join(lines)
 
 
@@ -1080,31 +1088,47 @@ def generate_rich_grid(
     occupied: set[tuple[int, int]] | None = None,
     technique: str = "",
     title: str = "Device Matrix",
+    cell_counts: dict[tuple[int, int], int] | None = None,
 ):
-    """Generate a Rich Table showing technique coverage per cell with colors.
+    """Generate a Rich Table showing file count or technique coverage per cell.
 
     Conventions:
-      T=top electrode (1-indexed, T1 at bottom, increases upward)
-      B=bottom electrode (1-indexed, B1 left, increases right)
+      R=row (1-indexed, R1 at top), C=col (1-indexed, C1 left, increases right)
 
     Args:
         occupied: If provided, only these positions are shown as occupied.
         technique: If provided, only check this technique (e.g., ``"iv"``).
         title: Custom table title.
+        cell_counts: Optional dict of (row,col) → file count. If given, shows count.
     """
     from rich.table import Table
 
     rows, cols = config.device.rows, config.device.cols
     grid: dict[tuple[int, int], str] = {}
+
+    def _count_style(n_str: str) -> str:
+        try:
+            n = int(n_str)
+            if n > 0:
+                return f"[cyan]{n_str}[/cyan]"
+            else:
+                return f"[bright_black]{n_str}[/bright_black]"
+        except ValueError:
+            return f"[bright_black]{n_str}[/bright_black]"
+
     for pt in config.points:
         if occupied is not None and (pt.row, pt.col) not in occupied:
             continue
-        if technique:
+        if cell_counts is not None:
+            n = cell_counts.get((pt.row, pt.col), 0)
+            grid[(pt.row, pt.col)] = str(n)
+        elif technique:
             letters = (
                 TECH_LETTERS.get(technique, "?")
                 if pt.has_technique(technique)
                 else "-"
             )
+            grid[(pt.row, pt.col)] = letters
         else:
             letters = ""
             for tech in TECH_ORDER:
@@ -1113,34 +1137,28 @@ def generate_rich_grid(
                     if pt.has_technique(tech)
                     else "-"
                 )
-        grid[(pt.row, pt.col)] = letters
+            grid[(pt.row, pt.col)] = letters
 
-    TECH_STYLES = {
-        "I": "cyan",
-        "E": "yellow",
-        "R": "magenta",
-        "S": "green",
-        "-": "bright_black",
-    }
+    table = Table(title=title, show_header=True, border_style="bright_black")
 
-    table = Table(title=title, show_header=False, border_style="bright_black")
+    col_header = ["C" + str(j + 1) for j in range(cols)]
     table.add_column("", style="bold", width=4)
-    for j in range(cols):
-        table.add_column("", justify="center", width=6)
+    for j, h in enumerate(col_header):
+        table.add_column(h, justify="center", width=6)
 
-    for i in reversed(range(rows)):
-        cells = [f"T{i + 1}"]
+    for i in range(rows):
+        cells = [f"R{i + 1}"]
         for j in range(cols):
-            letters = grid.get((i, j), "----")
-            styled = ""
-            for ch in letters:
-                color = TECH_STYLES.get(ch, "white")
-                styled += f"[{color}]{ch}[/{color}]"
-            cells.append(styled)
+            val = grid.get((i, j), "----")
+            if cell_counts is not None:
+                cells.append(_count_style(val))
+            else:
+                styled = ""
+                for ch in val:
+                    color = TECH_STYLES.get(ch, "white")
+                    styled += f"[{color}]{ch}[/{color}]"
+                cells.append(styled)
         table.add_row(*cells)
-
-    footer = ["B" + str(j + 1) for j in range(cols)]
-    table.add_row("", *footer, style="bold")
 
     return table
 

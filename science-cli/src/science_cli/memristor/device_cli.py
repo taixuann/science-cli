@@ -436,6 +436,24 @@ def cmd_ls(args: argparse.Namespace) -> None:
     if args.matrix:
         from rich.console import Console
 
+        # Load cell counts from SQLite
+        proj = pdir.parent.parent
+        cell_counts: dict[tuple[int, int], int] = {}
+        try:
+            from science_cli.memristor.db import get_db_path
+            db_path = get_db_path(proj)
+            if db_path.exists():
+                import sqlite3
+                with sqlite3.connect(db_path) as _conn:
+                    rows = _conn.execute(
+                        "SELECT row, col, n_files FROM cells WHERE protocol=?",
+                        (pdir.name,),
+                    ).fetchall()
+                    for r, c, n in rows:
+                        cell_counts[(r, c)] = n
+        except Exception:
+            pass
+
         console = Console()
         material_groups = config.get_points_by_material()
 
@@ -455,12 +473,13 @@ def cmd_ls(args: argparse.Namespace) -> None:
             )
             console.print(
                 generate_rich_grid(
-                    config, occupied=occupied, technique=technique, title=title
+                    config, occupied=occupied, technique=technique, title=title,
+                    cell_counts=cell_counts or None,
                 )
             )
         elif not material_groups:
             # No material data — single grid (backward-compatible)
-            console.print(generate_rich_grid(config, technique=technique))
+            console.print(generate_rich_grid(config, technique=technique, cell_counts=cell_counts or None))
         else:
             # All materials — one table per material+batch
             first = True
@@ -489,6 +508,7 @@ def cmd_ls(args: argparse.Namespace) -> None:
                         occupied=occupied,
                         technique=technique,
                         title=title,
+                        cell_counts=cell_counts or None,
                     )
                 )
         return

@@ -181,6 +181,9 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
         table.add_column("Files", style="dim", justify="right")
         table.add_column("Description", style="bright_black")
 
+        def _file_name(f):
+            return f["file"] if isinstance(f, dict) else str(f)
+
         for s in steps:
             sn = s.get("name", "?")
             t = s.get("technique", "")
@@ -196,7 +199,8 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
             # Show extra files from directory when show_all
             if show_all and step_dir.exists():
                 extra = sorted(step_dir.glob("*"))
-                extra_names = [e.name for e in extra if e.name not in sfiles and e.name != "results"]
+                sfile_names = {_file_name(f) for f in sfiles}
+                extra_names = [e.name for e in extra if e.name not in sfile_names and e.name != "results"]
                 if extra_names:
                     file_badge += f" +{len(extra_names)} in dir"
 
@@ -204,7 +208,8 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
             if show_step or show_files or show_all:
                 # Include file list in description column for detailed views
                 if sfiles:
-                    details = ", ".join(sfiles[:3])
+                    names = [_file_name(f) for f in sfiles[:3]]
+                    details = ", ".join(names)
                     if len(sfiles) > 3:
                         details += f" +{len(sfiles) - 3} more"
                     if display_desc:
