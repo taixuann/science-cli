@@ -636,6 +636,13 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     else:
         ax.plot(x, y, linewidth=linewidth, **plot_kw)
 
+    if technique == "ec-eis":
+        ax.set_aspect("equal")
+        if not flags.get("xlabel"):
+            ax.set_xlabel("Z' (Ω)")
+        if not flags.get("ylabel"):
+            ax.set_ylabel("-Z'' (Ω)")
+
     _apply_figure_kw(ax, flags, Path(filepath).stem)
 
     out_dir = _get_results_dir(filepath)

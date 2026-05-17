@@ -116,7 +116,7 @@ def _analyze_direct(files: list, rest_args: list) -> None:
         _analyze_cv(filepath, flags)
     elif tech == "ca":
         _analyze_ca(filepath, flags)
-    elif tech == "eis":
+    elif tech in ("eis", "ec-eis"):
         _analyze_eis(filepath, flags)
     else:
         console.print(f"[yellow]Unknown technique: {tech}. Trying CV analysis as default.[/yellow]")

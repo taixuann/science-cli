@@ -3,9 +3,20 @@
 import numpy as np
 
 from science_cli.plot.base import (
-    create_figure, save_figure, apply_figure_kw,
+    create_figure, apply_figure_kw,
     parse_figsize, plot_line,
 )
+
+
+def _ensure_neg_imag(z_imag):
+    """Ensure z_imag represents -Z'' (positive upward).
+    
+    Normalized column z_imag stores the raw column value. If the raw column
+    was named "-Z'' (Ω)" (Autolab convention), values are already positive.
+    If named "Z'' (Ω)" (other instruments), values are negative for capacitive.
+    Detect by sign of min value and negate if needed so -Z'' sits on +y axis.
+    """
+    return -z_imag if np.min(z_imag) < 0 else z_imag
 
 
 def plot_eis_nyquist(
@@ -22,7 +33,8 @@ def plot_eis_nyquist(
     else:
         fig = ax.figure
 
-    plot_line(z_real, -z_imag, ax=ax, flags=flags, label=label)
+    y = _ensure_neg_imag(z_imag)
+    plot_line(z_real, y, ax=ax, flags=flags, label=label)
 
     apply_figure_kw(ax, flags)
     if not flags.get("xlabel"):
@@ -43,26 +55,27 @@ def plot_eis_bode(
     flags = flags or {}
     figsize = parse_figsize(flags)
 
-    if phase is not None:
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
-    else:
-        fig, ax1 = plt.subplots(figsize=figsize)
+    fig, ax1 = create_figure(flags.get("theme", ""), figsize=figsize)
 
-    apply_theme(flags.get("theme", "default"))
-    plot_line(frequency, magnitude, ax=ax1, flags=flags, label="|Z|")
+    mag_flags = dict(flags)
+    mag_flags.setdefault("color", "#2563eb")
+    plot_line(frequency, magnitude, ax=ax1, flags=mag_flags)
     ax1.set_ylabel("|Z| (Ω)")
     ax1.set_xscale("log")
     ax1.set_yscale("log")
     ax1.grid(True, alpha=0.3)
 
     if phase is not None:
-        plot_line(frequency, phase, ax=ax2, flags=flags, label="Phase")
-        ax2.set_xlabel("Frequency (Hz)")
+        ax2 = ax1.twinx()
+        phase_flags = dict(flags)
+        phase_flags["color"] = "#dc2626"
+        plot_line(frequency, phase, ax=ax2, flags=phase_flags)
         ax2.set_ylabel("Phase (°)")
         ax2.set_xscale("log")
+        ax2.set_xlabel("Frequency (Hz)")
         ax2.grid(True, alpha=0.3)
 
-    return fig, (ax1, ax2) if phase is not None else ax1
+    return fig, ax1
 
 
 def plot_eis_fit(
@@ -76,12 +89,14 @@ def plot_eis_fit(
     figsize = parse_figsize(flags)
     fig, ax = create_figure(flags.get("theme", "default"), figsize)
 
-    plot_line(z_real, -z_imag, ax=ax, flags=flags, label="Data")
+    y_data = _ensure_neg_imag(z_imag)
+    y_fit = _ensure_neg_imag(fit_imag)
+    plot_line(z_real, y_data, ax=ax, flags=flags, label="Data")
     fit_flags = dict(flags)
     fit_flags["linestyle"] = "--"
     fit_flags["color"] = "red"
     fit_flags.pop("marker", None)
-    plot_line(fit_real, -fit_imag, ax=ax, flags=fit_flags, label="Fit")
+    plot_line(fit_real, y_fit, ax=ax, flags=fit_flags, label="Fit")
 
     ax.set_xlabel("Z' (Ω)")
     ax.set_ylabel("-Z'' (Ω)")
