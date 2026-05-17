@@ -283,7 +283,7 @@ def plot_handler(args: list) -> None:
         rprint(f"[dim]Available: {', '.join(themes)}[/dim]")
         return
     if args[0] == "--fzf":
-        _plot_interactive()
+        _plot_interactive(args[1:])
         return
 
     if args[0] == "results":
@@ -305,7 +305,7 @@ def plot_handler(args: list) -> None:
         console.print("[yellow]Usage: plot [--fzf | -f file1,file2 [options]][/yellow]")
 
 
-def _plot_interactive() -> None:
+def _plot_interactive(extra_args: list | None = None) -> None:
     from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
@@ -347,27 +347,29 @@ def _plot_interactive() -> None:
         file_step_map = {k: v for k, v in file_step_map.items() if v[0] == active_proto}
 
     # Build display items with step/protocol info
-    col_re = re.compile(r"^\S+\s+\S+\s+")
+    from science_cli.core.fzf_utils import build_fzf_display
+    show_proto = not active_proto
+    col_re = re.compile(r"^\S+\s+\S+\s+") if show_proto else re.compile(r"^\S+\s+")
     display_items = []
     for name in item_names:
         if name in file_step_map:
             proto, step = file_step_map[name]
-            from science_cli.core.fzf_utils import build_fzf_display
-            display_items.append(build_fzf_display(proto, step, name))
-        else:
+            display_items.append(build_fzf_display(proto, step, name, show_protocol=show_proto))
+        elif not active_proto:
             display_items.append(name)
 
+    prompt = f"{active_proto} | Select file(s) >" if active_proto else "Select file(s) (Tab to multi-select):"
     selected = fzf_select(
         items=display_items,
-        prompt="Select file(s) (Tab to multi-select):",
+        prompt=prompt,
         multi=True,
-        preview=f"head -n 20 {raw_dir}/$(echo {{}} | cut -d' ' -f1)",
+        preview=f"head -n 20 {raw_dir}/$(echo {{}} | awk '{{print $NF}}')",
         preview_window="right:50%:border-sharp",
     )
     if not selected:
         return
 
-    # Strip step info to get clean filenames
+    # Strip column prefix to get clean filenames
     selected = [col_re.sub("", s) for s in selected]
 
     # Show selected files summary
@@ -446,12 +448,26 @@ def _plot_interactive() -> None:
     resolved = [_resolve_file(f) for f in selected]
     resolved = [f for f in resolved if f]
 
-    if len(resolved) == 1:
-        _do_plot(resolved[0], all_flags, auto_technique)
-    elif len(resolved) > 1:
-        _do_overlap(resolved, all_flags, auto_technique)
-    else:
+    if not resolved:
         console.print("[yellow]No valid files selected.[/yellow]")
+        return
+
+    # Determine overlay vs individual mode
+    overlay_mode = extra_args and "--overlay" in extra_args
+    all_mode = extra_args and "--all" in extra_args
+
+    if not overlay_mode and not all_mode and len(resolved) > 1:
+        choice = input("  Overlay all (o) or individual plots (i)? [o/i] ").strip().lower()
+        if choice == "i":
+            all_mode = True
+        else:
+            overlay_mode = True
+
+    if all_mode:
+        for f in resolved:
+            _do_plot(f, all_flags, auto_technique)
+    else:
+        _do_overlap(resolved, all_flags, auto_technique)
 
 
 def _plot_direct(files: list, rest_args: list) -> None:

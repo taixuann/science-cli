@@ -231,13 +231,11 @@ def _delete_data(args: list) -> None:
     if flags.get("fzf"):
         from science_cli.core.fzf_utils import fzf_select, build_fzf_display
         pname = safe_name  # protocol name is available as safe_name
-        items = [build_fzf_display(pname, step_name, fname) for step_name, fname, _ in all_entries]
+        items = [build_fzf_display(pname, step_name, fname, show_protocol=False) for step_name, fname, _ in all_entries]
         selected = fzf_select(
             items=items,
-            prompt="Select files to remove >",
+            prompt=f"{pname} | Select files to remove >",
             multi=True,
-            preview="head -3 {}",
-            preview_window="right:50%:border-sharp",
         )
         if not selected:
             console.print("[yellow]No files selected.[/yellow]")
@@ -245,10 +243,10 @@ def _delete_data(args: list) -> None:
         # Build lookup from display string back to entry
         display_to_entry = {}
         for step_name, fname, fi in all_entries:
-            display_to_entry[build_fzf_display(pname, step_name, fname)] = (step_name, fname, fi)
+            display_to_entry[build_fzf_display(pname, step_name, fname, show_protocol=False)] = (step_name, fname, fi)
         selected_set = set(selected)
         for step_name, fname, fi in all_entries:
-            key = build_fzf_display(pname, step_name, fname)
+            key = build_fzf_display(pname, step_name, fname, show_protocol=False)
             if key in selected_set:
                 si = next(i for i, s in enumerate(steps) if s.get("name") == step_name)
                 to_remove.append((si, fi))

@@ -341,27 +341,26 @@ def _add_data(args: list) -> None:
 
     from science_cli.core.fzf_utils import build_fzf_display
     display_items: list[str] = []
-    pname = proto_name  # protocol name is already available in scope
-    # Unassigned files (use "-" placeholder to preserve column structure)
+    # Unassigned files (use "-" placeholder step)
     for name in unassigned:
-        display_items.append(build_fzf_display(pname, "-", name))
+        display_items.append(build_fzf_display(proto_name, "-", name, show_protocol=False))
     # Per-step sections
     for step in sorted(assigned_grouped.keys()):
         for fname in sorted(assigned_grouped[step]):
-            display_items.append(build_fzf_display(pname, step, fname))
+            display_items.append(build_fzf_display(proto_name, step, fname, show_protocol=False))
 
     import re
     selected = fzf_select(
         items=display_items,
-        prompt="Select files (Tab to multi-select):",
+        prompt=f"{proto_name} | Select files (Tab to multi-select):",
         multi=True,
     )
     if not selected:
         console.print("[yellow]No files selected.[/yellow]")
         return
 
-    # Strip column prefix (protocol + step) to recover filenames
-    col_re = re.compile(r"^\S+\s+\S+\s*")
+    # Strip step column to recover filenames
+    col_re = re.compile(r"^\S+\s+")
     selected_stripped: list[str] = []
     for s in selected:
         fname = col_re.sub("", s).strip()

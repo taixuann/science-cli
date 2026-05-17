@@ -226,6 +226,8 @@ COMMAND_HELP: Dict[str, dict] = {
         "desc": "Plot data — interactive or direct (Group 3). Accepts technique, analyze, style, and figure options.",
         "subcommands": {
             "plot --fzf":        {"desc": "Interactive: fzf file selection then prompts", "usage": "plot --fzf"},
+            "plot --fzf --overlay": {"desc": "Interactive: overlay all chosen files in one plot", "usage": "plot --fzf --overlay"},
+            "plot --fzf --all":  {"desc": "Interactive: export each file individually", "usage": "plot --fzf --all"},
             "plot -f <file>":    {"desc": "Single file direct plot", "usage": "plot -f 2105_CV.txt [options]"},
             "plot -f <f1>,<f2>": {"desc": "Multiple files overlay", "usage": "plot -f 2105_CV.txt,2106_CV.txt [options]"},
             "plot -theme":       {"desc": "Configure plot theme (placeholder)", "usage": "plot -theme"},

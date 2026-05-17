@@ -94,11 +94,36 @@ def _edit_protocol(args: list) -> None:
     if new_name:
         safe_new = sanitize_protocol_name(new_name)
         data["name"] = safe_new
-        new_path = paths.protocol_yaml_new(safe_new)
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-        if new_path.exists() and new_path != yaml_path:
-            console.print(f"[red]Protocol '{safe_new}' already exists.[/red]")
+        old_pdir = paths.protocol_dir / safe_name
+        new_pdir = paths.protocol_dir / safe_new
+        if new_pdir.exists() and new_pdir != old_pdir:
+            # Allow rename if existing target is an empty directory leftover
+            # from a previous incomplete rename.
+            empties = list(new_pdir.iterdir()) if new_pdir.is_dir() else [None]
+            if not empties:
+                new_pdir.rmdir()
+            else:
+                console.print(f"[red]Protocol '{safe_new}' already exists.[/red]")
+                return
+
+        new_yaml = new_pdir / f"{safe_new}.yaml"
+        flat_yaml = paths.protocol_dir / f"{safe_name}.yaml"
+
+        if old_pdir.is_dir():
+            old_pdir.rename(new_pdir)
+            old_yaml = new_pdir / f"{safe_name}.yaml"
+        elif flat_yaml.exists():
+            new_pdir.mkdir(parents=True, exist_ok=True)
+            old_yaml = flat_yaml
+        else:
+            console.print(f"[red]Protocol '{safe_name}' not found on disk.[/red]")
             return
+
+        if old_yaml != new_yaml and old_yaml.exists():
+            old_yaml.rename(new_yaml)
+
+        yaml_path = new_yaml
+        safe_name = safe_new  # update for subsequent step operations
 
     if new_desc:
         data["description"] = new_desc
@@ -184,10 +209,8 @@ def _edit_protocol(args: list) -> None:
                 s["device"] = devs[i]
 
     if new_name:
-        with open(new_path, "w") as f:
+        with open(yaml_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
-        if new_path != yaml_path:
-            yaml_path.unlink()
         rprint(f"[bold green]✓[/bold green] Protocol renamed to '{safe_new}'")
     else:
         with open(yaml_path, "w") as f:
@@ -320,10 +343,10 @@ def _edit_data(args: list) -> None:
 
     # fzf multi-select: column format via build_fzf_display
     from science_cli.core.fzf_utils import fzf_select, build_fzf_display
-    display_items = [build_fzf_display(proto_name, sn, fn) for sn, fn in all_files]
+    display_items = [build_fzf_display(proto_name, sn, fn, show_protocol=False) for sn, fn in all_files]
     selected_displays = fzf_select(
         display_items,
-        prompt="Select files to move (Tab to multi-select):",
+        prompt=f"{proto_name} | Select files to move (Tab to multi-select):",
         multi=True,
     )
     if not selected_displays:
@@ -335,9 +358,9 @@ def _edit_data(args: list) -> None:
     # Handle duplicate filenames across steps by using index
     display_to_file: dict[str, tuple[str, str]] = {}
     for i, (sn, fn) in enumerate(all_files):
-        key = build_fzf_display(proto_name, sn, fn)
+        key = build_fzf_display(proto_name, sn, fn, show_protocol=False)
         if key in display_to_file:
-            key = build_fzf_display(proto_name, sn, fn) + f"  [{i}]"
+            key = build_fzf_display(proto_name, sn, fn, show_protocol=False) + f"  [{i}]"
             display_to_file[key] = (sn, fn)
         else:
             display_to_file[key] = (sn, fn)

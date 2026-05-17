@@ -12,10 +12,10 @@ Usage:
     mem-device add --fzf
 
     # Plot all:
-    mem-device plot --all [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device plot --all [--overlay] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
 
     # Interactive:
-    mem-device plot [--all] [--fzf] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device plot [--fzf] [--overlay | --all] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
     mem-device dashboard [--output path] [--open]
     
 In the sci REPL, use 'memristor' instead of 'mem-device'.
@@ -975,14 +975,12 @@ def cmd_add_fzf(args: argparse.Namespace) -> None:
         return
 
     proto_name = pdir.name
-    display_names = [build_fzf_display(proto_name, step_name, rel) for rel, step_name, _ in unassigned]
+    display_names = [build_fzf_display(proto_name, step_name, rel, show_protocol=False) for rel, step_name, _ in unassigned]
 
     selected = fzf_select(
         items=display_names,
-        prompt="Select data files to assign >",
+        prompt=f"{proto_name} | Select data files to assign >",
         multi=True,
-        preview="head -30 {}",
-        preview_window="right:50%:border-sharp",
     )
     if not selected:
         print("No files selected.")
@@ -991,7 +989,7 @@ def cmd_add_fzf(args: argparse.Namespace) -> None:
     # Build a lookup from display name → (rel_path, step, path)
     lookup = {}
     for rel, step, path in unassigned:
-        display_key = build_fzf_display(proto_name, step, rel)
+        display_key = build_fzf_display(proto_name, step, rel, show_protocol=False)
         lookup[display_key] = (rel, step, path)
 
     assignments = []
@@ -1866,6 +1864,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         build_plot_filename,
         build_plot_title,
         generate_iv_svg,
+        generate_iv_overlay_svg,
         collect_iv_files,
         build_fzf_line,
     )
@@ -1909,10 +1908,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         selected_lines = fzf_select(
             items=display_lines,
-            prompt="Select IV files to plot >",
+            prompt=f"{pdir.name} | Select IV files to plot >",
             multi=True,
-            preview="echo {}",
-            preview_window="",
         )
         if not selected_lines:
             print("No files selected.")
@@ -1929,86 +1926,139 @@ def cmd_plot(args: argparse.Namespace) -> None:
     overwrite = getattr(args, "overwrite", False)
     dpi = getattr(args, "dpi", 150)
 
-    # ── Issue 4: Compute per-cell file index for line style cycling ──
-    position_files: dict[tuple[int, int], list[dict]] = {}
-    for t in targets:
-        pos = (t["row"], t["col"])
-        position_files.setdefault(pos, []).append(t)
-    for pos, files in position_files.items():
-        files.sort(key=lambda x: x["order"])
-        for i, f in enumerate(files):
-            f["file_index"] = i
+    # Determine overlay vs individual mode
+    overlay_mode = getattr(args, "overlay", False)
+    all_mode = getattr(args, "plot_all", False)
+
+    if args.fzf and not overlay_mode and not all_mode and len(targets) > 1:
+        choice = input("  Overlay all (o) or individual plots (i)? [o/i] ").strip().lower()
+        if choice == "i":
+            all_mode = True
+        else:
+            overlay_mode = True
+
+    if overlay_mode and all_mode:
+        all_mode = False
 
     plotted = 0
     skipped = 0
     errors = 0
 
-    for t in targets:
-        fe = t["file_entry"]
-        plot_filename = fe.extra.get("plot", "")
+    if overlay_mode:
+        # ── Overlay mode: one plot with all traces ──
+        all_traces = []
+        for t in targets:
+            fe = t["file_entry"]
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                errors += 1
+                continue
+            title = build_plot_title(
+                order=t["order"],
+                sweep=fe.sweep,
+                sweep_type=t["sweep_type"],
+            )
+            metadata = {
+                "title": title,
+                "sweep": fe.sweep,
+                "sweep_type": fe.sweep_type,
+                "row": t["row"],
+                "col": t["col"],
+                "order": t["order"],
+                "label": fe.file,
+            }
+            all_traces.append((voltage, current, metadata))
 
-        # Skip if already plotted and not overwriting
-        if plot_filename and not overwrite:
-            existing = results_dir / plot_filename
-            if existing.exists():
-                skipped += 1
+        if all_traces:
+            output_path = results_dir / "overlay.svg"
+            try:
+                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi)
+                plotted = len(all_traces)
+                print(f"  ✓ overlay.svg ({len(all_traces)} traces)")
+            except Exception as exc:
+                print(f"  Error generating overlay: {exc}")
+                errors += 1
+    else:
+        # ── Individual mode: one SVG per file ──
+        position_files: dict[tuple[int, int], list[dict]] = {}
+        for t in targets:
+            pos = (t["row"], t["col"])
+            position_files.setdefault(pos, []).append(t)
+        for pos, files in position_files.items():
+            files.sort(key=lambda x: x["order"])
+            for i, f in enumerate(files):
+                f["file_index"] = i
+
+        for t in targets:
+            fe = t["file_entry"]
+            plot_filename = fe.extra.get("plot", "")
+
+            if plot_filename and not overwrite:
+                existing = results_dir / plot_filename
+                if existing.exists():
+                    skipped += 1
+                    continue
+
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                errors += 1
                 continue
 
-        # Read CSV data
-        filepath = config.resolve_file_path(pdir, "iv", fe.file)
-        try:
-            voltage, current, info = read_iv_csv(str(filepath))
-        except Exception as exc:
-            print(f"  Error reading {fe.file}: {exc}")
-            errors += 1
-            continue
+            plot_filename = build_plot_filename(
+                row=t["row"],
+                col=t["col"],
+                material_key=t["material_key"],
+                sweep_type=t["sweep_type"],
+                order=t["order"],
+            )
+            title = build_plot_title(
+                order=t["order"],
+                sweep=fe.sweep,
+                sweep_type=t["sweep_type"],
+            )
 
-        # Build plot metadata
-        plot_filename = build_plot_filename(
-            row=t["row"],
-            col=t["col"],
-            material_key=t["material_key"],
-            sweep_type=t["sweep_type"],
-            order=t["order"],
-        )
-        title = build_plot_title(
-            order=t["order"],
-            sweep=fe.sweep,
-            sweep_type=t["sweep_type"],
-        )
+            metadata = {
+                "title": title,
+                "sweep": fe.sweep,
+                "sweep_type": fe.sweep_type,
+                "row": t["row"],
+                "col": t["col"],
+                "order": t["order"],
+                "file_index": t.get("file_index", 0),
+                "time": info.get("time"),
+            }
 
-        metadata = {
-            "title": title,
-            "sweep": fe.sweep,
-            "sweep_type": fe.sweep_type,
-            "row": t["row"],
-            "col": t["col"],
-            "order": t["order"],
-            "file_index": t.get("file_index", 0),
-            "time": info.get("time"),  # for auto-detection fallback in generate_iv_svg
-        }
+            output_path = results_dir / plot_filename
+            try:
+                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi)
+            except Exception as exc:
+                print(f"  Error plotting {fe.file}: {exc}")
+                errors += 1
+                continue
 
-        # Generate SVG
-        output_path = results_dir / plot_filename
-        try:
-            generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi)
-        except Exception as exc:
-            print(f"  Error plotting {fe.file}: {exc}")
-            errors += 1
-            continue
+            fe.extra["plot"] = plot_filename
+            plotted += 1
+            print(f"  ✓ {plot_filename}")
 
-        # Store plot filename in devices.yaml
-        fe.extra["plot"] = plot_filename
-        plotted += 1
-        print(f"  ✓ {plot_filename}")
+        if plotted > 0:
+            write_devices(pdir, config)
 
-    # Write updated devices.yaml
-    if plotted > 0:
-        write_devices(pdir, config)
-        print(f"\nPlotted: {plotted} | Skipped (exists): {skipped} | Errors: {errors}")
+    # Summary
+    if overlay_mode and plotted > 0:
+        print(f"\nPlotted: {plotted} | Errors: {errors}")
         print(f"Results: {results_dir}/")
-    else:
-        print(f"\nNo new plots generated. {skipped} already exist. Use --overwrite to regenerate.")
+    elif not overlay_mode:
+        if plotted > 0:
+            print(f"\nPlotted: {plotted} | Skipped (exists): {skipped} | Errors: {errors}")
+            print(f"Results: {results_dir}/")
+        else:
+            print(f"\nNo new plots generated. {skipped} already exist. Use --overwrite to regenerate.")
 
     set_last_step(pdir.name)
 
@@ -2164,8 +2214,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_plot = sub.add_parser("plot", help="Generate IV curve SVGs from devices.yaml")
     p_plot.add_argument("--step-dir", default="")
-    p_plot.add_argument("--all", action="store_true", help="Plot all IV files (default if no filter)")
     p_plot.add_argument("--fzf", action="store_true", help="Interactive fzf multi-select picker")
+    p_plot.add_argument("--overlay", action="store_true", help="Overlay all selected files in one plot")
+    p_plot.add_argument("--all", action="store_true", dest="plot_all", help="Export each file individually")
     p_plot.add_argument("--material", default="", help="Plot files for a specific material+batch")
     p_plot.add_argument("--row", type=int, default=None, help="Filter by matrix row")
     p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")

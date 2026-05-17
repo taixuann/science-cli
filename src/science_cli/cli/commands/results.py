@@ -60,11 +60,11 @@ def results_handler(args: list) -> None:
             console.print("[yellow]No result files found.[/yellow]")
             return
         from science_cli.core.fzf_utils import fzf_select, build_fzf_display
-        display_lines = [build_fzf_display(pname, sd_name, pf.name) for pname, sd_name, pf in result_files]
+        display_lines = [build_fzf_display(pname, sd_name, pf.name, width_proto=22, width_step=18) for pname, sd_name, pf in result_files]
         selected = fzf_select(display_lines, prompt="Select result to open:", multi=False)
         if selected:
             for pname, sd_name, pf in result_files:
-                if build_fzf_display(pname, sd_name, pf.name) == selected[0]:
+                if build_fzf_display(pname, sd_name, pf.name, width_proto=22, width_step=18) == selected[0]:
                     subprocess.run(["open", str(pf)], check=False)
                     console.print(f"[dim]Opened: {pf.name}[/dim]")
                     break

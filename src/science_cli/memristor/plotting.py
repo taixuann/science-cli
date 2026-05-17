@@ -806,9 +806,11 @@ def _plot_simple_sweep(
     use_log: bool,
     order: int,
     file_index: int = 0,
+    color: str | None = None,
 ) -> None:
     """Plot a single-direction (uc/sp/sn) IV sweep with cycled line style."""
-    color, style = _get_line_style(file_index)
+    c, style = _get_line_style(file_index)
+    color = color or c
     label = f"#{order:02d}"
     if use_log:
         ax.semilogy(voltage, np.abs(current), color=color, linestyle=style,
@@ -827,6 +829,7 @@ def _plot_bipolar_sweep(
     use_log: bool,
     order: int,
     file_index: int = 0,
+    color: str | None = None,
 ) -> None:
     """Plot a full bipolar (``f``) sweep with forward/reverse distinction.
 
@@ -838,10 +841,11 @@ def _plot_bipolar_sweep(
     segments = _split_at_reversals(voltage)[:2]
 
     if len(segments) <= 1:
-        _plot_simple_sweep(ax, voltage, current, use_log, order, file_index)
+        _plot_simple_sweep(ax, voltage, current, use_log, order, file_index, color=color)
         return
 
-    color, _ = _get_line_style(file_index)
+    c, _ = _get_line_style(file_index)
+    color = color or c
     rev_color = "#888888"
     plot_current = np.abs(current) if use_log else current
 
@@ -1059,6 +1063,82 @@ def generate_iv_svg(
     logger.info(f"Generated plot: {output_path}")
 
 
+def generate_iv_overlay_svg(
+    traces: list[tuple[np.ndarray, np.ndarray, dict]],
+    output_path: str | Path,
+    dpi: int = 150,
+):
+    """Generate an overlay SVG with multiple IV traces on one plot.
+
+    Args:
+        traces: List of (voltage, current, metadata) tuples.
+        output_path: Path to save the SVG.
+        dpi: Resolution for SVG rendering.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    acs_rc = {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "mathtext.fontset": "dejavusans",
+        "axes.linewidth": 1.0,
+        "xtick.major.width": 0.8,
+        "ytick.major.width": 0.8,
+        "xtick.major.size": 4,
+        "ytick.major.size": 4,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "legend.frameon": False,
+    }
+
+    colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+    use_log = any(_should_use_log_scale(t[1]) for t in traces)
+
+    with plt.rc_context(acs_rc):
+        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
+
+        for i, (voltage, current, meta) in enumerate(traces):
+            color = colors[i % len(colors)]
+            sweep_type = meta.get("sweep_type", "") or "uc"
+            order = meta.get("order", i + 1)
+            file_index = meta.get("file_index", i)
+            label = meta.get("label", f"Sweep {order}")
+
+            if sweep_type == "f":
+                _plot_bipolar_sweep(ax, voltage, current, use_log, order, file_index, color=color)
+            else:
+                _plot_simple_sweep(ax, voltage, current, use_log, order, file_index, color=color)
+
+        ax.set_xlabel("Voltage (V)", fontsize=10)
+        base_title = traces[0][2].get("title", "") if traces else ""
+        title = base_title or f"IV Overlay ({len(traces)} sweeps)"
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.tick_params(labelsize=8, direction="in", which="both")
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+
+        if use_log:
+            has_neg = any(np.any(t[1] < 0) for t in traces if t[1] is not None and len(t[1]) > 0)
+            ax.set_ylabel("|Current| (A)" if has_neg else "Current (A)", fontsize=10)
+            ax.set_yscale("log")
+        else:
+            ax.set_ylabel("Current (A)", fontsize=10)
+
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(handles, labels, frameon=False, fontsize=8, loc="upper left")
+
+        fig.tight_layout()
+        fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+
+    logger.info(f"Generated overlay plot: {output_path}")
+
+
 # ── Batch plotting helpers ──────────────────────────────────
 
 
@@ -1152,9 +1232,10 @@ def collect_iv_files(
 
 
 def build_fzf_line(target: dict, protocol: str = "") -> str:
-    """Build a preview line for fzf display.
+    """Build a fzf display line for memristor IV file selection.
 
-    Format: ``{protocol}  {step}  r{row}c{col}  {material}  {sweep_type}  {file}``
+    Format: ``r{row}c{col}  {material}  {sweep_type}  {file}``
+    (protocol is shown in the fzf prompt instead)
     """
     from science_cli.core.fzf_utils import build_fzf_display
     detail = (
@@ -1163,4 +1244,4 @@ def build_fzf_line(target: dict, protocol: str = "") -> str:
         f"{target['sweep_type']:<3s}  "
         f"{target['file_entry'].file}"
     )
-    return build_fzf_display(protocol, "", detail)
+    return build_fzf_display(protocol, "", detail, show_protocol=False)
