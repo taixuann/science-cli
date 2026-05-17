@@ -1,6 +1,7 @@
 """Retention analysis: decay modeling, extrapolation, lifetime estimation."""
 
 import numpy as np
+
 from science_cli.memristor.models import RetentionData
 
 
@@ -109,6 +110,6 @@ def retention_summary(data: RetentionData) -> str:
             f"({days:.0f} days, {years:.2f} years)"
         )
     else:
-        lines.append(f"  Lifetime: unable to estimate")
+        lines.append("  Lifetime: unable to estimate")
 
     return "\n".join(lines)

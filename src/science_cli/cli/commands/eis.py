@@ -1,8 +1,8 @@
 """eis command handler — kk, fit, batch, simulate, export."""
 
 from pathlib import Path
+
 from rich.console import Console
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.data_loader import load_data_file
@@ -50,14 +50,28 @@ def _resolve_file(name: str) -> str:
 
 def _get_eis_data(filepath: str):
     import numpy as np
+
     from science_cli.electrochem.models import EISData
-    df, info = load_data_file(filepath)
-    cols = info.get("columns", [])
-    if len(cols) < 3:
-        console.print("[red]Need freq, Z', Z'' columns.[/red]")
+
+    def _col(candidates, cols):
+        for c in candidates:
+            if c in cols:
+                return c
+        return ""
+
+    try:
+        df, info = load_data_file(filepath, technique="ec-eis")
+    except Exception:
+        df, info = load_data_file(filepath)
+    cols = list(df.columns)
+    freq_col = _col(["frequency", "Frequency (Hz)"], cols)
+    zr_col = _col(["z_real", "Z' (Ω)", "Z'"], cols)
+    zi_col = _col(["z_imag", "-Z'' (Ω)", "-Z''"], cols)
+    if not freq_col or not zr_col or not zi_col:
+        console.print("[red]Could not resolve EIS columns.[/red]")
         return None
-    freq = df[cols[0]].values
-    z = df[cols[1]].values + 1j * df[cols[2]].values
+    freq = df[freq_col].values
+    z = df[zr_col].values - 1j * df[zi_col].values
     m = ~(np.isnan(freq) | np.isnan(z.real) | np.isnan(z.imag))
     return EISData(frequency=freq[m], impedance=z[m])
 

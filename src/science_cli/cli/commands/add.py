@@ -1,10 +1,11 @@
 """add command handler — protocol, metadata, data."""
 
-import yaml
-from pathlib import Path
 from datetime import datetime
-from rich.console import Console
+from pathlib import Path
+
+import yaml
 from rich import print as rprint
+from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -73,10 +74,9 @@ def _add_project(args: list) -> None:
             console.print("[yellow]Usage: add -m project <name>[/yellow]")
             return
 
+    from science_cli.core.paths import sanitize_project_name
     from science_cli.core.project import _get_projects_root
     from science_cli.core.session import set_last_project
-
-    from science_cli.core.paths import sanitize_name, sanitize_project_name
     safe_name = sanitize_project_name(name).strip().lower().replace(" ", "_")
     if not safe_name:
         console.print("[red]Invalid project name.[/red]")
@@ -105,7 +105,7 @@ def _add_project(args: list) -> None:
 
     console.print(f"[bold green]✓[/bold green] Created project: [bold white]{safe_name}[/bold white]")
     rprint(f"  [dim]Path: {project_path}[/dim]")
-    rprint(f"  [dim]Directories: data/raw, data/processed, protocol, results[/dim]")
+    rprint("  [dim]Directories: data/raw, data/processed, protocol, results[/dim]")
 
 
 def _create_default_config(project_path: Path) -> None:
@@ -131,8 +131,8 @@ def _add_protocol(args: list) -> None:
         console.print("[yellow]Required: -n / --name (protocol name)[/yellow]")
         return
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open. Use 'add -m project <name>' to create one, or 'open -m project <name>' to open one.[/yellow]")
@@ -170,7 +170,7 @@ def _add_protocol(args: list) -> None:
             step_dir = paths.step_dir(safe_name, sn)
             step_dir.mkdir(parents=True, exist_ok=True)
             (step_dir / "results").mkdir(parents=True, exist_ok=True)
-    
+
     protocol = {
         "name": safe_name,
         "description": desc,
@@ -204,8 +204,8 @@ def _add_metadata(args: list) -> None:
         console.print("[yellow]Required: -pt / --protocol (protocol name), or open a protocol first[/yellow]")
         return
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -243,10 +243,10 @@ def _add_metadata(args: list) -> None:
         step_dir = paths.step_dir(safe_name, sn)
         step_dir.mkdir(parents=True, exist_ok=True)
         (step_dir / "results").mkdir(parents=True, exist_ok=True)
-    
+
     with open(yaml_path, "w") as f:
         yaml.dump(protocol, f, default_flow_style=False, sort_keys=False)
-    
+
     parts = [f"steps: {', '.join(step_names)}"]
     if techs:
         parts.append(f"techniques: {', '.join(techs)}")
@@ -273,7 +273,7 @@ def _add_data(args: list) -> None:
 
     raw_dir = proj / "data" / "raw"
     if not raw_dir.exists():
-        console.print(f"[red]data/raw/ not found in project.[/red]")
+        console.print("[red]data/raw/ not found in project.[/red]")
         return
 
     files = sorted(raw_dir.iterdir())

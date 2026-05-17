@@ -6,10 +6,9 @@ auto-scrolling, timestamp separators, and Rich markup support.
 
 from datetime import datetime
 
-from textual.widgets import RichLog
-
 from rich.table import Table
 from rich.text import Text as RichText
+from textual.widgets import RichLog
 
 from science_cli import __version__
 
@@ -54,10 +53,10 @@ class OutputPanel(RichLog):
         """Display a welcome message when the output panel first mounts."""
         self.write(f"[bold #55ee77]myscience v{__version__}[/]")
         self.write(
-            f"[dim]Type commands below. [/dim]"
-            f"[dim #5ea8b5]/help[/] [dim]/clear[/] [dim]/history[/] [dim]/version[/dim]"
+            "[dim]Type commands below. [/dim]"
+            "[dim #5ea8b5]/help[/] [dim]/clear[/] [dim]/history[/] [dim]/version[/dim]"
         )
-        self.write(f"[dim]Tip: use [bold]--fzf[/] for interactive file selection[/dim]\n")
+        self.write("[dim]Tip: use [bold]--fzf[/] for interactive file selection[/dim]\n")
 
     def write_command_header(self, command: str) -> None:
         ts = datetime.now().strftime("%H:%M:%S")

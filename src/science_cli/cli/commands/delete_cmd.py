@@ -1,9 +1,9 @@
 """delete command handler — remove protocol/metadata/data files."""
 
+
 import yaml
-from pathlib import Path
-from rich.console import Console
 from rich import print as rprint
+from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -66,8 +66,8 @@ def _delete_protocol(args: list) -> None:
         console.print("[yellow]Required: -n / --name (protocol name)[/yellow]")
         return
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -120,8 +120,8 @@ def _delete_metadata(args: list) -> None:
     step = flags.get("step")
     clear_all = flags.get("all", False)
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -229,7 +229,7 @@ def _delete_data(args: list) -> None:
     to_remove: list[tuple[int, int]] = []  # (step_idx, file_idx)
 
     if flags.get("fzf"):
-        from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+        from science_cli.core.fzf_utils import build_fzf_display, fzf_select
         pname = safe_name  # protocol name is available as safe_name
         items = [build_fzf_display(pname, step_name, fname, show_protocol=False) for step_name, fname, _ in all_entries]
         selected = fzf_select(

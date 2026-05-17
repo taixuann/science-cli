@@ -1,11 +1,11 @@
 """Theme system — composite colors, presets for Rich and matplotlib."""
 
 from science_cli.theme.registry import (
-    list_themes,
-    get_theme,
     apply_theme,
-    theme_to_rcparams,
+    get_theme,
+    list_themes,
     template_to_flags,
+    theme_to_rcparams,
 )
 
 RICH_STYLES = {

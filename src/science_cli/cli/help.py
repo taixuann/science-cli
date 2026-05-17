@@ -1,15 +1,12 @@
 """Help system — builds Rich-formatted hierarchical help text."""
 
-from typing import Dict, List, Optional, Callable
+from typing import Dict
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
-from rich import print as rprint
 
 from science_cli import __version__
-from science_cli.theme import RICH_STYLES, RAW_COLORS
+from science_cli.theme import RAW_COLORS, RICH_STYLES
 
 console = Console()
 
@@ -367,7 +364,7 @@ def show_command_help(cmd: str) -> None:
 
     subcmds = info.get("subcommands")
     if subcmds:
-        console.print(f"  [bold]SUBCOMMANDS[/bold]")
+        console.print("  [bold]SUBCOMMANDS[/bold]")
         for name, sub in subcmds.items():
             console.print(f"    {name:<30} [dim]{sub['desc']}[/dim]")
             console.print(f"    {'':<30}  Usage: [{accent}]{sub['usage']}[/{accent}]")
@@ -375,7 +372,7 @@ def show_command_help(cmd: str) -> None:
 
     flags = info.get("flags")
     if flags:
-        console.print(f"  [bold]FLAGS / OPTIONS[/bold]")
+        console.print("  [bold]FLAGS / OPTIONS[/bold]")
         for name, flag in flags.items():
             req = " [bold](required)[/bold]" if flag.get("required") else ""
             console.print(f"    {name:<25} [dim]{flag['desc']}[/dim]{req}")
@@ -383,7 +380,7 @@ def show_command_help(cmd: str) -> None:
 
     examples = info.get("examples")
     if examples:
-        console.print(f"  [bold]EXAMPLES[/bold]")
+        console.print("  [bold]EXAMPLES[/bold]")
         for ex in examples:
             console.print(f"    [{accent}]{ex}[/{accent}]")
         console.print()

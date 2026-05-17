@@ -1,9 +1,9 @@
 """Results manifest — JSON + CSV output for tracking analysis."""
 
-import json
 import csv
-from pathlib import Path
+import json
 from datetime import datetime
+from pathlib import Path
 
 
 def emit_manifest(

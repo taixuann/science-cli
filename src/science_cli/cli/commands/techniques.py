@@ -1,7 +1,7 @@
 """techniques command — list available techniques (deprecated, delegates to config)."""
 
-from rich.console import Console
 from rich import print as rprint
+from rich.console import Console
 
 console = Console()
 

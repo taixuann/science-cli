@@ -1,7 +1,9 @@
 """parse command handler."""
 
 from pathlib import Path
+
 from rich.console import Console
+
 console = Console()
 
 

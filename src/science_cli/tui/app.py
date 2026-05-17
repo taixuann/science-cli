@@ -9,34 +9,30 @@ Bare `sci` (no args) launches this TUI. `sci --repl` still uses the
 legacy prompt_toolkit REPL.
 """
 
+import inspect
 import io
 import re
-import sys
-import inspect
 import shlex
 import subprocess
-from contextlib import redirect_stdout, redirect_stderr
-from datetime import datetime
+import sys
+from contextlib import redirect_stderr, redirect_stdout
 
 from rich.console import Console as RichConsole
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Static, Input
+from textual.widgets import Input, Static
 
 from science_cli import __version__
 from science_cli.cli.commands import COMMAND_TREE
 from science_cli.core.session import (
-    load_session,
-    save_session,
     add_history,
     get_history,
 )
-from science_cli.tui.theme import CSS_VARIABLES, MATCHA_COLORS, RICH_STYLES
 from science_cli.tui.banner import SCIBanner
+from science_cli.tui.input_bar import CommandInput
 from science_cli.tui.output_panel import OutputPanel
 from science_cli.tui.status_bar import StatusBar
-from science_cli.tui.input_bar import CommandInput, SLASH_COMMANDS
-
+from science_cli.tui.theme import CSS_VARIABLES
 
 #: Maximum number of command history entries to store.
 MAX_HISTORY = 200

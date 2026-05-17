@@ -1,7 +1,6 @@
 """close command handler — close context with auto-save at step/protocol/project level."""
 
 from rich.console import Console
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -83,10 +82,10 @@ def _close_step() -> None:
 def _close_protocol() -> None:
     """Close the current protocol — save state and clear last_protocol + last_step."""
     from science_cli.core.session import (
-        load_session,
-        save_session,
-        save_context_state,
         clear_protocol_state,
+        load_session,
+        save_context_state,
+        save_session,
     )
     sess = load_session()
     current_protocol = sess.get("last_protocol", "")
@@ -107,10 +106,10 @@ def _close_protocol() -> None:
 def _close_project() -> None:
     """Close the current project — save state and clear all context."""
     from science_cli.core.session import (
-        load_session,
-        save_session,
-        save_context_state,
         clear_project_state,
+        load_session,
+        save_context_state,
+        save_session,
     )
     sess = load_session()
     current_project = sess.get("last_project", "")

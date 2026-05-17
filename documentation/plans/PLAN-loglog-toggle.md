@@ -2,7 +2,7 @@
 
 ## Status
 - **Created**: 2026-05-16
-- **Status**: draft
+- **Status**: completed
 - **Branch**: refactor/2.1.0
 
 ## Objective
@@ -82,7 +82,13 @@ None.
 ## Progress
 - [x] PLAN created
 - [x] User approved
-- [x] IMPLEMENT done
+- [x] IMPLEMENT done — HTML toggle added at dashboard.py lines 721-722, `ivScaleMode` tracking at line 2595, `setIVScale()` JS at line 2912
 - [x] TEST passed (97/97)
-- [ ] DOCS updated
+- [x] DOCS updated
 - [x] COMMIT done
+
+## Implementation Details
+- IV mode keeps current behavior (semi-log: linear x, log y)
+- ln-ln mode converts both axes to log scale
+- Negative voltages converted to `Math.abs(v)` in ln-ln mode for SCLC convention
+- Toggle buttons rendered as `.scale-btn` elements in dashboard.py inline HTML

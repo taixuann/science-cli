@@ -1,8 +1,6 @@
 """protocol command handler."""
 
-from pathlib import Path
 from rich.console import Console
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 
@@ -52,10 +50,11 @@ def protocol_handler(args: list) -> None:
         console.print(f"[dim]Running protocol '{sub_args[0]}' — open YAML to configure steps.[/dim]")
 
     elif sub == "create":
-        from science_cli.core.project import get_current_project_path
-        from science_cli.core.paths import ProjectPaths
-        import yaml
         import questionary
+        import yaml
+
+        from science_cli.core.paths import ProjectPaths
+        from science_cli.core.project import get_current_project_path
         proj = get_current_project_path()
         if not proj:
             console.print("[yellow]No project open. Select a project first.[/yellow]")

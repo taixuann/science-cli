@@ -1,21 +1,20 @@
 """science_cli.memristor: memristor characterization module."""
 
 from science_cli.memristor.device import (
-    SweepSegment,
-    FileEntry,
-    TechniqueGroup,
-    MatrixPoint,
-    DeviceGeometry,
     DeviceConfig,
-    read_devices,
-    write_devices,
-    validate,
-    sync_devices,
-    sync_sweep_to_protocol_yaml,
+    DeviceGeometry,
+    FileEntry,
+    MatrixPoint,
+    SweepSegment,
+    TechniqueGroup,
     _migrate_devices_yaml,
     generate_device_grid,
+    read_devices,
+    sync_devices,
+    sync_sweep_to_protocol_yaml,
+    validate,
+    write_devices,
 )
-
 from science_cli.memristor.endurance import analyze_endurance
 from science_cli.memristor.retention import analyze_retention
 from science_cli.memristor.switching import analyze_switching, extract_iv_parameters

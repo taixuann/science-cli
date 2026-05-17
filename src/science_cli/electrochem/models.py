@@ -1,6 +1,7 @@
 """Data models for electrochemistry."""
 
 from dataclasses import dataclass
+
 import numpy as np
 
 

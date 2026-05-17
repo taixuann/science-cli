@@ -5,13 +5,12 @@ and the workflow steps on the right, styled in the matcha green theme.
 Updates dynamically when the session context changes.
 """
 
+from rich.text import Text as RichText
 from textual.app import ComposeResult
-from textual.widgets import Static
 from textual.containers import Horizontal
 from textual.reactive import reactive
-from rich.text import Text as RichText
+from textual.widgets import Static
 
-from science_cli import __version__
 from science_cli.core.session import load_session
 
 

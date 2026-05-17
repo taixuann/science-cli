@@ -11,9 +11,9 @@ import sys
 from rich.console import Console
 
 from science_cli import __version__
-from science_cli.core.session import add_history, get_history
 from science_cli.cli.commands import COMMAND_TREE
 from science_cli.cli.help import show_top_help
+from science_cli.core.session import add_history, get_history
 
 console = Console()
 
@@ -64,7 +64,7 @@ def run_cli():
                 console.print(f"  [dim]{i:3d}.[/dim] {h}")
     else:
         console.print(f"[yellow]Unknown command: {cmd}[/yellow]")
-        console.print(f"[dim]Use 'sci --help' to see available commands.[/dim]")
+        console.print("[dim]Use 'sci --help' to see available commands.[/dim]")
         sys.exit(1)
 
 

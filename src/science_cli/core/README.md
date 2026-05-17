@@ -65,14 +65,14 @@ Session file: `~/.config/science-cli/session.json`
 ```
 Hardcoded defaults (core/config.py::_DEFAULT_*)
        ↓ overwritten by
-Technique configs (~/.config/science-cli/techniques/<technique>.yaml)
+Global config (~/.config/science-cli/config.yaml)     ← device registry, technique templates, grammar
        ↓ overwritten by
-Global config (~/.config/science-cli/config.yaml)
+Per-project config (<project_root>/sci-config.yaml)    ← type→step mapping, project overrides
        ↓ overwritten by
-Per-project config (<project_root>/sci-config.yaml)
-       ↓
-Merged config (get_merged_config())
+Per-protocol metadata (protocol/<name>/...)
 ```
+
+**Note:** The per-technique YAML config files (`~/.config/science-cli/techniques/<technique>.yaml`) were part of an earlier design and have been superseded by the global config approach. All technique settings now live in the global `config.yaml` or per-project `sci-config.yaml`.
 
 ### Typed Accessors
 

@@ -1,9 +1,9 @@
 """open command handler — sets session context (protocol)."""
 
+
 import yaml
-from pathlib import Path
-from rich.console import Console
 from rich import print as rprint
+from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -72,15 +72,12 @@ def open_handler(args: list) -> None:
 
 def _open_project(name: str) -> None:
     """Open a project and set session context with state restoration."""
-    from science_cli.core.project import open_project, _get_projects_root
-    from science_cli.core.session import (
-        load_session,
-        save_session,
-        set_last_project,
-        restore_context_state,
-    )
-
     from science_cli.core.paths import sanitize_project_name
+    from science_cli.core.project import open_project
+    from science_cli.core.session import (
+        restore_context_state,
+        set_last_project,
+    )
     safe_name = sanitize_project_name(name).strip().lower().replace(" ", "_")
     if not safe_name:
         console.print("[red]Invalid project name.[/red]")
@@ -89,7 +86,7 @@ def _open_project(name: str) -> None:
     proj_path = open_project(safe_name)
     if not proj_path:
         console.print(f"[red]Project '{safe_name}' not found.[/red]")
-        rprint(f"[dim]Use 'ls -m project' to see available projects, or 'add -m project <name>' to create one.[/dim]")
+        rprint("[dim]Use 'ls -m project' to see available projects, or 'add -m project <name>' to create one.[/dim]")
         return
 
     set_last_project(safe_name)
@@ -111,12 +108,10 @@ def _open_project(name: str) -> None:
 
 def _open_protocol(name: str) -> None:
     """Open a protocol and set session context (existing behavior)."""
-    import yaml
-    from pathlib import Path
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
-    from science_cli.core.session import set_last_protocol, restore_context_state
+    from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import restore_context_state, set_last_protocol
 
     proj = get_current_project_path()
     if not proj:
@@ -170,11 +165,9 @@ def _open_protocol(name: str) -> None:
 
 def _open_step(step_id: str) -> None:
     """Open a specific step within the current protocol."""
-    import yaml
-    from pathlib import Path
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     from science_cli.core.session import load_session, set_last_step
 
     sess = load_session()

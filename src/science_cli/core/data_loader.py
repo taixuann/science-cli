@@ -8,6 +8,7 @@ Supports device-aware loading via the config system (4-tier resolution):
 """
 
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -217,7 +218,6 @@ def _load_excel(path: Path) -> tuple[pd.DataFrame, dict]:
 
 
 def fit_file(filepath: str, model: str = "linear", xcol: str = "", ycol: str = ""):
-    from science_cli.plot.base import create_figure, save_figure
     import numpy as np
     from lmfit import Model
 

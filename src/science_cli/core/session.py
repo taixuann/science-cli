@@ -1,8 +1,8 @@
 """Session state: current project, protocol, history."""
 
 import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 SESSION_DIR = Path.home() / ".config" / "science-cli"
 SESSION_FILE = SESSION_DIR / "session.json"

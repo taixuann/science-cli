@@ -1,6 +1,7 @@
 """Project path resolution and management."""
 
 from pathlib import Path
+
 from science_cli.core.session import load_session
 
 

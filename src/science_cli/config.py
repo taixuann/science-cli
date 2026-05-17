@@ -1,6 +1,7 @@
 """Configuration: paths, themes, defaults."""
 
 from pathlib import Path
+
 import yaml
 
 CONFIG_DIR = Path.home() / ".config" / "science-cli"

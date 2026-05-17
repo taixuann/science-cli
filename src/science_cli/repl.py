@@ -8,24 +8,23 @@ No alternate screen — scrollback friendly.
 
 import io
 import os
-import sys
 import shlex
 import shutil
+import sys
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style
-
 from rich.console import Console as RichConsole
 
 from science_cli import __version__
 from science_cli.cli.commands import COMMAND_TREE
-from science_cli.core.session import load_session, add_history, get_history
+from science_cli.cli.help import show_command_help, show_top_help
+from science_cli.core.session import add_history, get_history, load_session
 from science_cli.tui.banner import SCI_ART
-from science_cli.cli.help import show_top_help, show_command_help
 
 ACCENT = "#55ee77"
 DIM = "#888888"

@@ -1,9 +1,9 @@
 """analyze command handler — analysis only (no plotting)."""
 
 from pathlib import Path
+
 import yaml
 from rich.console import Console
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -55,9 +55,9 @@ def _detect_technique(filename: str) -> str:
 
 
 def _get_results_dir(filepath: str) -> Path:
-    from science_cli.core.session import load_session
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
     session = load_session()
     current_protocol = session.get("last_protocol")
     proj = get_current_project_path()
@@ -123,10 +123,10 @@ def _analyze_direct(files: list, rest_args: list) -> None:
         _analyze_cv(filepath, flags)
 
     # Sweep metadata: detect and store in protocol YAML
-    from science_cli.core.sweep_metadata import extract_sweep_from_file, update_protocol_with_sweep
-    from science_cli.core.session import load_session
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
+    from science_cli.core.sweep_metadata import extract_sweep_from_file, update_protocol_with_sweep
     sess = load_session()
     pname = sess.get("last_protocol", "")
     proj = get_current_project_path()
@@ -151,9 +151,10 @@ def _analyze_direct(files: list, rest_args: list) -> None:
 
 
 def _analyze_cv(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
     import numpy as np
-    from science_cli.electrochem.cv import peak_analysis, calculate_charge
+
+    from science_cli.core.data_loader import load_data_file
+    from science_cli.electrochem.cv import calculate_charge, peak_analysis
     from science_cli.electrochem.models import CVData
 
     df, info = load_data_file(filepath)
@@ -186,8 +187,9 @@ def _analyze_cv(filepath: str, flags: dict) -> None:
 
 
 def _analyze_ca(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
     import numpy as np
+
+    from science_cli.core.data_loader import load_data_file
 
     df, info = load_data_file(filepath)
     cols = info.get("columns", [])
@@ -199,8 +201,8 @@ def _analyze_ca(filepath: str, flags: dict) -> None:
 
     console.print(f"\n[bold]CA Analysis: {Path(filepath).name}[/bold]")
 
-    from science_cli.electrochem.models import CAData
     from science_cli.electrochem.ca import analyze_ca as _analyze_ca_func
+    from science_cli.electrochem.models import CAData
     ca_data = CAData(time=t[m], current=i[m])
     ca_result = _analyze_ca_func(ca_data, {"fit": flags.get("fit", True), "steady_state": True})
     if "cottrell" in ca_result:
@@ -217,16 +219,29 @@ def _analyze_ca(filepath: str, flags: dict) -> None:
 
 
 def _analyze_eis(filepath: str, flags: dict) -> None:
-    from science_cli.core.data_loader import load_data_file
     import numpy as np
 
-    df, info = load_data_file(filepath)
-    cols = info.get("columns", [])
-    if len(cols) < 3:
-        console.print("[red]Need freq, Z', Z'' columns.[/red]")
+    from science_cli.core.data_loader import load_data_file
+
+    def _col(candidates, cols):
+        for c in candidates:
+            if c in cols:
+                return c
+        return ""
+
+    try:
+        df, info = load_data_file(filepath, technique="ec-eis")
+    except Exception:
+        df, info = load_data_file(filepath)
+    cols = list(df.columns)
+    freq_col = _col(["frequency", "Frequency (Hz)"], cols)
+    zr_col = _col(["z_real", "Z' (Ω)", "Z'"], cols)
+    zi_col = _col(["z_imag", "-Z'' (Ω)", "-Z''"], cols)
+    if not freq_col or not zr_col or not zi_col:
+        console.print("[red]Could not resolve EIS columns.[/red]")
         return
-    freq = df[cols[0]].values
-    z = df[cols[1]].values + 1j * df[cols[2]].values
+    freq = df[freq_col].values
+    z = df[zr_col].values - 1j * df[zi_col].values
     m = ~(np.isnan(freq) | np.isnan(z.real) | np.isnan(z.imag))
 
     from science_cli.electrochem.eis import circuit_fit, kramers_kronig

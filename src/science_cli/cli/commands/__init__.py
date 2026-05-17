@@ -1,19 +1,18 @@
 """CLI command handlers — each module maps to a top-level command group."""
 
-from science_cli.cli.commands.plot import plot_handler
-from science_cli.cli.commands.analyze import analyze_handler
-
 from science_cli.cli.commands.add import add_handler
-from science_cli.cli.commands.ls_cmd import ls_handler
-from science_cli.cli.commands.open_cmd import open_handler
+from science_cli.cli.commands.analyze import analyze_handler
+from science_cli.cli.commands.close import close_handler
+from science_cli.cli.commands.config import config_handler
 from science_cli.cli.commands.delete_cmd import delete_handler
 from science_cli.cli.commands.edit_cmd import edit_handler
-from science_cli.cli.commands.config import config_handler
-from science_cli.cli.commands.techniques import techniques_handler
-from science_cli.cli.commands.results import results_handler
-from science_cli.cli.commands.close import close_handler
-from science_cli.cli.commands.status import status_handler
+from science_cli.cli.commands.ls_cmd import ls_handler
 from science_cli.cli.commands.memristor import memristor_handler
+from science_cli.cli.commands.open_cmd import open_handler
+from science_cli.cli.commands.plot import plot_handler
+from science_cli.cli.commands.results import results_handler
+from science_cli.cli.commands.status import status_handler
+from science_cli.cli.commands.techniques import techniques_handler
 
 COMMAND_TREE = {
     "add":     {"handler": add_handler,  "desc": "Add project/protocol/metadata/data (group 1)"},

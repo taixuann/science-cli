@@ -1,11 +1,11 @@
 """Base plot utilities and generic plotting."""
 
 from pathlib import Path
+
 import matplotlib
 import matplotlib.pyplot as plt
-import numpy as np
 
-from science_cli.theme import apply_theme, theme_to_rcparams
+from science_cli.theme import apply_theme
 
 
 def setup_backend(interactive: bool = False):

@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -39,9 +38,9 @@ def _collect_device_data(config, results_dir: Path) -> dict:
       - switching_count: int
       - total_measured_devices: int
     """
+    from science_cli.memristor.device import extract_material_batch
     from science_cli.memristor.plotting import read_iv_csv
     from science_cli.memristor.switching import extract_iv_parameters
-    from science_cli.memristor.device import extract_material_batch
 
     data_dir = results_dir.parent
     per_device: dict[tuple, dict] = {}
@@ -150,8 +149,8 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
     Uses v_set, v_reset, on_off_ratio from the files table.
     Falls back to CSV reading for files that don't have analysis values.
     """
-    from science_cli.memristor.plotting import read_iv_csv
     from science_cli.memristor.device import extract_material_batch
+    from science_cli.memristor.plotting import read_iv_csv
 
     data_dir = results_dir.parent
     per_device: dict[tuple[int, int], dict] = {}
@@ -389,12 +388,12 @@ def generate_dashboard(
     """
     # ── Try SQLite fast-read path ──
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, query_files, close_db
-    
+    from science_cli.memristor.db import close_db, open_db, query_files
+
     proj = get_current_project_path()
     sqlite_available = False
     sqlite_data = None
-    
+
     if proj:
         try:
             db_path = proj / f"{proj.name}.db"
@@ -407,7 +406,7 @@ def generate_dashboard(
                     sqlite_data = db_files
         except Exception:
             pass
-    
+
     # ── Phase 1: Collect data (SQLite or CSV) ──
     if sqlite_available:
         collection = _collect_device_data_from_sqlite(config, results_dir, sqlite_data)
@@ -887,7 +886,7 @@ def collect_cross_protocol_data(project_dir: Path, force: bool = False) -> dict:
     Returns:
         dict with keys: protocols, aggregate, generated_at, file_mtimes.
     """
-    from science_cli.memristor.device import read_devices, extract_material_batch
+    from science_cli.memristor.device import extract_material_batch, read_devices
     from science_cli.memristor.plotting import read_iv_csv
     from science_cli.memristor.switching import extract_iv_parameters
 
@@ -1097,7 +1096,7 @@ def read_dashboard_data_sqlite(project_root: Path) -> Optional[dict]:
 
     Returns dict with keys: files, cells, or None if DB not available.
     """
-    from science_cli.memristor.db import open_db, query_files, query_cells, close_db
+    from science_cli.memristor.db import close_db, open_db, query_cells, query_files
 
     db_path = project_root / f"{project_root.name}.db"
     if not db_path.exists():
@@ -3615,8 +3614,8 @@ def generate_main_dashboard(
     Returns:
         Path to main index HTML.
     """
+    from science_cli.memristor.db import close_db, open_db
     from science_cli.memristor.device import read_devices
-    from science_cli.memristor.db import open_db, close_db
 
     # Collect protocol dirs
     proto_dir = project_dir / "protocol"

@@ -17,7 +17,9 @@ The Textual-based terminal UI for science-cli. Launched when `sci` is run withou
 ## Architecture
 
 The TUI dispatches commands through the same `COMMAND_TREE` as the CLI.
-Output is captured via `_TeeWriter` and displayed in the output panel.
+For fzf commands, the TUI stops application mode, launches a subprocess via
+`subprocess.run([sys.executable, "-m", "science_cli", ...])` that has direct
+access to the real terminal, then re-enters application mode.
 
 ## Slash Commands
 

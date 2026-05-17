@@ -1,11 +1,10 @@
 """results command — list saved figures/analysis by protocol and step."""
 
 import subprocess
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
+
 from rich.console import Console
-from rich.table import Table
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 
@@ -22,8 +21,8 @@ def results_handler(args: list) -> None:
     if use_fzf:
         args = [a for a in args if a != "--fzf"]
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open. Use 'project open <name>' first.[/yellow]")
@@ -59,7 +58,7 @@ def results_handler(args: list) -> None:
         if not result_files:
             console.print("[yellow]No result files found.[/yellow]")
             return
-        from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+        from science_cli.core.fzf_utils import build_fzf_display, fzf_select
         display_lines = [build_fzf_display(pname, sd_name, pf.name, width_proto=22, width_step=18) for pname, sd_name, pf in result_files]
         selected = fzf_select(display_lines, prompt="Select result to open:", multi=False)
         if selected:
@@ -80,14 +79,14 @@ def results_handler(args: list) -> None:
             orphaned = [f for f in orphaned if f.is_file() and f.suffix in (".pdf", ".svg", ".png")]
             if orphaned:
                 has_orphaned = True
-                console.print(f"\n[bold]Other results:[/bold]")
+                console.print("\n[bold]Other results:[/bold]")
                 for f in orphaned:
                     size = f.stat().st_size
                     console.print(f"  [dim]• {f.name}  ({_fmt_size(size)})[/dim]")
                 console.print()
 
         if not has_orphaned:
-            console.print(f"[dim]No results yet.[/dim]\n")
+            console.print("[dim]No results yet.[/dim]\n")
         return
 
     console.print(f"\n[bold]Results for project:[/bold] {proj.name}\n")
@@ -111,7 +110,7 @@ def results_handler(args: list) -> None:
                 console.print(f"      [dim]{pf.name:<40s} {_fmt_size(size)}[/dim]")
 
         if total_proto == 0:
-            console.print(f"    [dim]No results yet.[/dim]")
+            console.print("    [dim]No results yet.[/dim]")
         console.print()
 
     # Also show standalone / orphaned results at project level
@@ -121,7 +120,7 @@ def results_handler(args: list) -> None:
         orphaned = [f for f in orphaned if f.is_file() and f.suffix in (".pdf", ".svg", ".png")]
         direct_results = [f for f in orphaned if not any(f.name.startswith(py.stem) for py in proto_yamls)]
         if direct_results:
-            console.print(f"  [bold]Other results:[/bold]")
+            console.print("  [bold]Other results:[/bold]")
             for f in direct_results:
                 size = f.stat().st_size
                 console.print(f"    [dim]• {f.name}  ({_fmt_size(size)})[/dim]")

@@ -1,6 +1,7 @@
 """EIS analysis: circuit fitting (RC, RRC, Randles), Kramers-Kronig testing."""
 
 import numpy as np
+
 from science_cli.electrochem.models import EISData
 
 # ---------------------------------------------------------------------------
@@ -56,11 +57,35 @@ def _rq_randles(f: np.ndarray, Rs: float, Rct: float, Q_mag: float, Q_n: float) 
     return Z
 
 
+def _warburg_impedance(f: np.ndarray, sigma: float) -> np.ndarray:
+    """Warburg diffusion impedance: Z_w = sigma / sqrt(j * omega)."""
+    w = 2 * np.pi * f
+    return sigma / np.sqrt(1j * w)
+
+
+def _rrc_w_randles(f: np.ndarray, Rs: float, Cdl: float, Rct: float, sigma: float) -> np.ndarray:
+    """Randles with Warburg R_s(C[RW]): Z = Rs + 1/(jωCdl + 1/(Rct + Zw))."""
+    Zw = _warburg_impedance(f, sigma)
+    Z = Rs + 1.0 / (1j * 2 * np.pi * f * Cdl + 1.0 / (Rct + Zw))
+    return Z
+
+
+def _rqr_w_randles(f: np.ndarray, Rs: float, Q_mag: float, Q_n: float, Rct: float, sigma: float) -> np.ndarray:
+    """Randles with CPE + Warburg R_s(Q[RW]): Z = Rs + 1/(1/Zcpe + 1/(Rct + Zw))."""
+    w = 2 * np.pi * f
+    Zcpe = 1.0 / (Q_mag * (1j * w) ** Q_n)
+    Zw = _warburg_impedance(f, sigma)
+    Z = Rs + 1.0 / (1.0 / Zcpe + 1.0 / (Rct + Zw))
+    return Z
+
+
 # Register built-in circuits
 _register_circuit("RC", _rc_series)
 _register_circuit("RRC", _rrc_randles)
 _register_circuit("RQR", _rq_randles)
 _register_circuit("Randles", _rq_randles)
+_register_circuit("R_s(C[RW])", _rrc_w_randles)
+_register_circuit("R_s(Q[RW])", _rqr_w_randles)
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +128,17 @@ def circuit_fit(data: EISData, circuit: str = "RRC") -> dict:
         params.add("Rct", value=1000, min=1, max=1e9)
         params.add("Q_mag", value=1e-6, min=1e-12, max=1)
         params.add("Q_n", value=0.8, min=0.5, max=1.0, vary=True)
+    elif circuit == "R_s(C[RW])":
+        params.add("Rs", value=100, min=1, max=1e6)
+        params.add("Cdl", value=1e-6, min=1e-12, max=1)
+        params.add("Rct", value=1000, min=1, max=1e9)
+        params.add("sigma", value=100, min=1e-6, max=1e6)
+    elif circuit == "R_s(Q[RW])":
+        params.add("Rs", value=100, min=1, max=1e6)
+        params.add("Q_mag", value=1e-6, min=1e-12, max=1)
+        params.add("Q_n", value=0.8, min=0.5, max=1.0, vary=True)
+        params.add("Rct", value=1000, min=1, max=1e9)
+        params.add("sigma", value=100, min=1e-6, max=1e6)
 
     from lmfit import Minimizer
     Z_real = Z.real
@@ -139,6 +175,27 @@ def circuit_fit(data: EISData, circuit: str = "RRC") -> dict:
         return {"error": str(e)}
 
 
+def best_circuit_fit(data: EISData, candidates: list[str] | None = None) -> dict:
+    """Try each candidate circuit model and return the one with best R².
+
+    Candidates default to all registered circuits except RC (series is
+    meaningless for typical EIS).
+    """
+    if candidates is None:
+        candidates = [n for n in _circuit_functions if n != "RC"]
+    best = {"r_squared": -1e9}
+    for name in candidates:
+        try:
+            fit = circuit_fit(data, name)
+            if "error" not in fit and fit.get("r_squared", -1) > best["r_squared"]:
+                best = fit
+        except Exception:
+            continue
+    if best.get("r_squared", -1) < -1e8:
+        return {"error": "all circuit fits failed"}
+    return best
+
+
 # ---------------------------------------------------------------------------
 # Kramers-Kronig consistency test
 # ---------------------------------------------------------------------------
@@ -163,7 +220,7 @@ def kramers_kronig(data: EISData) -> dict:
     # Log-spaced time constants
     poles = np.logspace(np.log10(f_min), np.log10(f_max), n_poles)
 
-    from lmfit import Parameters, Minimizer
+    from lmfit import Minimizer, Parameters
 
     # Voigt model: R_inf + Σ(R_k / (1 + jωτ_k))
     def model_Z(f, poles_params):

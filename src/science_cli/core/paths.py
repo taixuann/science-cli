@@ -160,6 +160,7 @@ class ProjectPaths:
         Returns dict: {migrated: int, skipped: int, errors: list[str]}.
         """
         import shutil
+
         import yaml
 
         result: dict = {"migrated": 0, "skipped": 0, "errors": []}

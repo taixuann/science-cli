@@ -2,7 +2,7 @@
 
 ## Status
 - **Created**: 2026-05-17
-- **Status**: in-progress
+- **Status**: completed
 - **Branch**: feature/dashboard-themes-fzf-columns
 
 ## Objective

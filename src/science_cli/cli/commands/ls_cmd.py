@@ -1,10 +1,11 @@
 """ls command handler — list protocols/steps/files (global, not session-bound)."""
 
-import yaml
 from pathlib import Path
+
+import yaml
+from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -117,7 +118,7 @@ def _ls_default(proj: Path) -> None:
     paths = ProjectPaths(proj)
     proto_yamls = paths.list_protocol_yamls()
     if not proto_yamls:
-        rprint(f"[yellow]No protocols found.[/yellow]")
+        rprint("[yellow]No protocols found.[/yellow]")
         return
 
     table = Table(title="Protocols", border_style="cyan")
@@ -134,7 +135,7 @@ def _ls_default(proj: Path) -> None:
         table.add_row(py.stem, str(len(steps)), str(n_files), data.get("description", ""))
 
     console.print(table)
-    rprint(f"\n[dim]Use 'ls -m protocol --all' for full view.[/dim]")
+    rprint("\n[dim]Use 'ls -m protocol --all' for full view.[/dim]")
 
 
 def _device_crossref(step_dir: Path) -> str:
@@ -164,7 +165,7 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
     paths = ProjectPaths(proj)
     proto_yamls = paths.list_protocol_yamls()
     if not proto_yamls:
-        rprint(f"[yellow]No protocols found.[/yellow]")
+        rprint("[yellow]No protocols found.[/yellow]")
         return
 
     for py in proto_yamls:
@@ -280,7 +281,7 @@ def _ls_projects() -> None:
 
     Works globally — does not require a project to be open.
     """
-    from science_cli.core.project import list_projects, get_current_project_path
+    from science_cli.core.project import get_current_project_path, list_projects
     from science_cli.core.session import load_session
 
     projects = list_projects()

@@ -8,8 +8,8 @@ Three-tier LabPlot-inspired system:
 This file handles the Theme tier. Templates live in theme/templates/.
 """
 
-import re
 from pathlib import Path
+
 import matplotlib as mpl
 
 _THEME_DIR = Path(__file__).parent / "themes"

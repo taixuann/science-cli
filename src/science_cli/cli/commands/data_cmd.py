@@ -1,8 +1,8 @@
 """data command handler — import, export, assign."""
 
 from pathlib import Path
+
 from rich.console import Console
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 

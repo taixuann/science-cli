@@ -3,8 +3,6 @@
 from typing import Optional
 
 import numpy as np
-from lmfit import Model, Parameters
-
 
 # ---------------------------------------------------------------------------
 # Public API

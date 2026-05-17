@@ -3,8 +3,10 @@
 import numpy as np
 
 from science_cli.plot.base import (
-    create_figure, apply_figure_kw,
-    parse_figsize, plot_line,
+    apply_figure_kw,
+    create_figure,
+    parse_figsize,
+    plot_line,
 )
 
 

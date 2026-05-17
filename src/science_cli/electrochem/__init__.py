@@ -9,10 +9,15 @@ Provides electrochemical analysis for:
 # ---------------------------------------------------------------------------
 # Public API — importable as science_cli.electrochem
 # ---------------------------------------------------------------------------
-from science_cli.electrochem.models import CVData, CAData, EISData
-from science_cli.electrochem.cv import analyze_cv, peak_analysis, calculate_charge, scan_rate_analysis
 from science_cli.electrochem.ca import analyze_ca, analyze_cottrell, analyze_steady_state
+from science_cli.electrochem.cv import (
+    analyze_cv,
+    calculate_charge,
+    peak_analysis,
+    scan_rate_analysis,
+)
 from science_cli.electrochem.eis import analyze_eis, circuit_fit, kramers_kronig
+from science_cli.electrochem.models import CAData, CVData, EISData
 
 __all__ = [
     # Models

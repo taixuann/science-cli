@@ -8,10 +8,6 @@ Provides a minimal Textual Input widget styled like Hermes:
 """
 
 from textual.widgets import Input
-from textual.reactive import reactive
-
-from science_cli.core.session import load_session, add_history
-
 
 #: Slash commands handled internally by the TUI (not dispatched to COMMAND_TREE).
 SLASH_COMMANDS: dict[str, str] = {

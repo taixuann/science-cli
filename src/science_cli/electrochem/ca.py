@@ -2,6 +2,7 @@
 
 import numpy as np
 from lmfit import Model
+
 from science_cli.electrochem.models import CAData
 
 

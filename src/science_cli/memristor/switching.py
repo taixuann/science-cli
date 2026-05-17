@@ -4,9 +4,9 @@ import logging
 from pathlib import Path
 
 import numpy as np
+
 from science_cli.memristor.models import SwitchingData
 from science_cli.memristor.plotting import _split_at_reversals, read_iv_csv
-from science_cli.memristor.device import extract_material_batch
 
 logger = logging.getLogger(__name__)
 

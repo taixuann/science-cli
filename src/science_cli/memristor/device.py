@@ -7,24 +7,19 @@ devices.yaml lives at protocol/<proto>/devices.yaml with a steps:
 mapping that connects techniques to step subdirectories.
 """
 
+import re
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-import re
 from typing import Optional
-import warnings
 
 import yaml
 
 from science_cli.core.protocol import (
-    read_device_section,
-    write_device_section,
     has_device_section,
-    read_step_enriched_files,
-    write_step_enriched_files,
     migrate_from_devices_yaml,
 )
-
 
 # ── Sweep segment metadata ─────────────────────────────────
 
@@ -482,7 +477,7 @@ def _read_from_protocol_yaml(
     points: list[MatrixPoint] = []
     try:
         from science_cli.core.project import get_current_project_path
-        from science_cli.memristor.db import open_db, query_files, close_db
+        from science_cli.memristor.db import close_db, open_db, query_files
 
         proj = get_current_project_path()
         if proj:

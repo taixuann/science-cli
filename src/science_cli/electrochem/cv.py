@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy.signal as signal
+
 from science_cli.electrochem.models import CVData
 
 

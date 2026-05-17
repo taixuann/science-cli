@@ -238,10 +238,6 @@ This makes SQLite the canonical store. A `sync_sweep_to_protocol_yaml()` functio
 ## Dependencies
 None — all preceding work (version-2.1.1) is committed.
 
-## Cross-PLAN Impact
-- [[PLAN-device-step-metadata]] — this PLAN supersedes the previous approach (devices.yaml was the target of step-metadata changes; now protocol YAML is)
-- [[PLAN-enhanced-dashboard]] — dashboard reads from SQLite (unchanged); the devices.yaml fallback path should be updated to also read protocol YAML
-
 ## Test Strategy
 
 ### Unit Tests

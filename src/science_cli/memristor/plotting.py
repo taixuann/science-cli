@@ -40,7 +40,6 @@ def read_iv_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray, dict]:
         ValueError: If neither voltage nor current columns can be identified.
     """
     import csv
-    import io
 
     path = Path(filepath)
     if not path.exists():
@@ -897,8 +896,8 @@ def _plot_time_colored_iv(
     order: int,
 ) -> None:
     """Plot V-I curve colored by relative time with Nature styling."""
-    from matplotlib.collections import LineCollection
     import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
 
     t_rel = time - time[0]
     y_vals = np.abs(current) if use_log else current

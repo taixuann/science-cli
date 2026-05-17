@@ -12,10 +12,9 @@ import time
 
 from textual.app import ComposeResult
 from textual.reactive import reactive
-from textual.widgets import Static
 from textual.timer import Timer
+from textual.widgets import Static
 
-from science_cli import __version__
 from science_cli.core.session import load_session
 
 

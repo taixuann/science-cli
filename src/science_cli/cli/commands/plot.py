@@ -1,12 +1,13 @@
 """plot command handler — interactive fzf or direct, with hints."""
 
 from pathlib import Path
-from rich.console import Console
+
 from rich import print as rprint
+from rich.console import Console
 
 from science_cli.cli.help import show_command_help
-from science_cli.core.session import get_active_theme
 from science_cli.core.file_utils import is_flag
+from science_cli.core.session import get_active_theme
 from science_cli.theme import apply_theme
 
 console = Console()
@@ -57,9 +58,9 @@ def _detect_technique(filename: str) -> str:
 
 def _get_results_dir(filepath: str) -> Path:
     """Determine results dir: protocol/<step>/results/ if in session, else project/results/."""
-    from science_cli.core.session import load_session
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
     session = load_session()
     current_protocol = session.get("last_protocol")
     proj = get_current_project_path()
@@ -138,8 +139,8 @@ def _plot_results() -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    from science_cli.core.session import load_session
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.session import load_session
     active_protocol = load_session().get("last_protocol", "")
     paths = ProjectPaths(proj)
 
@@ -173,7 +174,7 @@ def _plot_results() -> None:
                 total += 1
                 step_count += 1
         if step_count == 0:
-            rprint(f"    [dim]No step-level results.[/dim]")
+            rprint("    [dim]No step-level results.[/dim]")
 
     # Project-level results (categorized by protocol if possible)
     out_dir = proj / "results"
@@ -184,7 +185,7 @@ def _plot_results() -> None:
             f.name.startswith(p.stem) for p in proto_dirs
         )]
         if project_figs:
-            rprint(f"  [bold]Project root:[/bold]")
+            rprint("  [bold]Project root:[/bold]")
             for f in project_figs:
                 size = f.stat().st_size
                 rprint(f"    [dim]•[/dim] {f.name} [dim]({_fmt_size(size)})[/dim]")
@@ -274,12 +275,12 @@ def plot_handler(args: list) -> None:
         show_command_help("plot")
         return
     if args[0] == "-theme":
-        from science_cli.theme import list_themes, apply_theme
-        from science_cli.core.session import get_active_theme, set_active_theme
+        from science_cli.core.session import get_active_theme
+        from science_cli.theme import list_themes
         active = get_active_theme()
         themes = list_themes()
         rprint(f"[bold]Current theme:[/bold] {active}")
-        rprint(f"[dim]Use 'config theme set <name>' to change.[/dim]")
+        rprint("[dim]Use 'config theme set <name>' to change.[/dim]")
         rprint(f"[dim]Available: {', '.join(themes)}[/dim]")
         return
     if args[0] == "--fzf":
@@ -314,7 +315,7 @@ def _plot_interactive(extra_args: list | None = None) -> None:
 
     raw_dir = proj / "data" / "raw"
     if not raw_dir.exists():
-        console.print(f"[red]data/raw/ not found.[/red]")
+        console.print("[red]data/raw/ not found.[/red]")
         return
 
     files = sorted(raw_dir.iterdir())
@@ -322,8 +323,9 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         console.print("[yellow]No files in data/raw/[/yellow]")
         return
 
-    from science_cli.core.fzf_utils import fzf_select
     import re
+
+    from science_cli.core.fzf_utils import fzf_select
 
     item_names = [f.name for f in files]
 
@@ -480,10 +482,16 @@ def _plot_direct(files: list, rest_args: list) -> None:
         console.print("[red]File(s) not found.[/red]")
         return
 
+    # Determine technique: from -t flag, auto-detect from filename, or empty
+    technique = flags.get("technique") or flags.get("t", "")
+    if not technique and resolved:
+        from science_cli.core.technique import detect_technique
+        technique = detect_technique(Path(resolved[0]).name)
+
     if len(resolved) == 1:
-        _do_plot(resolved[0], flags)
+        _do_plot(resolved[0], flags, technique)
     else:
-        _do_overlap(resolved, flags)
+        _do_overlap(resolved, flags, technique)
 
 
 def _resolve_xy_columns(
@@ -603,6 +611,9 @@ def _resolve_xy_columns(
 
 
 def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
+    if technique == "ec-eis":
+        return _do_eis_plot(filepath, flags)
+
     from science_cli.core.data_loader import load_data_file
 
     try:
@@ -614,7 +625,6 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import numpy as np
 
     apply_theme(get_active_theme())
     fig, ax = plt.subplots(figsize=_figsize(flags))
@@ -626,7 +636,6 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
         )
         return
 
-    # Apply template flags for labels if not overridden by user
     if not flags.get("xlabel") and xlabel:
         flags["xlabel"] = xlabel
     if not flags.get("ylabel") and ylabel:
@@ -659,13 +668,6 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     else:
         ax.plot(x, y, linewidth=linewidth, **plot_kw)
 
-    if technique == "ec-eis":
-        ax.set_aspect("equal")
-        if not flags.get("xlabel"):
-            ax.set_xlabel("Z' (Ω)")
-        if not flags.get("ylabel"):
-            ax.set_ylabel("-Z'' (Ω)")
-
     _apply_figure_kw(ax, flags, Path(filepath).stem)
 
     out_dir = _get_results_dir(filepath)
@@ -674,7 +676,6 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
         out_name = flags.get("n") or flags.get("name", f"{technique}_{stem}.pdf")
     else:
         out_name = flags.get("n") or flags.get("name", f"{stem}_plot.pdf")
-    # Ensure .pdf extension if none specified
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
@@ -697,11 +698,140 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     )
 
 
-def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
+def _do_eis_plot(filepath: str, flags: dict) -> None:
+    """Generate Nyquist, Bode, and optionally circuit-fit-nyquist for an EIS file."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
+
+    from science_cli.core.data_loader import load_data_file
+
+    try:
+        df, info = load_data_file(filepath, technique="ec-eis")
+    except Exception as e:
+        console.print(f"[red]Failed to load EIS data: {e}[/red]")
+        return
+
+    cols = list(df.columns)
+    # Resolve column names (try normalized first, fall back to raw)
+    def _col(candidates):
+        for c in candidates:
+            if c in cols:
+                return c
+        return ""
+
+    freq_col = _col(["frequency", "Frequency (Hz)"])
+    z_real_col = _col(["z_real", "Z' (Ω)", "Z'"])
+    z_imag_col = _col(["z_imag", "-Z'' (Ω)", "-Z''"])
+    mag_col = _col(["magnitude", "Z (Ω)"])
+    phase_col = _col(["phase", "-Phase (°)", "Phase (°)"])
+
+    if not freq_col or not z_real_col or not z_imag_col:
+        console.print("[red]EIS data missing frequency, Z', or Z'' columns.[/red]")
+        return
+
+    freq = df[freq_col].values
+    z_real = df[z_real_col].values
+    z_imag = df[z_imag_col].values
+    mag = df[mag_col].values if mag_col else None
+    phase = df[phase_col].values if phase_col else None
+
+    from science_cli.electrochem.models import EISData
+    from science_cli.plot.eis import plot_eis_bode, plot_eis_fit, plot_eis_nyquist
+
+    apply_theme(get_active_theme())
+    stem = Path(filepath).stem
+    out_dir = _get_results_dir(filepath)
+    dpi = int(flags.get("dpi", 150))
+
+    want_nyquist = not flags.get("bode")
+    want_bode = not flags.get("nyquist")
+    output_files = []
+
+    # ── Nyquist ──────────────────────────────────────────────────────
+    if want_nyquist:
+        fig, ax = plot_eis_nyquist(z_real, z_imag, label=stem)
+        _apply_figure_kw(ax, flags, stem)
+        nyq_name = f"ec-eis-nyquist_{stem}.pdf"
+        nyq_path = out_dir / nyq_name
+        fig.savefig(nyq_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        console.print(f"[bold green]✓[/bold green] Nyquist saved: {nyq_path}")
+        output_files.append(str(nyq_path))
+
+    # ── Bode ──────────────────────────────────────────────────────────
+    if want_bode and freq_col and mag_col and phase_col:
+        fig, ax1 = plot_eis_bode(freq, mag, phase)
+        _apply_figure_kw(ax1, flags, stem)
+        bode_name = f"ec-eis-bode_{stem}.pdf"
+        bode_path = out_dir / bode_name
+        fig.savefig(bode_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        console.print(f"[bold green]✓[/bold green] Bode saved: {bode_path}")
+        output_files.append(str(bode_path))
+
+    # ── Circuit fit (--circuit) ──────────────────────────────────────
+    circuit_model = flags.get("circuit")
+    if circuit_model is not False and circuit_model is not None:
+        from science_cli.electrochem.eis import best_circuit_fit, circuit_fit
+
+        eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
+
+        if isinstance(circuit_model, str) and circuit_model not in (True, ""):
+            fit = circuit_fit(eis_data, circuit_model)
+        else:
+            fit = best_circuit_fit(eis_data, candidates=["R_s(C[RW])", "R_s(Q[RW])"])
+            circuit_model = fit.get("circuit", "best")
+
+        if "error" not in fit:
+            fz = np.array(fit.get("fit_Z_real", []))
+            fzi = np.array(fit.get("fit_Z_imag", []))
+            if len(fz) > 0:
+                fig, ax = plot_eis_fit(z_real, z_imag, fz, fzi)
+                _apply_figure_kw(ax, flags, stem)
+                fit_name = f"ec-eis-fit-nyquist_{stem}.pdf"
+                fit_path = out_dir / fit_name
+                fig.savefig(fit_path, dpi=dpi, bbox_inches="tight")
+                plt.close(fig)
+                console.print(f"[bold green]✓[/bold green] Fit overlay saved: {fit_path}")
+                output_files.append(str(fit_path))
+
+            # Print fit results
+            console.print(f"\n  [bold]Circuit fit:[/bold] {circuit_model}  (R²={fit.get('r_squared', 0):.4f})")
+            for n, v in zip(fit.get("parameter_names", []), fit.get("fitted_params", [])):
+                console.print(f"    {n}: {v:.4e}")
+        else:
+            console.print(f"  [red]Fit failed: {fit['error']}[/red]")
+
+    # ── KK test (--kk) ──────────────────────────────────────────────
+    if flags.get("kk"):
+        from science_cli.electrochem.eis import kramers_kronig
+        eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
+        kk = kramers_kronig(eis_data)
+        status = "✓ passed" if kk.get("passes") else "✗ failed"
+        console.print(f"\n  [bold]KK test:[/bold] {status}  (score={kk.get('consistency_score', 0):.3f})")
+
+    # ── Manifest ─────────────────────────────────────────────────────
+    from science_cli.core.manifest import emit_manifest
+    from science_cli.core.project import get_current_project_path
+    if output_files:
+        emit_manifest(
+            output_dir=out_dir,
+            command=f"plot {filepath}",
+            source_files=[filepath],
+            output_files=output_files,
+            technique="ec-eis",
+            parameters=flags,
+            project=get_current_project_path().name if get_current_project_path() else "",
+        )
+
+
+def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     from science_cli.core.data_loader import load_data_file
 
     apply_theme(get_active_theme())
@@ -753,7 +883,7 @@ def _apply_zoom(ax, zoom_str: str) -> None:
             ax.set_xlim(float(parts[0]), float(parts[1]))
             ax.set_ylim(float(parts[2]), float(parts[3]))
         else:
-            console.print(f"[yellow]Usage: --zoom x1,x2 or --zoom x1,x2,y1,y2[/yellow]")
+            console.print("[yellow]Usage: --zoom x1,x2 or --zoom x1,x2,y1,y2[/yellow]")
     except (ValueError, IndexError):
         console.print(f"[red]Invalid zoom values: {zoom_str}[/red]")
 

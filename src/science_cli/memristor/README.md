@@ -49,7 +49,7 @@ memristor init --matrix r6-c6 --steps 4_iv
 memristor init --matrix r6-c6 --pt 1_pda-memristor   # target specific protocol
 ```
 
-Writes the `device:` section (rows, cols, label) into the **protocol YAML** (`protocol/<name>/<name>.yaml`). No longer creates a separate `devices.yaml`. The `--steps` argument maps step directory names to their technique (auto-resolved from the protocol YAML). `--matrix rN-cN` is shorthand for `--rows N --cols N`. Optionally migrates legacy `devices.yaml` data with `--migrate`.
+Writes the `device:` section (rows, cols, label) into the **protocol YAML** (`protocol/<name>/<name>.yaml`). No longer creates a separate `devices.yaml`. The `--steps` argument maps step directory names to their technique (auto-resolved from the protocol YAML), but is currently **informational only** — the steps mapping is printed to console but not persisted. `--matrix rN-cN` is shorthand for `--rows N --cols N`. Optionally migrates legacy `devices.yaml` data with `--migrate`.
 
 ### Step 2: `sync` — Populate SQLite from filenames + sweep metadata
 

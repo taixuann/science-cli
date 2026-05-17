@@ -1,6 +1,7 @@
 """Endurance analysis: cycle statistics, Weibull failure, trend degradation."""
 
 import numpy as np
+
 from science_cli.memristor.models import EnduranceData
 
 
@@ -115,7 +116,7 @@ def endurance_summary(data: EnduranceData) -> str:
                 f"η={stats['weibull_fit']['scale']:.0f}"
             )
     else:
-        lines.append(f"  NO FAILURE (ratio > 10 throughout)")
+        lines.append("  NO FAILURE (ratio > 10 throughout)")
 
     lines.append(f"  R_OFF trend: {stats['trend_slope']:.2e} Ω/cycle (R²={stats['trend_r_squared']:.4f})")
     lines.append(f"  Tail ratio ({len(data.ratio) - int(len(data.cycles) * 0.9)} cycles): "

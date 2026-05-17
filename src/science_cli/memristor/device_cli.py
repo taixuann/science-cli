@@ -30,30 +30,26 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from rich.console import Console
-from rich.table import Table
-from rich.style import Style
 from rich import print as rprint
+from rich.table import Table
 
-from science_cli.memristor.device import (
-    DeviceGeometry,
-    DeviceConfig,
-    MatrixPoint,
-    TechniqueGroup,
-    FileEntry,
-    read_devices,
-    write_devices,
-    validate as validate_config,
-    sync_devices,
-    generate_device_grid,
-    generate_rich_grid,
-    find_orphaned_files,
-    extract_material_batch,
-    KNOWN_TECHNIQUES,
-)
 from science_cli.core.session import (
     load_session,
     set_last_step,
+)
+from science_cli.memristor.device import (
+    FileEntry,
+    MatrixPoint,
+    TechniqueGroup,
+    extract_material_batch,
+    find_orphaned_files,
+    generate_rich_grid,
+    read_devices,
+    sync_devices,
+    write_devices,
+)
+from science_cli.memristor.device import (
+    validate as validate_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -345,13 +341,13 @@ def cmd_init(args: argparse.Namespace) -> None:
     # Check if protocol YAML exists
     if not protocol_yaml.exists():
         print(f"  Error: protocol YAML not found at {protocol_yaml}")
-        print(f"  Create a protocol first with 'protocol create' or navigate to a protocol directory.")
+        print("  Create a protocol first with 'protocol create' or navigate to a protocol directory.")
         sys.exit(1)
 
     # Check if device section already exists
     from science_cli.core.protocol import has_device_section, write_device_section
     if has_device_section(protocol_yaml):
-        print(f"  Protocol YAML already has a device section. Use --matrix to update.")
+        print("  Protocol YAML already has a device section. Use --matrix to update.")
 
     # Build geometry dict
     geometry = {
@@ -395,8 +391,8 @@ def cmd_init(args: argparse.Namespace) -> None:
                     steps[tech] = part
                 else:
                     # Try auto-detection
-                    from science_cli.core.technique import detect_technique
                     from science_cli.core.config import resolve_technique_from_grammar
+                    from science_cli.core.technique import detect_technique
                     ft = detect_technique(part)
                     if ft:
                         tid = resolve_technique_from_grammar(ft)
@@ -433,7 +429,7 @@ def cmd_ls(args: argparse.Namespace) -> None:
 
     if config is None:
         print(f"No device configuration found in {pdir}")
-        print(f"  (Check for protocol YAML with device section or legacy devices.yaml)")
+        print("  (Check for protocol YAML with device section or legacy devices.yaml)")
         sys.exit(1)
 
     material_filter = getattr(args, "material", "") or ""
@@ -642,7 +638,7 @@ def cmd_matrix(args: argparse.Namespace) -> None:
         --status: Show summary of what's loaded in the database.
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, close_db
+    from science_cli.memristor.db import close_db, open_db
 
     proj = get_current_project_path()
     if not proj:
@@ -959,7 +955,7 @@ def cmd_add_pattern(args: argparse.Namespace) -> None:
 
 def cmd_add_fzf(args: argparse.Namespace) -> None:
     """Interactive fzf file picker — scans all step subdirs recursively."""
-    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
 
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
@@ -1238,10 +1234,10 @@ def _sync_one_protocol(
     Side effects: prints per-protocol output.
     """
     from science_cli.memristor.db import (
-        populate_protocol_from_step_dirs,
-        prune_stale_files,
         DATA_SUFFIXES,
         MEMRISTOR_TECHNIQUES,
+        populate_protocol_from_step_dirs,
+        prune_stale_files,
     )
 
     # ── Phase 1: Reconcile protocol YAML (if --reconcile) ──
@@ -1334,7 +1330,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     With ``--all`` / ``-A``: sync ALL protocols in the current project.
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, close_db, rebuild_cells
+    from science_cli.memristor.db import close_db, open_db, rebuild_cells
 
     proj = get_current_project_path()
     if not proj:
@@ -1406,9 +1402,13 @@ def _sqlite_sync_from_yaml(pdir: Path) -> None:
     """Write current devices.yaml contents into the SQLite cache."""
     from science_cli.core.project import get_current_project_path
     from science_cli.memristor.db import (
-        open_db, insert_file, upsert_cells, upsert_protocol, close_db, rebuild_cells,
+        close_db,
+        insert_file,
+        open_db,
+        rebuild_cells,
+        upsert_protocol,
     )
-    from science_cli.memristor.device import read_devices, extract_material_batch
+    from science_cli.memristor.device import extract_material_batch, read_devices
 
     proj = get_current_project_path()
     if not proj:
@@ -1499,9 +1499,13 @@ def _sqlite_reindex(pdir: Path) -> None:
     """
     from science_cli.core.project import get_current_project_path
     from science_cli.memristor.db import (
-        open_db, insert_file, upsert_cells, upsert_protocol, close_db, rebuild_cells,
+        close_db,
+        insert_file,
+        open_db,
+        rebuild_cells,
+        upsert_protocol,
     )
-    from science_cli.memristor.device import read_devices, extract_material_batch
+    from science_cli.memristor.device import extract_material_batch, read_devices
 
     proj = get_current_project_path()
     if not proj:
@@ -1602,7 +1606,7 @@ def _analyze_protocol(
     pdir = proj / "protocol" / protocol_name
     if not pdir.exists():
         return {"protocol": protocol_name, "total": 0, "analyzed": 0, "skipped": 0, "errors": 0,
-                "message": f"directory not found"}
+                "message": "directory not found"}
 
     files = query_files(conn, protocol=protocol_name)
     target_files = [f for f in files if not f.get("parse_error")]
@@ -1694,7 +1698,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         --step <name>: filter to a specific step within the protocol(s).
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, close_db
+    from science_cli.memristor.db import close_db, open_db
 
     proj = get_current_project_path()
     if not proj:
@@ -1726,7 +1730,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
                 results.append(r)
 
             conn.commit()
-            print(f"\n── Analyze (--all) complete ──")
+            print("\n── Analyze (--all) complete ──")
             total_a = sum(r["analyzed"] for r in results)
             total_s = sum(r["skipped"] for r in results)
             total_e = sum(r["errors"] for r in results)
@@ -1860,13 +1864,13 @@ def cmd_check(args: argparse.Namespace) -> None:
 def cmd_plot(args: argparse.Namespace) -> None:
     """Batch-generate IV curve SVGs from devices.yaml."""
     from science_cli.memristor.plotting import (
-        read_iv_csv,
+        build_fzf_line,
         build_plot_filename,
         build_plot_title,
-        generate_iv_svg,
-        generate_iv_overlay_svg,
         collect_iv_files,
-        build_fzf_line,
+        generate_iv_overlay_svg,
+        generate_iv_svg,
+        read_iv_csv,
     )
 
     pdir = _resolve_protocol_dir(args)
@@ -2068,8 +2072,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Generate per-protocol dashboards + main index page (default)."""
-    from science_cli.memristor.dashboard import generate_main_dashboard
     from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.dashboard import generate_main_dashboard
 
     sess = load_session()
     last_proj = sess.get("last_project", "")

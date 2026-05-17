@@ -1,10 +1,10 @@
 """edit command handler — edit protocol/metadata/data."""
 
-import yaml
 import shutil
-from pathlib import Path
-from rich.console import Console
+
+import yaml
 from rich import print as rprint
+from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -67,8 +67,8 @@ def _edit_protocol(args: list) -> None:
         console.print("[yellow]Required: -n / --name (protocol name)[/yellow]")
         return
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -195,13 +195,13 @@ def _edit_protocol(args: list) -> None:
             step_dir = paths.step_dir(safe_name, sn)
             step_dir.mkdir(parents=True, exist_ok=True)
             (step_dir / "results").mkdir(parents=True, exist_ok=True)
-    
+
     if techs_raw and not steps_raw:
         techs = [t.strip() for t in techs_raw.split(",") if t.strip()]
         for i, s in enumerate(data.get("steps", [])):
             if i < len(techs):
                 s["technique"] = techs[i]
-    
+
     if devs_raw and not steps_raw:
         devs = [d.strip() for d in devs_raw.split(",") if d.strip()]
         for i, s in enumerate(data.get("steps", [])):
@@ -234,8 +234,8 @@ def _edit_metadata(args: list) -> None:
         console.print("[yellow]Required: -n / --name (protocol name), or open a protocol first[/yellow]")
         return
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -289,8 +289,8 @@ def _edit_data(args: list) -> None:
     """Move/reassign files between protocol steps."""
     import questionary
 
-    from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
         console.print("[yellow]No project open.[/yellow]")
@@ -342,7 +342,7 @@ def _edit_data(args: list) -> None:
         return
 
     # fzf multi-select: column format via build_fzf_display
-    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
     display_items = [build_fzf_display(proto_name, sn, fn, show_protocol=False) for sn, fn in all_files]
     selected_displays = fzf_select(
         display_items,
@@ -442,7 +442,7 @@ def _edit_data(args: list) -> None:
     target_step_dir = paths.step_dir(proto_name, target_step)
     target_step_dir.mkdir(parents=True, exist_ok=True)
     (target_step_dir / "results").mkdir(parents=True, exist_ok=True)
-    
+
     for old_step_name, fname in selected_files:
         # Remove old symlink (only if it's a symlink, not a real file)
         old_link = paths.step_dir(proto_name, old_step_name) / fname

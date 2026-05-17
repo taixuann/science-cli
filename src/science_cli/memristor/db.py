@@ -9,7 +9,6 @@ Schema (v2):
 WAL mode enabled. Schema migration via _meta table (version tracking).
 """
 
-import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -593,8 +592,8 @@ def populate_from_grammar(
     Returns:
         dict with keys: files_found, files_matched, files_inserted, errors
     """
+    from science_cli.core.config import get_default_device, resolve_technique_from_grammar
     from science_cli.core.technique import parse_filename_grammar
-    from science_cli.core.config import resolve_technique_from_grammar, get_default_device
 
     # Resolve project root
     if project_root is None:

@@ -1,11 +1,11 @@
 """status command handler — show current context (project/protocol/step)."""
 
-import yaml
 from pathlib import Path
 
+import yaml
+from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
-from rich import print as rprint
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
@@ -61,8 +61,8 @@ def status_handler(args: list) -> None:
 
 def _status_full() -> None:
     """Show full context tree: project → all protocols → session step."""
-    from science_cli.core.session import load_session
     from science_cli.core.project import get_current_project_path, list_projects
+    from science_cli.core.session import load_session
     sess = load_session()
 
     current_project = sess.get("last_project", "")
@@ -123,8 +123,8 @@ def _status_full() -> None:
 
 def _status_project() -> None:
     """Show project-level context: current project, protocol, step."""
-    from science_cli.core.session import load_session
     from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
 
     sess = load_session()
     current_project = sess.get("last_project", "")
@@ -169,8 +169,8 @@ def _status_project() -> None:
 
 def _status_protocol() -> None:
     """Show protocol-level context: current protocol and step."""
-    from science_cli.core.session import load_session
     from science_cli.core.project import get_current_project_path
+    from science_cli.core.session import load_session
 
     sess = load_session()
     current_protocol = sess.get("last_protocol", "")

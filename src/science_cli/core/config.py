@@ -31,8 +31,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-import yaml
 
+import yaml
 
 # ── Hardcoded defaults — never removed, always fall back ───────────────
 

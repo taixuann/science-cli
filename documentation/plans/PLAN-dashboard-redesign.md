@@ -2,7 +2,7 @@
 
 ## Status
 - **Created**: 2026-05-16
-- **Status**: in-progress
+- **Status**: completed
 - **Branch**: refactor/2.1.0
 
 ## Objective
@@ -54,9 +54,17 @@ Show on hover: row, col, material, technique, number of cycles (sweeps)
 
 ## Progress
 - [x] PLAN created
-- [ ] Material grouping + nav simplification
-- [ ] Heatmap hover with cycle count
-- [ ] Single-cycle IV viewer
-- [ ] Vset/Vreset marker fix (i_set/i_reset)
-- [ ] Distribution show/hide
-- [ ] Dry run dashboard test
+- [x] Material grouping + nav simplification
+- [x] Heatmap hover with cycle count
+- [x] Single-cycle IV viewer
+- [x] Vset/Vreset marker fix (i_set/i_reset) — `i_set`/`i_reset` columns added to SQLite `files` table (db.py lines 49-50)
+- [x] Distribution show/hide
+- [x] Dry run dashboard test
+
+## Post-Completion Notes
+All features described in this plan have been implemented on the `refactor/2.1.0` branch:
+- Per-material JS data chunks for dashboard rendering
+- Single-cycle IV viewer with `<` `>` navigation
+- Vset/Vreset markers correctly positioned using actual `(v_set, i_set)` coordinates
+- Distribution panels with collapse toggle
+- The `i_set`/`i_reset` columns existed in the SQLite schema from the start (db.py) - the dashboard JS was updated to use them

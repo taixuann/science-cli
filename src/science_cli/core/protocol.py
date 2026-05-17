@@ -7,10 +7,8 @@ per step with sweep metadata.
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import yaml
-
 
 # ── Device section ───────────────────────────────────────────────────
 

@@ -3,11 +3,10 @@
 import os
 import subprocess
 from pathlib import Path
+
 from rich.console import Console
-from rich import print as rprint
-from rich.table import Table
 from rich.panel import Panel
-import yaml
+from rich.table import Table
 
 from science_cli.cli.help import show_command_help
 
@@ -27,8 +26,8 @@ def config_handler(args: list) -> None:
         console.print("[yellow]config plot: use plot_settings.json directly at ~/.config/science-cli/plot_settings.json[/yellow]")
 
     elif sub == "theme":
-        from science_cli.theme import list_themes, apply_theme
         from science_cli.core.session import get_active_theme, set_active_theme
+        from science_cli.theme import apply_theme, list_themes
         if not sub_args or sub_args[0] == "list":
             themes = list_themes()
             active = get_active_theme()
@@ -157,10 +156,10 @@ def _cmd_show(args: list) -> None:
 
     try:
         from science_cli.core.config import (
-            load_global_config,
-            load_project_config,
             get_merged_config,
             invalidate_cache,
+            load_global_config,
+            load_project_config,
         )
     except ImportError:
         console.print("[red]Config system not available.[/red]")
@@ -230,7 +229,11 @@ def _cmd_set_technique(args: list) -> None:
     technique = args[0]
     device = args[1]
 
-    from science_cli.core.config import write_technique_config, load_technique_configs, list_technique_devices
+    from science_cli.core.config import (
+        list_technique_devices,
+        load_technique_configs,
+        write_technique_config,
+    )
 
     # Load existing technique config or create new one
     tech_configs = load_technique_configs()
@@ -487,13 +490,13 @@ def _cmd_edit_global_devices() -> None:
     editor = os.environ.get("EDITOR", "nvim")
     try:
         subprocess.run([editor, str(path)], check=True)
-        console.print(f"[green]✓[/green] Devices config updated")
+        console.print("[green]✓[/green] Devices config updated")
         from science_cli.core.config import invalidate_cache
         invalidate_cache()
     except FileNotFoundError:
         console.print(f"[red]Editor '{editor}' not found.[/red]")
     except subprocess.CalledProcessError:
-        console.print(f"[yellow]Editor exited with error.[/yellow]")
+        console.print("[yellow]Editor exited with error.[/yellow]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 
@@ -516,13 +519,13 @@ def _cmd_edit_global_grammar() -> None:
     editor = os.environ.get("EDITOR", "nvim")
     try:
         subprocess.run([editor, str(path)], check=True)
-        console.print(f"[green]✓[/green] Grammar config updated")
+        console.print("[green]✓[/green] Grammar config updated")
         from science_cli.core.config import invalidate_cache
         invalidate_cache()
     except FileNotFoundError:
         console.print(f"[red]Editor '{editor}' not found.[/red]")
     except subprocess.CalledProcessError:
-        console.print(f"[yellow]Editor exited with error.[/yellow]")
+        console.print("[yellow]Editor exited with error.[/yellow]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 
@@ -545,13 +548,13 @@ def _cmd_edit_global_techniques() -> None:
     editor = os.environ.get("EDITOR", "nvim")
     try:
         subprocess.run([editor, str(path)], check=True)
-        console.print(f"[green]✓[/green] Techniques config updated")
+        console.print("[green]✓[/green] Techniques config updated")
         from science_cli.core.config import invalidate_cache
         invalidate_cache()
     except FileNotFoundError:
         console.print(f"[red]Editor '{editor}' not found.[/red]")
     except subprocess.CalledProcessError:
-        console.print(f"[yellow]Editor exited with error.[/yellow]")
+        console.print("[yellow]Editor exited with error.[/yellow]")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 
@@ -559,11 +562,11 @@ def _cmd_edit_global_techniques() -> None:
 def _cmd_list_techniques() -> None:
     """List all configured techniques from all sources with per-device config display."""
     from science_cli.core.config import (
-        list_technique_names,
-        list_technique_devices,
-        get_technique_patterns,
         get_default_device,
         get_device_config_detail,
+        get_technique_patterns,
+        list_technique_devices,
+        list_technique_names,
     )
 
     names = list_technique_names()
@@ -671,7 +674,7 @@ def _cmd_list_devices(technique: str) -> None:
 
 def _cmd_list_global_devices() -> None:
     """List all devices in the global registry."""
-    from science_cli.core.config import list_global_devices, get_global_device_config
+    from science_cli.core.config import get_global_device_config, list_global_devices
 
     devices = list_global_devices()
 
