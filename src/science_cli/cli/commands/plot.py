@@ -506,6 +506,23 @@ def _resolve_xy_columns(
                 ycol = candidate
                 break
 
+    elif technique == "ec-eis":
+        # EIS: Z' vs -Z'' (Nyquist)
+        for candidate in (
+            "Z' (Ω)", "Z'", "Re(Z)", "ReZ", "Zre",
+            "z'", "z_re", "z_real",
+        ):
+            if candidate in df.columns:
+                xcol = candidate
+                break
+        for candidate in (
+            "-Z'' (Ω)", "-Z''", "Z''", '-Z"',
+            "Im(Z)", "ImZ", "Zim", "z''", "z_im", "z_imag",
+        ):
+            if candidate in df.columns:
+                ycol = candidate
+                break
+
     elif technique in ("iv-sweep", "iv-breakdown", "iv-leakage"):
         # IV: voltage vs current
         for candidate in (
@@ -551,7 +568,7 @@ def _resolve_xy_columns(
     y = df[ycol].values
 
     # Time normalization: if x looks like absolute time (large values), subtract min
-    if technique in ("ec-ca", "ec-cv", "ec-eis") and xcol not in (
+    if technique in ("ec-ca", "ec-cv") and xcol not in (
         "Corrected time (s)", "corrected time",
     ):
         x_numeric = np.asarray(x, dtype=float)
