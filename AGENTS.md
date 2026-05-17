@@ -211,7 +211,7 @@ PLAN-config-expansion
 ## Directory Map
 
 ```
-science-cli/
+/ (repo root = science-cli content)
 ├── AGENTS.md                          ← This file (agent workflow + reference)
 ├── README.md                          ← User-facing documentation
 ├── documentation/                     ← Plans and instructions
@@ -220,81 +220,46 @@ science-cli/
 ├── pyproject.toml                     ← Build config, dependencies, entry points
 ├── bin/sci                            ← Shell entry point
 ├── scripts/                           ← Dev/utility scripts
-├── theme-previews/                    ← Generated theme preview PDFs
-├── test_changes.py                    ← Smoke tests
+├── theme-previews/                    ← Generated theme preview PDFs (gitignored)
 ├── test_guardrails.py                 ← Architecture guardrail tests
 ├── .codegraph/                        ← CodeGraph index
-└── src/science_cli/
-    ├── __init__.py                    ← __version__
-    ├── app.py                         ← CLI entry point (run_cli + REPL)
-    ├── config.py                      ← Legacy config (theme, projects_root)
-    │
-├── cli/                           ← CLI dispatch layer
-│   ├── commands/                  ← One module per command
-│   │   ├── __init__.py            ← COMMAND_TREE (all registered commands)
-│   │   ├── add.py                 ← add handler
-│   │   ├── analyze.py             ← analyze handler
-│   │   ├── config.py              ← config handler (theme, init, show)
-│   │   ├── data_cmd.py            ← data handler (import/export/assign)
-│   │   ├── delete_cmd.py          ← delete handler
-│   │   ├── edit_cmd.py            ← edit handler
-│   │   ├── eis.py                 ← EIS fitting helpers
-│   │   ├── fit.py                 ← fit handler
-│   │   ├── ls_cmd.py              ← ls handler
-│   │   ├── metadata.py            ← metadata handler
-│   │   ├── open_cmd.py            ← open handler
-│   │   ├── parse.py               ← parse handler
-│   │   ├── plot.py                ← plot handler
-│   │   ├── protocol.py            ← protocol handler
-│   │   ├── results.py             ← results handler
-│   │   ├── close.py               ← close handler
-│   │   ├── status.py              ← status handler
-│   │   ├── memristor.py           ← memristor handler
-│   │   └── techniques.py          ← techniques handler
-    │   └── help.py                    ← Help text rendering
-    │
-    ├── core/                          ← Core library — no CLI coupling
-    │   ├── config.py                  ← ** Device-aware config system **
-    │   ├── data_loader.py             ← File → DataFrame (device-aware)
-    │   ├── file_utils.py              ← File I/O utilities
-    │   ├── fzf_utils.py               ← fzf integration
-    │   ├── legacy.py                  ← Backward-compat shims
-    │   ├── manifest.py                ← Manifest management
-    │   ├── paths.py                   ← ProjectPaths (directory layout)
-    │   ├── project.py                 ← Project path resolution
-    │   ├── protocol.py                ← Protocol YAML management
-    │   ├── session.py                 ← Session state (JSON)
-    │   ├── sweep_metadata.py          ← IV sweep segment detection
-    │   └── technique.py               ← Technique detection from filenames
-    │
-    ├── plot/                          ← Plot engine
-    │   ├── __init__.py                ← Re-exports + figure utilities
-    │   ├── base.py                    ← ** Canonical base ** — create_figure, save_figure
-    │   ├── ca.py                      ← Chronoamperometry plots
-    │   ├── cv.py                      ← Cyclic voltammetry plots
-    │   ├── eis.py                     ← EIS plots (Nyquist, Bode)
-    │   ├── eis_circuits.py            ← EIS circuit fitting models
-    │   └── overlays.py                ← Multi-file overlay plots
-    │
-    ├── theme/                         ← Theme & template system
-    │   ├── __init__.py                ← Public API + matcha colors
-    │   ├── registry.py                ← Theme/template registry + YAML loader
-    │   ├── themes/                    ← Global style themes (*.yaml)
-    │   └── templates/                 ← Per-technique defaults (*.yaml)
-    │
-    ├── tui/                           ← Textual TUI
-    │
-    ├── memristor/                     ← Memristor characterization
-    │   ├── __init__.py                ← Public API + built-in data
-    │   ├── db.py                      ← ** SQLite query cache (v4 schema with sweep metadata columns) **
-    │   ├── device.py                  ← DeviceConfig, protocol YAML integration + devices.yaml fallback
-    │   ├── device_cli.py              ← CLI commands (init, ls, add, plot, dashboard, sync, analyze)
-    │   ├── dashboard.py               ← ** Plotly interactive HTML dashboard (SQLite fast path) **
-    │   ├── plotting.py                ← IV CSV reading + SVG generation
-    │   ├── endurance.py               ← Endurance analysis
-    │   ├── retention.py               ← Retention analysis
-    │   ├── switching.py               ← Switching analysis
-    │   └── models.py                  ← SwitchingData, EnduranceData, RetentionData
+├── .gitignore                         ← Allowlist-based: only science-cli source files tracked
+├── src/science_cli/                   ← Canonical source root
+│   ├── __init__.py                    ← __version__
+│   ├── app.py                         ← CLI entry point (run_cli + REPL)
+│   ├── config.py                      ← Legacy config (theme, projects_root)
+│   ├── cli/                           ← CLI dispatch layer
+│   │   ├── commands/                  ← One module per command
+│   │   │   ├── __init__.py            ← COMMAND_TREE (all registered commands)
+│   │   │   ├── add.py / analyze.py / close.py / config.py
+│   │   │   ├── data_cmd.py / delete_cmd.py / edit_cmd.py
+│   │   │   ├── eis.py / fit.py / ls_cmd.py / memristor.py
+│   │   │   ├── metadata.py / open_cmd.py / parse.py
+│   │   │   ├── plot.py / protocol.py / results.py
+│   │   │   ├── status.py / techniques.py
+│   │   │   └── help.py                ← Help text rendering
+│   │   └── help.py
+│   ├── core/                          ← Core library — no CLI coupling
+│   │   ├── config.py                  ← 4-tier device-aware config
+│   │   ├── data_loader.py / file_utils.py / fzf_utils.py
+│   │   ├── manifest.py / paths.py / project.py
+│   │   ├── protocol.py / session.py
+│   │   ├── sweep_metadata.py / technique.py
+│   │   └── parquet_store.py
+│   ├── plot/                          ← Plot engine
+│   │   ├── __init__.py / base.py / ca.py / cv.py
+│   │   ├── eis.py / eis_circuits.py / overlays.py
+│   ├── theme/                         ← Theme & template system
+│   │   ├── __init__.py / registry.py
+│   │   ├── themes/                    ← 7 style themes (*.yaml)
+│   │   └── templates/                 ← Per-technique defaults (*.yaml)
+│   ├── tui/                           ← Textual TUI
+│   ├── memristor/                     ← Memristor characterization
+│   │   ├── __init__.py / db.py / device.py / device_cli.py
+│   │   ├── dashboard.py / plotting.py / models.py
+│   │   ├── switching.py / endurance.py / retention.py
+│   ├── electrochem/                   ← CV, CA, EIS analysis
+│   └── iv/                            ← IV analysis models
 ```
 
 ---
@@ -487,6 +452,7 @@ from science_cli.core.technique import (
 | `memristor init --matrix` shorthand | 2026-05-16 | `--matrix r6-c6` as shorthand for `--rows 6 --cols 6`; `--label` auto-generates |
 | fzf TUI subprocess dispatch | 2026-05-16 | `tui/app.py` uses subprocess.run with stop/start application mode; `fzf_utils.py` uses `/dev/tty` stderr |
 | Consolidate devices.yaml into protocol YAML | version-2.1.1 | `core/protocol.py` created; SQLite schema v4; `read_devices()` reads protocol YAML first; `write_devices()` deprecated; `memristor init` writes to protocol YAML; sweep metadata sync pipeline |
+| Repo restructuring (science-cli/* → repo root) | version-2.1.1 | `git mv science-cli/* .` — repo root IS science-cli; extensions/ removed; .gitignore allowlist for clean remote push |
 
 ### Active Gaps (Need Execution)
 

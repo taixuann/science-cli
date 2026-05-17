@@ -1,10 +1,29 @@
-# Ignore everything except science-cli and extensions/science-memristor
+# Include only science-cli source files
 /*
 !/.gitignore
-!/science-cli
-!/extensions
-/extensions/*
-!/extensions/science-memristor
+!/src
+!/bin
+!/scripts
+!/pyproject.toml
+!/README.md
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/LICENSE
+!/MIGRATION.md
+!/requirements.txt
+!/ruff.toml
+!/.github
+!/.codegraph
+!/documentation
+
+# Ignore AGENTS.md, PLAN files, test artifacts
+AGENTS.md
+**/AGENTS.md
+PLAN-*.md
+documentation/plans/
+tests/
+test_*.py
+theme-previews/
 
 # Python
 __pycache__/

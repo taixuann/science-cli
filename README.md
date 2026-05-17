@@ -1,4 +1,4 @@
-# science-cli v2.1.0 — Scientific Data CLI for Memristor & Electrochemistry
+# science-cli v2.1.1 — Scientific Data CLI for Memristor & Electrochemistry
 
 A Python CLI for managing, plotting, and analyzing experimental data — IV curves, CV, CA, EIS, memristor switching, endurance, and retention. Built for researchers who work with measurement files in the terminal.
 
@@ -153,7 +153,8 @@ sci memristor dashboard --all --open
 
 `memristor sync` and `memristor analyze` are now separate commands:
 
-- **`sync`** — Pure filename parsing. Scans step dirs, matches filenames against grammar patterns from config, extracts universal fields (date_code, material, technique, matrix, suffix), populates SQLite. No CSV reading, no IV analysis.
+- **`sync`** — Pure filename parsing. Scans step dirs, matches filenames against grammar patterns from config, extracts universal fields (date_code, material, technique, matrix, suffix), populates SQLite. No CSV reading, no IV analysis. Filters to memristor-only techniques (`iv-sweep`, `iv-breakdown`, `iv-leakage`, `mem-endurance`, `mem-retention`, `mem-switching`).
+- **`sync --reconcile`** — Three-phase sync: (1) populate SQLite from step dirs, (2) sync sweep metadata back to protocol YAML enriched `files[]` entries, (3) prune stale files from SQLite and YAML that no longer exist on disk.
 - **`analyze`** — CSV-based computation. Reads raw CSV files using device config, computes Vset/Vreset/ON/OFF ratio/compliance, updates SQLite analysis columns. Depends on `sync` having populated metadata first.
 
 Workflow: `memristor sync` (metadata) → `memristor analyze` (computation) → `memristor dashboard` (visualization).
@@ -195,7 +196,7 @@ The dashboard auto-extracts switching parameters:
 | Keysight Clarius+ | `.csv` (B1500A) | Keysight |
 | Biologic | `.mpt` | Biologic |
 
-Filenames follow **universal grammar fields** separated by `_` (hardcoded): `date_code_material_matrix_technique_suffix` (e.g., `140526_Ta-PDA-ITO_r0c0_iv_01.csv`). The 5 universal fields are: `date_code`, `material`, `technique`, `matrix`, `suffix`.
+Filenames follow **universal grammar fields** separated by `_` (hardcoded): `date_code_material_matrix_technique_suffix` (e.g., `140526_Ta-PDA-ITO_r0c0_iv_01.csv`). The 5 universal fields are: `date_code`, `material`, `technique`, `matrix`, `suffix`. Parenthesized suffixes like `(c)`, `(q)`, `(n)` in filenames are part of `material`, not batch/suffix.
 
 ## Theme System
 
@@ -301,6 +302,23 @@ steps:
 - SQLite schema v4 adds `sweep_order`, `sweep_type`, `sweep_segments`, `temperature` columns
 - `write_devices()` deprecated (warning emitted, still functional for backward compat)
 
+### Matrix Display (v2.1.1)
+
+The `memristor ls --matrix` command displays a grid of matrix cells:
+
+```
+┌─────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│     │  C1  │  C2  │  C3  │  C4  │  C5  │  C6  │
+├─────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│ R1  │  2   │  0   │  3   │  1   │  0   │  2   │
+│ R2  │  1   │  4   │  0   │  2   │  1   │  0   │
+└─────┴──────┴──────┴──────┴──────┴──────┴──────┘
+```
+
+- R1→R6 rows (top→bottom), C1→C6 columns (left→right)
+- Each cell shows file count from SQLite `cells` table
+- Column headers on TOP, row labels on LEFT
+
 ## Global Device & Technique Registry (Sprint 8)
 
 Built-in device library and technique configs shared across all projects:
@@ -342,7 +360,7 @@ Separator is hardcoded to `_` (underscore) — not configurable.
 # Install in editable mode
 pip install -e .
 
-# Run tests (97 total — 78 unit + 19 guardrail)
+# Run tests (140 total — 78 unit + 19 guardrail + 43 integration)
 pytest tests/ -v
 ```
 

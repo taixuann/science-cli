@@ -55,11 +55,12 @@ Writes the `device:` section (rows, cols, label) into the **protocol YAML** (`pr
 
 ```
 memristor sync
+memristor sync --reconcile    # 3-phase: populate → sync sweep → prune stale
 ```
 
-Scans step directories, parses every filename against the [grammar patterns](../core/technique.py) to extract `date_code`, `material`, `batch`, `technique`, `matrix` (row-col), and `suffix`. Fills the SQLite `files` table with metadata only — **no CSV content is read**. The `cells` table is also computed (aggregated per-cell stats).
+Scans step directories, parses every filename against the [grammar patterns](../core/technique.py) to extract `date_code`, `material`, `batch`, `technique`, `matrix` (row-col), and `suffix`. Only processes files matching **memristor-only techniques** (`iv-sweep`, `iv-breakdown`, `iv-leakage`, `mem-endurance`, `mem-retention`, `mem-switching`) — EC techniques (CV, CA, EIS) and fabrication steps (PVD, AFM) are skipped. Fills the SQLite `files` table with metadata only — **no CSV content is read**. The `cells` table is also computed (aggregated per-cell stats).
 
-**New in v2.1.1:** After populating SQLite from filenames, `sync` also sweeps CSV headers for sweep metadata (sweep segments, sweep_type, temperature) and stores them in the new `sweep_order`, `sweep_type`, `sweep_segments`, and `temperature` columns. Then writes enriched file entries back to the protocol YAML via `sync_sweep_to_protocol_yaml()`. The full data flow is:
+**New in v2.1.1:** After populating SQLite from filenames, `sync` also sweeps CSV headers for sweep metadata (sweep segments, sweep_type, temperature) and stores them in the new `sweep_order`, `sweep_type`, `sweep_segments`, and `temperature` columns. Then writes enriched file entries back to the protocol YAML via `sync_sweep_to_protocol_yaml()`. The `--reconcile` flag runs all three phases: (1) populate SQLite from step dirs, (2) sync sweep metadata back to protocol YAML, (3) prune stale files from both SQLite and YAML. The full data flow is:
 
 ```
 CSV files → SQLite (canonical store) → protocol YAML (human-readable sync)
