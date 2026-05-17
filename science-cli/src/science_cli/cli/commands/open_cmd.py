@@ -134,6 +134,13 @@ def _open_protocol(name: str) -> None:
     with open(yaml_path) as f:
         protocol = yaml.safe_load(f) or {}
 
+    # If the YAML name is the old sanitized form but we have a nicer name, update it
+    yaml_name = protocol.get("name", "")
+    if safe_name != yaml_name and ("." in safe_name or "(" in safe_name):
+        protocol["name"] = safe_name
+        with open(yaml_path, "w") as f:
+            yaml.dump(protocol, f, default_flow_style=False, sort_keys=False)
+
     set_last_protocol(safe_name)
 
     # ── Clear step context when opening a new protocol
