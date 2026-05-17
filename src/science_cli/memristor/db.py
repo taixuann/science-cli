@@ -627,17 +627,33 @@ def populate_from_grammar(
     errors: list[str] = []
 
     for entry in sorted(step_dir.iterdir()):
-        if not entry.is_file():
-            continue
         if entry.name.startswith("."):
             continue
-        if entry.suffix.lower() not in DATA_SUFFIXES:
+
+        # Resolve symlinks to their real targets in data/raw/
+        if entry.is_symlink():
+            try:
+                target = entry.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue  # broken symlink — skip
+            if not target.is_file():
+                continue
+            filename = target.name
+            suffix = target.suffix
+            stat_result = target.stat()
+        elif entry.is_file():
+            filename = entry.name
+            suffix = entry.suffix
+            stat_result = entry.stat()
+        else:
+            continue
+
+        if suffix.lower() not in DATA_SUFFIXES:
             continue
 
         files_found += 1
-        filename = entry.name
-        file_size = entry.stat().st_size
-        mtime = datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
+        file_size = stat_result.st_size
+        mtime = datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc).isoformat()
 
         # Parse filename via grammar
         parsed = parse_filename_grammar(filename, project_root=project_root)

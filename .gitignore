@@ -1,20 +1,5 @@
-# Include only science-cli source files
-/*
-!/.gitignore
-!/src
-!/bin
-!/scripts
-!/pyproject.toml
-!/README.md
-!/CHANGELOG.md
-!/CONTRIBUTING.md
-!/LICENSE
-!/MIGRATION.md
-!/requirements.txt
-!/ruff.toml
-!/.github
-!/.codegraph
-!/documentation
+# Standard blocklist (repo is isolated — no allowlist needed)
+# Only deny what should be excluded
 
 # Ignore AGENTS.md files, generated PLAN files at root level, test artifacts
 AGENTS.md

@@ -223,7 +223,7 @@ PLAN-config-expansion
 ├── theme-previews/                    ← Generated theme preview PDFs (gitignored)
 ├── test_guardrails.py                 ← Architecture guardrail tests
 ├── .codegraph/                        ← CodeGraph index
-├── .gitignore                         ← Allowlist-based: only science-cli source files tracked
+├── .gitignore                         ← Standard blocklist (repo isolated, no allowlist needed)
 ├── src/science_cli/                   ← Canonical source root
 │   ├── __init__.py                    ← __version__
 │   ├── app.py                         ← CLI entry point (run_cli + REPL)
@@ -452,7 +452,7 @@ from science_cli.core.technique import (
 | `memristor init --matrix` shorthand | 2026-05-16 | `--matrix r6-c6` as shorthand for `--rows 6 --cols 6`; `--label` auto-generates |
 | fzf TUI subprocess dispatch | 2026-05-16 | `tui/app.py` uses subprocess.run with stop/start application mode; `fzf_utils.py` uses `/dev/tty` stderr |
 | Consolidate devices.yaml into protocol YAML | version-2.1.1 | `core/protocol.py` created; SQLite schema v4; `read_devices()` reads protocol YAML first; `write_devices()` deprecated; `memristor init` writes to protocol YAML; sweep metadata sync pipeline |
-| Repo restructuring (science-cli/* → repo root) | version-2.1.1 | `git mv science-cli/* .` — repo root IS science-cli; extensions/ removed; .gitignore allowlist for clean remote push |
+| Repo restructuring (science-cli/* → repo root) | version-2.1.1 | `git mv science-cli/* .` — repo root IS science-cli; extensions/ removed; .gitignore simplified to standard blocklist |
 
 ### Active Gaps (Need Execution)
 

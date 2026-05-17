@@ -25,9 +25,15 @@ import argparse
 import json
 import logging
 import re
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from rich.console import Console
+from rich.table import Table
+from rich.style import Style
+from rich import print as rprint
 
 from science_cli.memristor.device import (
     DeviceGeometry,
@@ -541,6 +547,254 @@ def cmd_ls(args: argparse.Namespace) -> None:
     set_last_step(pdir.name)
 
 
+# ── Command: matrix ─────────────────────────────────────────
+
+
+def _render_matrix_grid(
+    protocol: str,
+    material: str,
+    cells: dict[tuple[int, int], int],
+    technique: str = "",
+    grid_rows: int | None = None,
+    grid_cols: int | None = None,
+) -> Table | None:
+    """Render a Rich Table grid of file counts for one protocol+material from DB data.
+
+    Args:
+        protocol: Protocol name (for title).
+        material: Material name (for title).
+        cells: Dict of (row, col) -> file count.
+        technique: Optional technique filter label.
+        grid_rows: Fixed grid rows from protocol YAML (default: infer from data).
+        grid_cols: Fixed grid columns from protocol YAML (default: infer from data).
+    """
+    if grid_rows is not None and grid_cols is not None:
+        rows, cols = grid_rows, grid_cols
+    elif cells:
+        rows = max(r for r, _ in cells) + 1
+        cols = max(c for _, c in cells) + 1
+    else:
+        return None
+
+    title_parts = [protocol, material]
+    if technique:
+        title_parts.append(f"[{technique}]")
+    title = " / ".join(title_parts)
+
+    table = Table(
+        title=title,
+        show_header=True,
+        header_style="bold cyan",
+        border_style="cyan",
+        show_lines=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("", style="bold bright_white", width=3)
+    for j in range(cols):
+        table.add_column(f"C{j + 1}", justify="right", width=5)
+
+    for i in range(rows):
+        row_data: list[str] = []
+        for j in range(cols):
+            n = cells.get((i, j), 0)
+            if n > 0:
+                row_data.append(f"[bold green]{n}[/]")
+            else:
+                row_data.append("[dim]----[/]")
+        table.add_row(f"R{i + 1}", *row_data)
+
+    return table
+
+
+def _get_protocol_grid_dims(proj: Path, protocol_name: str) -> tuple[int | None, int | None]:
+    """Read device grid dimensions from protocol YAML device section.
+
+    Returns (rows, cols) or (None, None) if not defined.
+    """
+    yaml_path = proj / "protocol" / protocol_name / f"{protocol_name}.yaml"
+    if not yaml_path.exists():
+        return None, None
+    try:
+        import yaml
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f) or {}
+        device = data.get("device", {})
+        rows = device.get("rows")
+        cols = device.get("cols")
+        if rows is not None and cols is not None:
+            return int(rows), int(cols)
+    except Exception:
+        pass
+    return None, None
+
+
+def cmd_matrix(args: argparse.Namespace) -> None:
+    """Show device matrix from SQLite (no YAML required).
+
+    Queries the ``files`` table for row/col coordinates parsed from filenames
+    and renders a grid per protocol+material.
+
+    Flags:
+        --all: Show matrix for ALL protocols in the project.
+        --material: Filter by exact material name.
+        --technique: Filter by technique (e.g., ``iv-sweep``).
+        --status: Show summary of what's loaded in the database.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.memristor.db import open_db, close_db
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    db_path = proj / f"{proj.name}.db"
+    if not db_path.exists():
+        print(f"No database found at {db_path}")
+        print("Run 'memristor sync' first to populate the database.")
+        return
+
+    technique = getattr(args, "technique", "") or ""
+    material = getattr(args, "material", "") or ""
+
+    # ── --status mode: summary table ──
+    if getattr(args, "status", False):
+        conn = open_db(proj)
+        try:
+            rows = conn.execute(
+                """SELECT protocol,
+                          COUNT(DISTINCT material) AS n_materials,
+                          COUNT(DISTINCT CASE WHEN row IS NOT NULL AND col IS NOT NULL
+                            THEN CAST(row AS TEXT) || '-' || CAST(col AS TEXT) END) AS n_cells,
+                          COUNT(*) AS n_files
+                   FROM files
+                   GROUP BY protocol
+                   ORDER BY protocol"""
+            ).fetchall()
+            if not rows:
+                print("No data in database.")
+                return
+            print(f"Database: {db_path.name}")
+            print(f"{'Protocol':45s} {'Materials':>10s} {'Cells':>8s} {'Files':>8s}")
+            print("-" * 75)
+            for r in rows:
+                print(f"{r[0]:45s} {r[1]:>10d} {r[2]:>8d} {r[3]:>8d}")
+            print("-" * 75)
+            total = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            print(f"{'TOTAL':45s} {'':>10s} {'':>8s} {total:>8d}")
+        finally:
+            close_db(conn)
+        return
+
+    # ── Matrix mode ──
+
+    # Determine which protocols to show
+    all_flag = getattr(args, "all", False)
+    if all_flag:
+        conn = open_db(proj)
+        try:
+            proto_rows = conn.execute(
+                "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+            ).fetchall()
+            protocols = [r[0] for r in proto_rows]
+        finally:
+            close_db(conn)
+        if not protocols:
+            print("No protocols found in database.")
+            print("Run 'memristor sync --all' first to populate the database.")
+            return
+    else:
+        pdir = _resolve_protocol_dir(args)
+        protocol_name = pdir.name
+
+        # Check if this protocol has data in the DB
+        conn_check = open_db(proj)
+        try:
+            has_data = conn_check.execute(
+                "SELECT 1 FROM files WHERE protocol = ? LIMIT 1", (protocol_name,)
+            ).fetchone()
+        finally:
+            close_db(conn_check)
+
+        if not has_data:
+            # Show available protocols from DB
+            conn_check2 = open_db(proj)
+            try:
+                available = [
+                    r[0] for r in conn_check2.execute(
+                        "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+                    ).fetchall()
+                ]
+            finally:
+                close_db(conn_check2)
+
+            if available:
+                print(f"Protocol '{protocol_name}' has no data in the database.")
+                print(f"Available protocols: {', '.join(available)}")
+                print("Use 'memristor matrix --all' or 'open -m protocol -n <name>'")
+            else:
+                print("No data in database. Run 'memristor sync' first.")
+            return
+
+        protocols = [protocol_name]
+
+    conn = open_db(proj)
+    try:
+        first = True
+        for protocol_name in protocols:
+            # Query matrix data
+            sql = """SELECT material, row, col, COUNT(*) AS n_files
+                     FROM files
+                     WHERE protocol = ?
+                       AND row IS NOT NULL
+                       AND col IS NOT NULL"""
+            params: list = [protocol_name]
+            if material:
+                sql += " AND material = ?"
+                params.append(material)
+            if technique:
+                sql += " AND technique_id = ?"
+                params.append(technique)
+            sql += " GROUP BY material, row, col ORDER BY material, row, col"
+
+            qrows = conn.execute(sql, params).fetchall()
+            if not qrows:
+                continue
+
+            # Group by material
+            mat_cells: dict[str, dict[tuple[int, int], int]] = {}
+            for qr in qrows:
+                mat_name = qr[0]
+                r, c = qr[1], qr[2]
+                n = qr[3]
+                mat_cells.setdefault(mat_name, {})[(r, c)] = n
+
+            if not first:
+                print()
+            first = False
+
+            g_rows, g_cols = _get_protocol_grid_dims(proj, protocol_name)
+
+            # --grid override
+            grid_str = getattr(args, "grid", "") or ""
+            if grid_str:
+                m = re.match(r"r(\d+)[-._]?c(\d+)", grid_str.strip(), re.IGNORECASE)
+                if m:
+                    g_rows, g_cols = int(m.group(1)), int(m.group(2))
+
+            for mat_name in sorted(mat_cells.keys()):
+                grid = _render_matrix_grid(
+                    protocol_name, mat_name, mat_cells[mat_name], technique,
+                    grid_rows=g_rows, grid_cols=g_cols,
+                )
+                if grid:
+                    rprint(grid)
+                    rprint()
+    finally:
+        close_db(conn)
+
+
 # ── Command: info ───────────────────────────────────────────
 
 
@@ -968,6 +1222,104 @@ def _reconcile_protocol_yaml(pdir: Path) -> dict:
 # ── Command: sync ───────────────────────────────────────────
 
 
+def _sync_one_protocol(
+    conn: sqlite3.Connection,
+    proj: Path,
+    protocol_name: str,
+    pdir: Path,
+    reconcile: bool,
+    force: bool = False,
+) -> dict:
+    """Sync a single protocol: populate SQLite, prune, sweep-to-yaml.
+
+    Returns the reconcile report (or empty dict if no reconcile).
+    Side effects: prints per-protocol output.
+    """
+    from science_cli.memristor.db import (
+        populate_protocol_from_step_dirs,
+        prune_stale_files,
+        DATA_SUFFIXES,
+        MEMRISTOR_TECHNIQUES,
+    )
+
+    # ── Phase 1: Reconcile protocol YAML (if --reconcile) ──
+    reconcile_report = None
+    if reconcile:
+        reconcile_report = _reconcile_protocol_yaml(pdir)
+        if reconcile_report["errors"]:
+            for err in reconcile_report["errors"]:
+                print(f"  [YAML] {err}")
+
+    # ── Phase 2: Force reset (if --force) ──
+    if force:
+        deleted = conn.execute(
+            "DELETE FROM files WHERE protocol = ?", (protocol_name,)
+        ).rowcount
+        print(f"  Force: cleared {deleted} stale file(s)")
+
+    # ── Phase 3: Populate SQLite from grammar (disk scan) ──
+    report = populate_protocol_from_step_dirs(
+        conn, protocol=protocol_name, project_root=proj,
+    )
+
+    # ── Phase 4: Prune stale DB entries (if --reconcile) ──
+    pruned_total = 0
+    if reconcile_report:
+        step_techniques: dict[str, str] = {}
+        try:
+            import yaml as _yaml
+            yaml_path = pdir / f"{protocol_name}.yaml"
+            if yaml_path.is_file():
+                with open(yaml_path) as _f:
+                    _data = _yaml.safe_load(_f)
+                for _s in (_data.get("steps") or []):
+                    if isinstance(_s, dict):
+                        step_techniques[_s.get("name", "")] = _s.get("technique", "")
+        except Exception:
+            pass
+
+        for step_name in sorted(
+            d.name for d in pdir.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        ):
+            technique = step_techniques.get(step_name, "")
+            if technique and technique not in MEMRISTOR_TECHNIQUES:
+                continue
+            step_dir = pdir / step_name
+            disk_files = set()
+            if step_dir.is_dir():
+                for entry in step_dir.iterdir():
+                    if not entry.is_file():
+                        continue
+                    if entry.name.startswith("."):
+                        continue
+                    if entry.suffix.lower() not in DATA_SUFFIXES:
+                        continue
+                    disk_files.add(entry.name)
+            pruned_total += prune_stale_files(conn, protocol_name, step_name, disk_files)
+
+    # ── Phase 5: Sync sweep metadata back to protocol YAML ──
+    from science_cli.memristor.device import sync_sweep_to_protocol_yaml
+    sweep_report = sync_sweep_to_protocol_yaml(pdir, conn)
+    if sweep_report.get("files_updated", 0) > 0:
+        print(f"  Sweep metadata synced: {sweep_report['files_updated']} file(s)")
+
+    # ── Report ──
+    if reconcile_report:
+        print(f"  Reconcile: {reconcile_report['steps_found']} steps, "
+              f"{reconcile_report['added']} added, "
+              f"{reconcile_report['removed']} removed, "
+              f"{pruned_total} pruned")
+
+    print(f"  Steps: {report['steps_found']} | Files: {report['total_files']} | "
+          f"Matched: {report['total_matched']} | Inserted: {report['total_inserted']}")
+    if report['errors']:
+        for err in report['errors'][:5]:
+            print(f"    - {err}")
+
+    return reconcile_report or {}
+
+
 def cmd_sync(args: argparse.Namespace) -> None:
     """Sync: pure filename parsing — scan step dirs, parse filenames via grammar, populate SQLite.
 
@@ -976,109 +1328,64 @@ def cmd_sync(args: argparse.Namespace) -> None:
 
     With ``--reconcile`` / ``-r``: also reconcile the protocol YAML's
     file list with actual files on disk, then prune stale SQLite entries.
-    """
-    pdir = _resolve_protocol_dir(args)
-    if not _validate_protocol_dir(pdir):
-        sys.exit(1)
 
+    With ``--all`` / ``-A``: sync ALL protocols in the current project.
+    """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import (
-        open_db, populate_protocol_from_step_dirs, close_db, rebuild_cells,
-        prune_stale_files, DATA_SUFFIXES,
-    )
+    from science_cli.memristor.db import open_db, close_db, rebuild_cells
 
     proj = get_current_project_path()
     if not proj:
         print("No project open. Use 'open -m project <path>' first.")
         sys.exit(1)
 
+    reconcile = getattr(args, "reconcile", False)
+    force = getattr(args, "force", False)
+
+    # ── --all mode: iterate every protocol in the project ──
+    if getattr(args, "all", False):
+        from science_cli.core.paths import ProjectPaths
+        ppaths = ProjectPaths(proj)
+        protocols = ppaths.protocol_names()
+        if not protocols:
+            print("No protocols found in project.")
+            return
+
+        conn = open_db(proj)
+        try:
+            for protocol_name in protocols:
+                pdir = proj / "protocol" / protocol_name
+                if not pdir.exists():
+                    print(f"  Skipping '{protocol_name}' — directory not found.")
+                    continue
+                print(f"\n── Syncing '{protocol_name}' ──")
+                _sync_one_protocol(conn, proj, protocol_name, pdir, reconcile,
+                                   force=force)
+
+            rebuild_cells(conn)
+            conn.commit()
+            print(f"\nAll protocols synced to {proj.name}.db")
+        except Exception as e:
+            conn.rollback()
+            print(f"  Sync (--all) failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            close_db(conn)
+        return
+
+    # ── Single-protocol mode (default) ──
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+
     protocol_name = pdir.name
 
-    # ── Phase 1: Reconcile protocol YAML (if --reconcile) ──
-    reconcile_report = None
-    if getattr(args, "reconcile", False):
-        reconcile_report = _reconcile_protocol_yaml(pdir)
-        if reconcile_report["errors"]:
-            for err in reconcile_report["errors"]:
-                print(f"  [YAML] {err}")
-
-    # ── Phase 2: Populate SQLite from grammar (disk scan) ──
     conn = open_db(proj)
     try:
-        report = populate_protocol_from_step_dirs(
-            conn,
-            protocol=protocol_name,
-            project_root=proj,
-        )
-
-        # ── Phase 3: Prune stale DB entries (if --reconcile) ──
-        pruned_total = 0
-        if reconcile_report:
-            # Read protocol YAML for step → technique mapping
-            step_techniques: dict[str, str] = {}
-            try:
-                import yaml as _yaml
-                yaml_path = pdir / f"{pdir.name}.yaml"
-                if yaml_path.is_file():
-                    with open(yaml_path) as _f:
-                        _data = _yaml.safe_load(_f)
-                    for _s in (_data.get("steps") or []):
-                        if isinstance(_s, dict):
-                            step_techniques[_s.get("name", "")] = _s.get("technique", "")
-            except Exception:
-                pass
-
-            from science_cli.memristor.db import MEMRISTOR_TECHNIQUES
-            step_dirs = [
-                d.name for d in pdir.iterdir()
-                if d.is_dir() and not d.name.startswith(".")
-            ]
-            for step_name in step_dirs:
-                technique = step_techniques.get(step_name, "")
-                if technique and technique not in MEMRISTOR_TECHNIQUES:
-                    continue  # Skip pruning for non-memristor techniques
-                step_dir = pdir / step_name
-                disk_files = set()
-                if step_dir.is_dir():
-                    for entry in step_dir.iterdir():
-                        if not entry.is_file():
-                            continue
-                        if entry.name.startswith("."):
-                            continue
-                        if entry.suffix.lower() not in DATA_SUFFIXES:
-                            continue
-                        disk_files.add(entry.name)
-                n = prune_stale_files(conn, protocol_name, step_name, disk_files)
-                pruned_total += n
-
+        _sync_one_protocol(conn, proj, protocol_name, pdir, reconcile,
+                           force=force)
         rebuild_cells(conn)
         conn.commit()
-
-        # ── NEW: Sync sweep metadata back to protocol YAML ──
-        from science_cli.memristor.device import sync_sweep_to_protocol_yaml
-        sweep_report = sync_sweep_to_protocol_yaml(pdir, conn)
-        if sweep_report.get("files_updated", 0) > 0:
-            print(f"  Sweep metadata synced to protocol YAML: {sweep_report['files_updated']} file(s)")
-
-        # ── Report ──
-        if reconcile_report:
-            print(f"Reconcile for protocol '{protocol_name}':")
-            print(f"  Steps found: {reconcile_report['steps_found']}")
-            print(f"  Files added to YAML: {reconcile_report['added']}")
-            print(f"  Files removed from YAML: {reconcile_report['removed']}")
-            print(f"  Stale DB rows pruned: {pruned_total}")
-
-        print(f"Sync complete for protocol '{protocol_name}':")
-        print(f"  Step dirs found: {report['steps_found']}")
-        print(f"  Files found: {report['total_files']}")
-        print(f"  Files matched (grammar): {report['total_matched']}")
-        print(f"  Files inserted: {report['total_inserted']}")
-        if report['errors']:
-            print(f"  Errors ({len(report['errors'])}):")
-            for err in report['errors'][:10]:  # Show first 10
-                print(f"    - {err}")
-            if len(report['errors']) > 10:
-                print(f"    ... and {len(report['errors']) - 10} more")
         print(f"  SQLite cache updated: {proj.name}.db")
     except Exception as e:
         conn.rollback()
@@ -1772,11 +2079,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_rm.add_argument("--step-dir", default="")
     p_rm.set_defaults(func=cmd_rm)
 
+    p_matrix = sub.add_parser("matrix", help="Show device matrix from SQLite (no YAML required)")
+    p_matrix.add_argument("--step-dir", default="")
+    p_matrix.add_argument("--all", "-A", action="store_true",
+                          help="Show matrix for ALL protocols in the project")
+    p_matrix.add_argument("--material", default="", help="Filter by exact material name")
+    p_matrix.add_argument("--technique", default="", help="Filter by technique (e.g., iv-sweep)")
+    p_matrix.add_argument("--grid", default="",
+                          help="Force grid dimensions (e.g. r6-c6). Overrides protocol YAML.")
+    p_matrix.add_argument("--status", action="store_true",
+                          help="Show summary of what's loaded in the database")
+    p_matrix.set_defaults(func=cmd_matrix)
+
     p_sync = sub.add_parser("sync", help="Sync sweep metadata")
     p_sync.add_argument("--step-dir", default="")
+    p_sync.add_argument("--all", "-A", action="store_true",
+                        help="Sync ALL protocols in the current project")
     p_sync.add_argument("--reindex", action="store_true", help="Reindex SQLite from YAML only (no CSV re-read)")
     p_sync.add_argument("--reconcile", "-r", action="store_true",
                         help="Reconcile protocol YAML file list with disk, then sync DB")
+    p_sync.add_argument("--force", "-F", action="store_true",
+                        help="Delete stale DB entries first, then re-scan from scratch")
     p_sync.set_defaults(func=cmd_sync)
 
     p_val = sub.add_parser("validate", help="Validate device config")

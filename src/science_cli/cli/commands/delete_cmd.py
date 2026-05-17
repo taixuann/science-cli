@@ -1,4 +1,4 @@
-"""delete command handler — remove protocol/metadata."""
+"""delete command handler — remove protocol/metadata/data files."""
 
 import yaml
 from pathlib import Path
@@ -50,6 +50,8 @@ def delete_handler(args: list) -> None:
             _delete_protocol(mode_args)
         elif mode == "metadata":
             _delete_metadata(mode_args)
+        elif mode == "data":
+            _delete_data(mode_args)
         else:
             console.print(f"[yellow]Unknown delete mode: {mode}[/yellow]")
     else:
@@ -168,3 +170,94 @@ def _delete_metadata(args: list) -> None:
 
     with open(yaml_path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def _delete_data(args: list) -> None:
+    """Delete data files from protocol YAML file lists.
+
+    Flags:
+        --fzf         Interactive fzf multi-select picker
+        --step <name> Limit to a specific step directory
+    """
+    _, flags = _parse_flags(args)
+
+    from science_cli.core.project import get_current_project_path
+    proj = get_current_project_path()
+    if not proj:
+        console.print("[yellow]No project open.[/yellow]")
+        return
+
+    from science_cli.core.session import load_session
+    session = load_session()
+    proto_name = session.get("last_protocol", "")
+    if not proto_name:
+        console.print("[yellow]No protocol selected. Open one first.[/yellow]")
+        return
+
+    from science_cli.core.paths import sanitize_protocol_name
+    safe_name = sanitize_protocol_name(proto_name)
+    from science_cli.core.paths import ProjectPaths
+    paths = ProjectPaths(proj)
+    yaml_path = paths.protocol_yaml(safe_name)
+    if not yaml_path.exists():
+        console.print(f"[red]Protocol YAML not found: {yaml_path}[/red]")
+        return
+
+    with open(yaml_path) as f:
+        data = yaml.safe_load(f) or {}
+
+    step_filter = flags.get("step", "")
+    steps = data.get("steps", [])
+
+    # Collect all files from all (or filtered) steps
+    all_entries: list[tuple[str, str, int | str]] = []  # (step_name, filename, entry_idx)
+    for si, s in enumerate(steps):
+        step_name = s.get("name", "")
+        if step_filter and step_name != step_filter:
+            continue
+        for fi, entry in enumerate(s.get("files", [])):
+            fname = entry["file"] if isinstance(entry, dict) else entry
+            all_entries.append((step_name, fname, fi))
+
+    if not all_entries:
+        if step_filter:
+            console.print(f"[yellow]No files found in step '{step_filter}'.[/yellow]")
+        else:
+            console.print("[yellow]No files found in protocol YAML.[/yellow]")
+        return
+
+    to_remove: list[tuple[int, int]] = []  # (step_idx, file_idx)
+
+    if flags.get("fzf"):
+        from science_cli.core.fzf_utils import fzf_select
+        items = [f"{step_name}/{fname}" for step_name, fname, _ in all_entries]
+        selected = fzf_select(
+            items=items,
+            prompt="Select files to remove >",
+            multi=True,
+            preview="head -3 {}",
+            preview_window="right:50%:border-sharp",
+        )
+        if not selected:
+            console.print("[yellow]No files selected.[/yellow]")
+            return
+        selected_set = set(selected)
+        for step_name, fname, fi in all_entries:
+            key = f"{step_name}/{fname}"
+            if key in selected_set:
+                si = next(i for i, s in enumerate(steps) if s.get("name") == step_name)
+                to_remove.append((si, fi))
+        for si, fi in reversed(to_remove):
+            files_list = steps[si].get("files", [])
+            if fi < len(files_list):
+                entry = files_list[fi]
+                removed_name = entry["file"] if isinstance(entry, dict) else entry
+                del files_list[fi]
+                console.print(f"  Removed: [dim]{step_name}/{removed_name}[/dim]")
+    else:
+        console.print("[yellow]Use --fzf to interactively select files.[/yellow]")
+        return
+
+    with open(yaml_path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    rprint(f"[bold green]✓[/bold green] Removed {len(to_remove)} file(s) from '{safe_name}' YAML")

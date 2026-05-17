@@ -102,20 +102,24 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "delete": {
         "usage": "delete -m <mode> [flags]",
-        "desc": "Delete protocol/metadata (Group 1).",
+        "desc": "Delete protocol/metadata/data files (Group 1).",
         "subcommands": {
             "delete -m protocol":    {"desc": "Delete a protocol and all its step folders", "usage": "delete -m protocol -n <name>"},
             "delete -m metadata":    {"desc": "Clear file assignments from protocol", "usage": "delete -m metadata -n <name> [--step s1] [--all]"},
+            "delete -m data":        {"desc": "Remove data files from protocol YAML", "usage": "delete -m data --fzf [--step <name>]"},
         },
         "flags": {
             "-n, --name": {"desc": "Protocol name (required)"},
             "--step":     {"desc": "Step ID(s) to clear, comma-separated"},
             "--all":      {"desc": "Clear file assignments from all protocols"},
+            "--fzf":      {"desc": "Interactive fzf picker for file selection"},
         },
         "examples": [
             "delete -m protocol -n doping",
             "delete -m metadata -n doping --step 1_deposition",
             "delete -m metadata --all",
+            "delete -m data --fzf",
+            "delete -m data --fzf --step 4_iv-sweep",
         ],
     },
     "ls": {
