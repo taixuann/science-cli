@@ -20,6 +20,13 @@ SCHEMA_VERSION = 3
 # Data file suffixes (same as device.py DATA_SUFFIXES)
 DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
 
+# Techniques that belong in the memristor SQLite cache.
+# EC techniques (ec-cv, ec-ca, etc.) and fabrication steps (pvd, afm) are excluded.
+MEMRISTOR_TECHNIQUES = {
+    "iv-sweep", "iv-breakdown", "iv-leakage",
+    "mem-endurance", "mem-retention", "mem-switching",
+}
+
 # Schema DDL
 CREATE_FILES = """
 CREATE TABLE IF NOT EXISTS files (
@@ -334,6 +341,39 @@ def update_file_analysis(
     )
 
 
+def prune_stale_files(
+    conn: sqlite3.Connection,
+    protocol: str,
+    step: str,
+    valid_filenames: set[str],
+) -> int:
+    """Delete rows from ``files`` for files no longer present on disk.
+
+    Args:
+        conn: Open SQLite connection.
+        protocol: Protocol name.
+        step: Step directory name.
+        valid_filenames: Set of filenames currently on disk.
+
+    Returns:
+        Number of rows deleted.
+    """
+    if valid_filenames:
+        placeholders = ",".join("?" for _ in valid_filenames)
+        cursor = conn.execute(
+            f"DELETE FROM files "
+            f"WHERE protocol = ? AND step = ? "
+            f"AND filename NOT IN ({placeholders})",
+            [protocol, step] + list(valid_filenames),
+        )
+    else:
+        cursor = conn.execute(
+            "DELETE FROM files WHERE protocol = ? AND step = ?",
+            [protocol, step],
+        )
+    return cursor.rowcount
+
+
 def rebuild_cells(conn: sqlite3.Connection) -> None:
     """Recompute the ``cells`` table from the ``files`` table.
 
@@ -611,6 +651,20 @@ def populate_protocol_from_step_dirs(
             "errors": [f"protocol directory not found: {proto_dir}"],
         }
 
+    # Read protocol YAML to learn step → technique mapping
+    step_techniques: dict[str, str] = {}
+    yaml_path = proto_dir / f"{protocol}.yaml"
+    try:
+        import yaml as _yaml
+        if yaml_path.is_file():
+            with open(yaml_path) as _f:
+                _data = _yaml.safe_load(_f)
+            for _s in (_data.get("steps") or []):
+                if isinstance(_s, dict):
+                    step_techniques[_s.get("name", "")] = _s.get("technique", "")
+    except Exception:
+        pass  # If YAML is unreadable, process all steps (backward compat)
+
     steps_found = 0
     total_files = 0
     total_matched = 0
@@ -625,6 +679,10 @@ def populate_protocol_from_step_dirs(
 
         step_name = entry.name
         steps_found += 1
+
+        technique = step_techniques.get(step_name, "")
+        if technique and technique not in MEMRISTOR_TECHNIQUES:
+            continue  # Skip non-memristor techniques (ec-cv, ec-ca, pvd, afm, etc.)
 
         result = populate_from_grammar(
             conn,

@@ -818,6 +818,99 @@ def cmd_rm(args: argparse.Namespace) -> None:
     set_last_step(pdir.name)
 
 
+# ── Reconcile helper ────────────────────────────────────────
+
+
+def _reconcile_protocol_yaml(pdir: Path) -> dict:
+    """Reconcile protocol YAML step file lists with actual files on disk.
+
+    Reads the protocol YAML (``<protocol>.yaml``), scans each step directory,
+    and updates the YAML's ``steps[].files[]`` to match current disk contents.
+
+    - Files in YAML but not on disk → removed from YAML
+    - Files on disk but not in YAML → appended as plain strings (no sweep metadata)
+    - Sweep metadata for removed files is discarded (identity may have changed)
+
+    Returns dict with keys: steps_found, added, removed, errors
+    """
+    import yaml
+
+    proto_yaml_path = pdir / f"{pdir.name}.yaml"
+    if not proto_yaml_path.exists():
+        return {"steps_found": 0, "added": 0, "removed": 0, "errors": ["protocol YAML not found"]}
+
+    with open(proto_yaml_path) as f:
+        proto_data = yaml.safe_load(f) or {}
+
+    from science_cli.memristor.db import DATA_SUFFIXES
+
+    total_added = 0
+    total_removed = 0
+    errors: list[str] = []
+
+    for step in proto_data.get("steps", []):
+        step_name = step.get("name", "")
+        if not step_name:
+            continue
+
+        step_dir = pdir / step_name
+        disk_files: set[str] = set()
+        if step_dir.is_dir():
+            for entry in step_dir.iterdir():
+                if not entry.is_file():
+                    continue
+                if entry.name.startswith("."):
+                    continue
+                if entry.suffix.lower() not in DATA_SUFFIXES:
+                    continue
+                disk_files.add(entry.name)
+
+        # Extract filenames from YAML entries (dict → "file" key, or plain string)
+        yaml_entries = step.get("files", [])
+        yaml_names: dict[str, str | dict] = {}
+        for entry in yaml_entries:
+            if isinstance(entry, dict):
+                fname = entry.get("file", "")
+                if fname:
+                    yaml_names[fname] = entry
+            elif isinstance(entry, str):
+                yaml_names[entry] = entry
+
+        yaml_files = set(yaml_names.keys())
+
+        to_remove = yaml_files - disk_files
+        to_add = disk_files - yaml_files
+
+        if not to_remove and not to_add:
+            continue
+
+        total_removed += len(to_remove)
+        total_added += len(to_add)
+
+        # Build new files list: keep existing entries, remove stale, add new
+        new_files: list = []
+        for entry in yaml_entries:
+            fname = entry["file"] if isinstance(entry, dict) else entry
+            if fname not in to_remove:
+                new_files.append(entry)
+
+        for fname in sorted(to_add):
+            new_files.append(fname)
+
+        step["files"] = new_files
+
+    if total_added > 0 or total_removed > 0:
+        with open(proto_yaml_path, "w") as f:
+            yaml.dump(proto_data, f, default_flow_style=False, sort_keys=False)
+
+    return {
+        "steps_found": len(proto_data.get("steps", [])),
+        "added": total_added,
+        "removed": total_removed,
+        "errors": errors,
+    }
+
+
 # ── Command: sync ───────────────────────────────────────────
 
 
@@ -826,13 +919,19 @@ def cmd_sync(args: argparse.Namespace) -> None:
 
     Does NOT read CSV content. Does NOT compute Vset/Vreset.
     Use 'memristor analyze' for CSV-based computation.
+
+    With ``--reconcile`` / ``-r``: also reconcile the protocol YAML's
+    file list with actual files on disk, then prune stale SQLite entries.
     """
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
 
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import open_db, populate_protocol_from_step_dirs, close_db, rebuild_cells
+    from science_cli.memristor.db import (
+        open_db, populate_protocol_from_step_dirs, close_db, rebuild_cells,
+        prune_stale_files, DATA_SUFFIXES,
+    )
 
     proj = get_current_project_path()
     if not proj:
@@ -840,6 +939,16 @@ def cmd_sync(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     protocol_name = pdir.name
+
+    # ── Phase 1: Reconcile protocol YAML (if --reconcile) ──
+    reconcile_report = None
+    if getattr(args, "reconcile", False):
+        reconcile_report = _reconcile_protocol_yaml(pdir)
+        if reconcile_report["errors"]:
+            for err in reconcile_report["errors"]:
+                print(f"  [YAML] {err}")
+
+    # ── Phase 2: Populate SQLite from grammar (disk scan) ──
     conn = open_db(proj)
     try:
         report = populate_protocol_from_step_dirs(
@@ -847,8 +956,57 @@ def cmd_sync(args: argparse.Namespace) -> None:
             protocol=protocol_name,
             project_root=proj,
         )
+
+        # ── Phase 3: Prune stale DB entries (if --reconcile) ──
+        pruned_total = 0
+        if reconcile_report:
+            # Read protocol YAML for step → technique mapping
+            step_techniques: dict[str, str] = {}
+            try:
+                import yaml as _yaml
+                yaml_path = pdir / f"{pdir.name}.yaml"
+                if yaml_path.is_file():
+                    with open(yaml_path) as _f:
+                        _data = _yaml.safe_load(_f)
+                    for _s in (_data.get("steps") or []):
+                        if isinstance(_s, dict):
+                            step_techniques[_s.get("name", "")] = _s.get("technique", "")
+            except Exception:
+                pass
+
+            from science_cli.memristor.db import MEMRISTOR_TECHNIQUES
+            step_dirs = [
+                d.name for d in pdir.iterdir()
+                if d.is_dir() and not d.name.startswith(".")
+            ]
+            for step_name in step_dirs:
+                technique = step_techniques.get(step_name, "")
+                if technique and technique not in MEMRISTOR_TECHNIQUES:
+                    continue  # Skip pruning for non-memristor techniques
+                step_dir = pdir / step_name
+                disk_files = set()
+                if step_dir.is_dir():
+                    for entry in step_dir.iterdir():
+                        if not entry.is_file():
+                            continue
+                        if entry.name.startswith("."):
+                            continue
+                        if entry.suffix.lower() not in DATA_SUFFIXES:
+                            continue
+                        disk_files.add(entry.name)
+                n = prune_stale_files(conn, protocol_name, step_name, disk_files)
+                pruned_total += n
+
         rebuild_cells(conn)
         conn.commit()
+
+        # ── Report ──
+        if reconcile_report:
+            print(f"Reconcile for protocol '{protocol_name}':")
+            print(f"  Steps found: {reconcile_report['steps_found']}")
+            print(f"  Files added to YAML: {reconcile_report['added']}")
+            print(f"  Files removed from YAML: {reconcile_report['removed']}")
+            print(f"  Stale DB rows pruned: {pruned_total}")
 
         print(f"Sync complete for protocol '{protocol_name}':")
         print(f"  Step dirs found: {report['steps_found']}")
@@ -1547,6 +1705,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync = sub.add_parser("sync", help="Sync sweep metadata")
     p_sync.add_argument("--step-dir", default="")
     p_sync.add_argument("--reindex", action="store_true", help="Reindex SQLite from YAML only (no CSV re-read)")
+    p_sync.add_argument("--reconcile", "-r", action="store_true",
+                        help="Reconcile protocol YAML file list with disk, then sync DB")
     p_sync.set_defaults(func=cmd_sync)
 
     p_val = sub.add_parser("validate", help="Validate device config")
