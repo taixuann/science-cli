@@ -79,9 +79,33 @@ def _capture_help_output(args: list[str]) -> str:
 
 
 def _build_context_prompt() -> FormattedText:
-    """Build prompt: separator + 'sci> ' + separator."""
+    """Build the multi-line prompt: separator + session info + separator + 'sci> '."""
     ft = FormattedText()
+    sess = load_session()
+
+    # top separator
     ft.append((DIM, "  " + "─" * (TERM_WIDTH - 4) + "\n"))
+
+    # session info
+    theme = sess.get("theme", "default")
+    ft.append((DIM, "  theme: "))
+    ft.append((TEXT, theme))
+    ft.append((DIM, " │ ctx "))
+
+    proj = sess.get("last_project", "")
+    prot = sess.get("last_protocol", "")
+    step = sess.get("last_step", "")
+    if proj:
+        ft.append((PROJECT_COL, proj))
+    else:
+        ft.append((DIM, "--"))
+    if prot:
+        ft.append((PROTOCOL_COL, f"/{prot}"))
+    if step:
+        ft.append((DIM, f"/{step}"))
+
+    # bottom separator + prompt
+    ft.append((DIM, "\n  " + "─" * (TERM_WIDTH - 4) + "\n"))
     ft.append((f"bold {ACCENT}", "sci> "))
     return ft
 
