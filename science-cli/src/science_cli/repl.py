@@ -7,6 +7,7 @@ No alternate screen — scrollback friendly.
 """
 
 import io
+import os
 import sys
 import shlex
 from pathlib import Path
@@ -78,33 +79,9 @@ def _capture_help_output(args: list[str]) -> str:
 
 
 def _build_context_prompt() -> FormattedText:
-    """Build the multi-line prompt: separator + session info + separator + 'sci> '."""
+    """Build prompt: separator + 'sci> ' + separator."""
     ft = FormattedText()
-    sess = load_session()
-
-    # top separator
     ft.append((DIM, "  " + "─" * (TERM_WIDTH - 4) + "\n"))
-
-    # session info
-    theme = sess.get("theme", "default")
-    ft.append((DIM, "  theme: "))
-    ft.append((TEXT, theme))
-    ft.append((DIM, " │ ctx "))
-
-    proj = sess.get("last_project", "")
-    prot = sess.get("last_protocol", "")
-    step = sess.get("last_step", "")
-    if proj:
-        ft.append((PROJECT_COL, proj))
-    else:
-        ft.append((DIM, "--"))
-    if prot:
-        ft.append((PROTOCOL_COL, f"/{prot}"))
-    if step:
-        ft.append((DIM, f"/{step}"))
-
-    # bottom separator + prompt
-    ft.append((DIM, "\n  " + "─" * (TERM_WIDTH - 4) + "\n"))
     ft.append((f"bold {ACCENT}", "sci> "))
     return ft
 
@@ -146,6 +123,8 @@ def run_repl():
             continue
 
         add_history(raw)
+        sep = "  " + "─" * (TERM_WIDTH - 4)
+        print(f"\x1b[0m{sep}")
         print(f">>> {raw}")
 
         try:
@@ -160,7 +139,6 @@ def run_repl():
             break
 
         if cmd in ("clear", "cls"):
-            import os
             os.system("clear")
             _print_banner()
             continue
@@ -170,6 +148,7 @@ def run_repl():
             if out:
                 for lo in out.split("\n"):
                     print(lo)
+            print()
             continue
 
         if cmd == "history":
@@ -180,10 +159,12 @@ def run_repl():
                 start = max(0, len(history) - 30)
                 for i, h in enumerate(history[start:], start + 1):
                     print(f"  {i:3d}. {h}")
+            print()
             continue
 
         if cmd == "version":
             print(f"sci version {__version__}")
+            print()
             continue
 
         if cmd in COMMAND_TREE:
@@ -191,6 +172,8 @@ def run_repl():
             if out:
                 for lo in out.split("\n"):
                     print(lo)
+            print()
             continue
 
         print(f"Unknown: {cmd}")
+        print()
