@@ -1,167 +1,185 @@
-# QA Test Report — 2026-05-17
+# Test Report — Dashboard Theme System + FZF Column Standardization
 
-## Context
-**Refactor**: Consolidate `devices.yaml` into protocol YAML
-**Branch**: `version-2.1.1`
-**Test constraint**: Only used `/Users/tai/workspace/projects/active_projects/test-project/` — no real data touched.
+**Date**: 2026-05-17
+**Project**: science-cli
+**Commit**: Working tree (unstaged changes)
 
 ---
 
-## 1. Existing Test Suite
+## 1. Smoke Test — All Commands `--help` / Import
+
+| Test | Result |
+|------|--------|
+| `add_handler` import | ✅ PASS |
+| `delete_handler` import | ✅ PASS |
+| `results_handler` import | ✅ PASS |
+| `edit_handler` import | ✅ PASS |
+| `plot_handler` import | ✅ PASS |
+| `build_fzf_line` import | ✅ PASS |
+| `generate_dashboard` import | ✅ PASS |
+
+**Result**: All modules import cleanly with no syntax errors.
+
+---
+
+## 2. Functional Tests
+
+### 2.1 `build_fzf_display()` — Column Formatting
+
+| Test Case | Result |
+|-----------|--------|
+| Normal (`proto1`, `step_a`, `data.txt`) | ✅ PASS — `"proto1               step_a                    data.txt"` |
+| Defaults (filename only) | ✅ PASS — padded correctly with 20+25 column widths |
+| Short protocol/step | ✅ PASS — `"a                    b                         file.txt"` |
+| Long protocol/step | ✅ PASS — overflows width but no crash |
+| Underscore names | ✅ PASS — `"IV_Sweep             Step_01                   test_file.csv"` |
+| Empty protocol/step | ✅ PASS |
+| **`None` protocol or step** | ❌ **BUG** — `TypeError: unsupported format string passed to NoneType.__format__` |
+
+### 2.2 `build_fzf_line()` — Plotting Display Line
+
+| Test Case | Result |
+|-----------|--------|
+| With protocol | ✅ PASS — `"test-proto                                     r0c1  Ta-PDA-ITO(1)              f    test.csv"` |
+| Without protocol | ✅ PASS — padded with spaces |
+| Empty fields | ✅ PASS |
+
+### 2.3 Column Strip Regex (`r"^\S+\s+\S+\s+"`)
+
+| Test Case | Result |
+|-----------|--------|
+| Normal → filename recovery | ✅ PASS — `"measurement.csv"` |
+| Short → filename recovery | ✅ PASS — `"file.txt"` |
+| Long → filename recovery | ✅ PASS — `"data.txt"` |
+| Empty protocol/step → filename recovery | ✅ PASS — `"onlyfile.csv"` |
+| Underscores → filename recovery | ✅ PASS — `"test_file.csv"` |
+
+**Conclusion**: The column strip regex works correctly for all input variations.
+
+---
+
+## 3. Dashboard Theme System
+
+### 3.1 CSS Theme Coverage
+
+| Theme | CSS Selector | Variables | Status |
+|-------|-------------|-----------|--------|
+| Dark | `[data-theme="dark"]` | 38 CSS vars | ✅ |
+| Black | `[data-theme="black"]` | 38 CSS vars | ✅ |
+| White | `:root, [data-theme="white"]` | 38 CSS vars | ✅ |
+
+Total unique CSS variables: **39** (covering `--bg-deep`, `--bg-base`, `--bg-panel`, `--bg-card`, `--bg-card2`, `--bg-hover`, `--bg-surface`, `--border`, etc.)
+
+### 3.2 JS Theme Engine
+
+| Feature | Per-Protocol | Cross-Protocol |
+|---------|-------------|----------------|
+| `function setTheme()` | ✅ present | ✅ present |
+| `THEMES` object | ✅ present | ✅ present |
+| `localStorage` persistence | ✅ present | ✅ present |
+| `theme-dot` click handlers | ✅ present | ✅ present |
+| Active class toggling | ✅ present | ✅ present |
+
+### 3.3 Theme Picker HTML
+
+Both dashboard variants embed the same 3-dot theme picker:
+```html
+<div class="theme-picker">
+  <span class="theme-dot active" data-theme="dark" onclick="setTheme('dark')" title="Dark (current)"></span>
+  <span class="theme-dot" data-theme="black" onclick="setTheme('black')" title="Full Black"></span>
+  <span class="theme-dot" data-theme="white" onclick="setTheme('white')" title="Full White"></span>
+</div>
 ```
-cd /Users/tai/workspace/tools/science-cli
-python -m pytest tests/ -x -v
 
-Result: 78 passed in 0.49s
-```
-**Result: ✅ PASS (78/78)**
+### 3.4 CSS Styling for Picker
 
----
-
-## 2. Guardrail Tests
-```
-python -m pytest test_guardrails.py -x -v
-
-Result: 19 passed in 0.60s
-```
-**Result: ✅ PASS (19/19)**
+| Element | Properties |
+|---------|-----------|
+| `.theme-picker` | Container layout |
+| `.theme-dot` | Circular clickable dots |
+| `.theme-dot:hover` | Scale transform |
+| `.theme-dot.active` | Accent border + glow |
 
 ---
 
-## 3. Protocol YAML Device Section Read/Write
+## 4. Integration Tests
 
-| Test | Result |
-|------|--------|
-| `write_device_section()` returns True | ✅ PASS |
-| `has_device_section()` returns True after write | ✅ PASS |
-| `read_device_section()` returns correct geometry (rows=6, cols=6) | ✅ PASS |
-| `write_step_enriched_files()` with sweep metadata | ✅ PASS |
-| `read_step_enriched_files()` returns file + sweep_order + sweep_type + temperature | ✅ PASS |
-| Edge case: `read_device_section()` on missing file returns None | ✅ PASS |
-| Edge case: `has_device_section()` False when no device section | ✅ PASS |
-| Edge case: `read_device_section()` on empty file returns None | ✅ PASS |
-| Edge case: `read_step_enriched_files()` for nonexistent step returns [] | ✅ PASS |
+### 4.1 FZF Column Standardization (6 files)
 
-**Result: ✅ PASS**
+| File | `build_fzf_display` usage count | Status |
+|------|-------------------------------|--------|
+| `cli/commands/add.py` | 3 | ✅ consistent |
+| `cli/commands/delete_cmd.py` | 4 | ✅ consistent |
+| `cli/commands/results.py` | 3 | ✅ consistent |
+| `cli/commands/edit_cmd.py` | 5 | ✅ consistent |
+| `memristor/plotting.py` | 2 | ✅ consistent |
+| `memristor/device_cli.py` | 3 | ✅ consistent |
 
----
+### 4.2 Protocol Filter in `_plot_interactive()`
 
-## 4. SQLite Schema v4
-
-| Test | Result |
-|------|--------|
-| Schema version is 4 | ✅ PASS |
-| All v4 columns present (sweep_order, sweep_type, sweep_segments, temperature) | ✅ PASS |
-| `insert_file()` with sweep metadata succeeds | ✅ PASS |
-| `query_sweep_metadata()` returns correct values | ✅ PASS |
-| `update_file_sweep_metadata()` updates correctly | ✅ PASS |
-| `query_sweep_metadata()` with step filter works | ✅ PASS |
-| `query_sweep_metadata()` for nonexistent protocol returns [] | ✅ PASS |
-| `update_file_sweep_metadata()` partial update (only sweep_segments) | ✅ PASS |
-| `update_file_sweep_metadata()` with no optional fields (noop) | ✅ PASS |
-
-**Result: ✅ PASS**
-
----
-
-## 5. Backward Compat — Legacy devices.yaml Still Reads
-
-| Test | Result |
-|------|--------|
-| `read_devices()` falls back to legacy `devices.yaml` when no protocol YAML | ✅ PASS |
-| Returns correct DeviceGeometry (rows=4, cols=4, label="Legacy") | ✅ PASS |
-| Returns correct steps mapping (`{'iv': '4_iv'}`) | ✅ PASS |
-
-**Result: ✅ PASS**
-
----
-
-## 6. Migration — Legacy → Protocol YAML
-
-| Test | Result |
-|------|--------|
-| `migrate_from_devices_yaml()` reports success | ✅ PASS |
-| Device geometry copied correctly (rows=6, cols=6) | ✅ PASS |
-| File entries migrated with sweep metadata (sweep_order, sweep_type, temperature) | ✅ PASS |
-| Migration metadata written (`_meta.migrated_from`, `_meta.migrated_at`) | ✅ PASS |
-
-**Result: ✅ PASS**
-
----
-
-## 7. Integration — Sync SQLite → Protocol YAML
-
-| Test | Result |
-|------|--------|
-| `sync_sweep_to_protocol_yaml()` updates step files with sweep data | ✅ PASS |
-| sweep_segments JSON deserialized to `sweep` list on file entries | ✅ PASS |
-| Sync is idempotent (running twice produces same result) | ✅ PASS |
-| Protocol YAML structure preserved (device section, steps intact) | ✅ PASS |
-
-**Result: ✅ PASS**
-
----
-
-## 8. CLI Smoke Test
-
-| Module | Result |
+| Aspect | Status |
 |--------|--------|
-| `science_cli.app` | ✅ PASS |
-| `science_cli.core.protocol` | ✅ PASS |
-| `science_cli.memristor.db` | ✅ PASS |
-| `science_cli.memristor.device` | ✅ PASS |
-| `science_cli.cli.commands` | ✅ PASS |
-| `science_cli.cli.commands.add` | ✅ PASS |
-| `science_cli.cli.commands.memristor` | ✅ PASS |
-| `science_cli.cli.commands.protocol` | ✅ PASS |
-| `science_cli.core.config` | ✅ PASS |
-| `science_cli.core.technique` | ✅ PASS |
-| `science_cli.core.data_loader` | ✅ PASS |
-| `science_cli.core.sweep_metadata` | ✅ PASS |
-| `science_cli.core.session` | ✅ PASS |
+| Reads `last_protocol` from session | ✅ |
+| Filters `file_step_map` by active protocol | ✅ |
+| Falls back to unfiltered list if no active protocol | ✅ |
+| Uses `build_fzf_display()` for display items | ✅ |
 
-**Result: ✅ PASS (all 13 modules import cleanly)**
+### 4.3 Cross-Protocol Dashboard Theme
+
+| Feature | Status |
+|---------|--------|
+| `setTheme()` in `_CROSS_PROTOCOL_JS` | ✅ |
+| `localStorage` in cross-protocol JS | ✅ |
+| `[data-theme]` CSS selectors shared | ✅ |
+| Same 3-dot picker HTML | ✅ |
 
 ---
 
-## 9. Data Integrity Verification
+## 5. Full Test Suite
 
-Test-project (`/Users/tai/workspace/projects/active_projects/test-project/`) verified intact:
-- Protocol YAML at `protocol/1_protocol-1/1_protocol-1.yaml` — unchanged
-- `devices.yaml` at `protocol/1_protocol-1/devices.yaml` — unchanged
-- `test-project.db` — exists, unmodified
-- `sci-config.yaml` — unchanged
-- `read_devices()` correctly reads from protocol YAML (device section) or falls back to legacy
+```
+$ python -m pytest tests/ -v
+============================== 78 passed in 0.50s ==============================
+```
 
-**Result: ✅ PASS**
+**All 78 existing tests pass with no regressions.**
 
 ---
 
-## Summary
+## 6. Error Audit
 
-| Category | Result | Details |
-|----------|--------|---------|
-| 1. Existing test suite | ✅ PASS | 78/78 |
-| 2. Guardrail tests | ✅ PASS | 19/19 |
-| 3. Protocol YAML I/O | ✅ PASS | 9/9 |
-| 4. SQLite schema v4 | ✅ PASS | 9/9 |
-| 5. Backward compat | ✅ PASS | 3/3 |
-| 6. Migration | ✅ PASS | 4/4 |
-| 7. Integration sync | ✅ PASS | 4/4 |
-| 8. CLI smoke test | ✅ PASS | 13/13 |
+### Critical (0)
+None.
 
-**Issues found: 0**
+### Major (0)  
+None.
 
-### Key Findings
-1. All 78 existing tests pass with no regressions
-2. All 19 guardrail tests pass
-3. Protocol YAML device section read/write works correctly
-4. SQLite v4 has all 4 new sweep metadata columns with CRUD operations
-5. Legacy `devices.yaml` backward compatibility fully preserved
-6. Migration from legacy → protocol YAML works (device geometry + file entries + metadata)
-7. Sync from SQLite → protocol YAML works with sweep_segments JSON deserialization
-8. No real data was modified — all tests used temporary directories
+### Minor (1)
+| Issue | File | Severity | Details |
+|-------|------|----------|---------|
+| `None` causes `TypeError` | `fzf_utils.py:188` | **minor** | `build_fzf_display(protocol=None, ...)` crashes with `TypeError: unsupported format string passed to NoneType.__format__`. All 6 production callers pass strings, so no runtime impact. A simple `protocol = protocol or ""` guard would fix it. |
+
+### Warning (1)
+| Issue | File | Severity | Details |
+|-------|------|----------|---------|
+| `generate_dashboard` docstring says "dark-themed" | `dashboard.py:369` | **suggestion** | Docstring still reads "dark-themed" but function now supports 3 themes. Consider updating to "themed" or "multi-themed". |
 
 ---
 
-**TRAFFIC LIGHT: GREEN** — All tests pass, no regressions, no issues found.
+## 7. Summary
+
+| Category | Pass | Fail | Notes |
+|----------|------|------|-------|
+| Smoke tests (imports) | 7 | 0 | |
+| Functional (fzf/utils) | 6 | 1 | None bug is defensive-only |
+| Dashboard theme (CSS) | 3/3 themes | 0 | 38 vars each |
+| Dashboard theme (JS) | 6/6 features | 0 | Both per-protocol and cross-protocol |
+| Column standardization | 6/6 files | 0 | Consistent usage |
+| Existing test suite | 78 | 0 | No regressions |
+| Integration | 7 | 0 | Protocol filter, strip regex |
+
+---
+
+## TRAFFIC LIGHT: YELLOW
+
+**Reason**: One minor defensive bug (`None` → `TypeError` in `build_fzf_display`) and one docstring suggestion. No critical or major failures. All 78 existing tests pass. All 6 files use the standardized `build_fzf_display()` consistently. The dashboard theme system is fully functional across all 3 themes in both dashboard variants.

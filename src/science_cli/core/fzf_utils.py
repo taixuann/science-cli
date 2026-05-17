@@ -165,6 +165,32 @@ def _fallback_select(
         return []
 
 
+def build_fzf_display(protocol: str = "", step: str = "", filename: str = "", width_proto: int = 20, width_step: int = 25) -> str:
+    """Build a fixed-width fzf display line showing protocol, step, and filename.
+
+    Format: ``<protocol:20> <step:25> <filename>`` — fixed-width columns
+    so the regex ``r"^\\S+\\s+\\S+\\s+"`` can strip the first two columns
+    to recover the filename.
+
+    Parameters
+    ----------
+    protocol : str
+        Protocol name (sanitized, no spaces).
+    step : str
+        Step name (sanitized, no spaces), or ``""`` for unassigned.
+    filename : str
+        File basename.
+    width_proto : int
+        Fixed width for protocol column (default 20).
+    width_step : int
+        Fixed width for step column (default 25).
+    """
+    protocol = protocol or ""
+    step = step or ""
+    filename = filename or ""
+    return f"{protocol:<{width_proto}} {step:<{width_step}} {filename}"
+
+
 # ── Filter helpers ─────────────────────────────────────────
 
 

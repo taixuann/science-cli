@@ -1151,14 +1151,16 @@ def collect_iv_files(
     return results
 
 
-def build_fzf_line(target: dict) -> str:
+def build_fzf_line(target: dict, protocol: str = "") -> str:
     """Build a preview line for fzf display.
 
-    Format: ``r{row}c{col}  {material}  {sweep_type}  {file}``
+    Format: ``{protocol}  {step}  r{row}c{col}  {material}  {sweep_type}  {file}``
     """
-    return (
+    from science_cli.core.fzf_utils import build_fzf_display
+    detail = (
         f"r{target['row']}c{target['col']}  "
         f"{target['material_key']:<25s}  "
         f"{target['sweep_type']:<3s}  "
         f"{target['file_entry'].file}"
     )
+    return build_fzf_display(protocol, "", detail)

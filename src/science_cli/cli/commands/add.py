@@ -327,8 +327,7 @@ def _add_data(args: list) -> None:
             assigned_files[fname] = s["name"]
 
     # Build fzf display items with assignment markers
-    from science_cli.core.fzf_utils import fzf_select, parse_filter_string, filter_files_by_metadata
-    import re
+    from science_cli.core.fzf_utils import fzf_select
 
     item_names = [f.name for f in files]
 
@@ -340,17 +339,18 @@ def _add_data(args: list) -> None:
             step = assigned_files[name]
             assigned_grouped.setdefault(step, []).append(name)
 
+    from science_cli.core.fzf_utils import build_fzf_display
     display_items: list[str] = []
-    # Unassigned section header
-    display_items.append("── Unassigned ──")
-    display_items.extend(unassigned)
+    pname = proto_name  # protocol name is already available in scope
+    # Unassigned files (use "-" placeholder to preserve column structure)
+    for name in unassigned:
+        display_items.append(build_fzf_display(pname, "-", name))
     # Per-step sections
     for step in sorted(assigned_grouped.keys()):
-        display_items.append(f"── Step: {step} ──")
         for fname in sorted(assigned_grouped[step]):
-            display_items.append(f"  {fname}")
+            display_items.append(build_fzf_display(pname, step, fname))
 
-    marker_re = re.compile(r"\s+\[→ .*?\]$")
+    import re
     selected = fzf_select(
         items=display_items,
         prompt="Select files (Tab to multi-select):",
@@ -360,13 +360,13 @@ def _add_data(args: list) -> None:
         console.print("[yellow]No files selected.[/yellow]")
         return
 
-    # Strip markers and leading whitespace, filter out section headers
+    # Strip column prefix (protocol + step) to recover filenames
+    col_re = re.compile(r"^\S+\s+\S+\s*")
     selected_stripped: list[str] = []
     for s in selected:
-        s = marker_re.sub("", s).strip()
-        if s.startswith("──") or not s:
-            continue
-        selected_stripped.append(s)
+        fname = col_re.sub("", s).strip()
+        if fname:
+            selected_stripped.append(fname)
     selected = selected_stripped
 
     # Build step choices with file count indicators

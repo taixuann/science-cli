@@ -318,9 +318,9 @@ def _edit_data(args: list) -> None:
         console.print("[yellow]No files assigned in protocol.[/yellow]")
         return
 
-    # fzf multi-select: show "step_name / filename"
-    from science_cli.core.fzf_utils import fzf_select
-    display_items = [f"{sn} / {fn}" for sn, fn in all_files]
+    # fzf multi-select: column format via build_fzf_display
+    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    display_items = [build_fzf_display(proto_name, sn, fn) for sn, fn in all_files]
     selected_displays = fzf_select(
         display_items,
         prompt="Select files to move (Tab to multi-select):",
@@ -335,10 +335,9 @@ def _edit_data(args: list) -> None:
     # Handle duplicate filenames across steps by using index
     display_to_file: dict[str, tuple[str, str]] = {}
     for i, (sn, fn) in enumerate(all_files):
-        key = f"{sn} / {fn}"
+        key = build_fzf_display(proto_name, sn, fn)
         if key in display_to_file:
-            # Duplicate display string? Unlikely but use index to disambiguate
-            key = f"{sn} / {fn}  [{i}]"
+            key = build_fzf_display(proto_name, sn, fn) + f"  [{i}]"
             display_to_file[key] = (sn, fn)
         else:
             display_to_file[key] = (sn, fn)

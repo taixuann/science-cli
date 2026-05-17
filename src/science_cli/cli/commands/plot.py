@@ -340,13 +340,20 @@ def _plot_interactive() -> None:
                 fname = entry["file"] if isinstance(entry, dict) else entry
                 file_step_map[fname] = (pname, s["name"])
 
+    from science_cli.core.session import load_session
+    sess = load_session()
+    active_proto = sess.get("last_protocol", "")
+    if active_proto:
+        file_step_map = {k: v for k, v in file_step_map.items() if v[0] == active_proto}
+
     # Build display items with step/protocol info
-    marker_re = re.compile(r"\s+→ .*$")
+    col_re = re.compile(r"^\S+\s+\S+\s+")
     display_items = []
     for name in item_names:
         if name in file_step_map:
             proto, step = file_step_map[name]
-            display_items.append(f"{name} → {proto}/{step}")
+            from science_cli.core.fzf_utils import build_fzf_display
+            display_items.append(build_fzf_display(proto, step, name))
         else:
             display_items.append(name)
 
@@ -361,7 +368,7 @@ def _plot_interactive() -> None:
         return
 
     # Strip step info to get clean filenames
-    selected = [marker_re.sub("", s) for s in selected]
+    selected = [col_re.sub("", s) for s in selected]
 
     # Show selected files summary
     rprint(f"\n[bold]Selected {len(selected)} file(s):[/bold]")

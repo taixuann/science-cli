@@ -229,8 +229,9 @@ def _delete_data(args: list) -> None:
     to_remove: list[tuple[int, int]] = []  # (step_idx, file_idx)
 
     if flags.get("fzf"):
-        from science_cli.core.fzf_utils import fzf_select
-        items = [f"{step_name}/{fname}" for step_name, fname, _ in all_entries]
+        from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+        pname = safe_name  # protocol name is available as safe_name
+        items = [build_fzf_display(pname, step_name, fname) for step_name, fname, _ in all_entries]
         selected = fzf_select(
             items=items,
             prompt="Select files to remove >",
@@ -241,9 +242,13 @@ def _delete_data(args: list) -> None:
         if not selected:
             console.print("[yellow]No files selected.[/yellow]")
             return
+        # Build lookup from display string back to entry
+        display_to_entry = {}
+        for step_name, fname, fi in all_entries:
+            display_to_entry[build_fzf_display(pname, step_name, fname)] = (step_name, fname, fi)
         selected_set = set(selected)
         for step_name, fname, fi in all_entries:
-            key = f"{step_name}/{fname}"
+            key = build_fzf_display(pname, step_name, fname)
             if key in selected_set:
                 si = next(i for i, s in enumerate(steps) if s.get("name") == step_name)
                 to_remove.append((si, fi))

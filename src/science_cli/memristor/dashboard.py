@@ -1,7 +1,7 @@
-"""Self-contained dark-themed interactive dashboard for memristor crossbar characterization.
+"""Self-contained multi-themed interactive dashboard for memristor crossbar characterization.
 
 Reads raw IV CSV data, extracts switching parameters, and generates a
-self-contained ``dashboard.html`` with a dark-themed interactive Plotly layout.
+self-contained ``dashboard.html`` with a multi-themed interactive Plotly layout.
 
 Works with ``file://`` protocol — no web server required.
 """
@@ -366,7 +366,7 @@ def generate_dashboard(
     results_dir: Path,
     output_path: str | Path,
 ) -> Path:
-    """Generate a self-contained dark-themed interactive Plotly HTML dashboard.
+    """Generate a self-contained multi-themed interactive Plotly HTML dashboard.
     
     Reads from SQLite cache first for analysis data, falls back to
     raw CSV reading if SQLite data is not available.
@@ -472,6 +472,18 @@ def generate_dashboard(
     device_label = config.device.label or config.device.id or "Memristor Device"
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    # Back link to main dashboard index
+    out_path = Path(output_path)
+    back_url = ""
+    try:
+        proj_path = get_current_project_path()
+        if proj_path:
+            back_url = str(
+                Path(os.path.relpath(proj_path / "results" / "dashboard.html", out_path.parent))
+            )
+    except Exception:
+        pass
+
     html = _build_html(
         device_label=device_label,
         device_id=config.device.id,
@@ -482,6 +494,7 @@ def generate_dashboard(
         histograms=histograms,
         mat_keys=all_mat_keys,
         date_str=date_str,
+        back_url=back_url,
     )
 
     out = Path(output_path)
@@ -505,8 +518,10 @@ def _build_html(
     histograms: dict,
     mat_keys: list[str],
     date_str: str,
+    back_url: str = "",
 ) -> str:
     """Assemble the full self-contained HTML document."""
+    back_link = f"""<div class="sb-section"><a href="{back_url}" class="back-link">← Back to Dashboard Index</a></div>""" if back_url else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -517,6 +532,8 @@ def _build_html(
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 {_CSS}
+.back-link {{ display:block; font-size:12px; color:var(--accent); text-decoration:none; padding:4px 0; }}
+.back-link:hover {{ color:var(--accent-hover); }}
 </style>
 </head>
 <body>
@@ -524,6 +541,7 @@ def _build_html(
 
   <!-- ══════════════ SIDEBAR ══════════════ -->
   <nav id="sidebar">
+    {back_link}
     <!-- Logo -->
     <div class="sb-logo">
       <div class="sb-logo-title">
@@ -615,6 +633,12 @@ def _build_html(
         <div class="badge-dot"></div>
         <span class="badge-text" id="badge-count">{aggregate["measured_cells"]} Devices</span>
       </div>
+      <!-- Theme picker -->
+      <div class="theme-picker">
+        <span class="theme-dot active" data-theme="dark" onclick="setTheme('dark')" title="Dark (current)"></span>
+        <span class="theme-dot" data-theme="black" onclick="setTheme('black')" title="Full Black"></span>
+        <span class="theme-dot" data-theme="white" onclick="setTheme('white')" title="Full White"></span>
+      </div>
     </header>
 
     <!-- CONTENT -->
@@ -688,6 +712,11 @@ def _build_html(
                 <button id="sweep-next" style="padding:0 6px;cursor:pointer;background:var(--bg-surface);border:1px solid var(--border);color:var(--text-primary);border-radius:3px;font-size:11px;line-height:1.6">&#9654;</button>
               </div>
             </div>
+            <div style="display:flex;align-items:center;gap:2px;margin-right:6px">
+              <span class="scale-btn active" data-curr-mode="abs" onclick="setCurrentMode('abs')">|I|</span>
+              <span class="scale-btn" data-curr-mode="real" onclick="setCurrentMode('real')">I</span>
+            </div>
+            <div style="width:1px;height:16px;background:var(--border);flex-shrink:0"></div>
             <div style="display:flex;align-items:center;gap:2px;margin-right:6px">
               <span class="scale-btn active" data-scale="iv" onclick="setIVScale('iv')">IV</span>
               <span class="scale-btn" data-scale="lnln" onclick="setIVScale('lnln')">ln-ln</span>
@@ -1089,7 +1118,7 @@ def generate_cross_protocol_dashboard(
     output_path: str | Path,
     force: bool = False,
 ) -> Path:
-    """Generate a project-level cross-protocol dashboard.
+    """Generate a project-level cross-protocol dashboard with multi-theme support.
 
     Scans all protocols, collects data (with caching), generates HTML.
 
@@ -1299,6 +1328,12 @@ def _build_cross_protocol_html(data: dict) -> str:
       <div class="badge-dot"></div>
       <span class="badge-text" id="cross-badge">{aggregate["total_devices"]} Devices</span>
     </div>
+    <!-- Theme picker -->
+    <div class="theme-picker">
+      <span class="theme-dot active" data-theme="dark" onclick="setTheme('dark')" title="Dark (current)"></span>
+      <span class="theme-dot" data-theme="black" onclick="setTheme('black')" title="Full Black"></span>
+      <span class="theme-dot" data-theme="white" onclick="setTheme('white')" title="Full White"></span>
+    </div>
   </header>
 
   <!-- ═════════ CONTENT ═════════ -->
@@ -1345,6 +1380,11 @@ def _build_cross_protocol_html(data: dict) -> str:
       </div>
       <div class="panel-body" style="padding:0">
         <div class="marker-toggle-row">
+          <div style="display:flex;align-items:center;gap:2px;margin-right:8px">
+            <span class="scale-btn active" data-curr-mode="abs" onclick="setCurrentMode('abs')">|I|</span>
+            <span class="scale-btn" data-curr-mode="real" onclick="setCurrentMode('real')">I</span>
+          </div>
+          <div style="width:1px;height:16px;background:var(--border);flex-shrink:0"></div>
           <label class="marker-toggle-label"><input type="checkbox" id="toggle-vset" checked onchange="onMarkerToggle()"> Show V<sub>set</sub></label>
           <label class="marker-toggle-label"><input type="checkbox" id="toggle-vreset" checked onchange="onMarkerToggle()"> Show V<sub>reset</sub></label>
           <span style="flex:1"></span>
@@ -1444,6 +1484,13 @@ var plotConfig = { displayModeBar: false, responsive: true };
 var currentProtoKey = null;   // "PDA-1::R1C1"
 var currentDevice = null;
 var currentTab = 'iv';
+var currentMode = 'abs';
+var currentTheme = localStorage.getItem('dash-theme') || 'white';
+document.documentElement.dataset.theme = currentTheme;
+(function() {
+  var dots = document.querySelectorAll('.theme-dot');
+  dots.forEach(function(d) { d.classList.toggle('active', d.dataset.theme === currentTheme); });
+})();
 
 // ══════════════════════════════════════════════════════
 //  PROTOCOL FILTER
@@ -1647,6 +1694,46 @@ function updateCrossDevice(d) {
     ' | Vset = ' + (d.v_set != null ? d.v_set.toFixed(2)+' V' : 'N/A');
 }
 
+function setCurrentMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.scale-btn[data-curr-mode]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.currMode === mode);
+  });
+  drawCrossIVPlot();
+}
+
+function setTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('dash-theme', theme);
+  document.querySelectorAll('.theme-dot').forEach(function(d) {
+    d.classList.toggle('active', d.dataset.theme === theme);
+  });
+  var THEMES = {
+    dark:   { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#8ba3c7', grid: 'rgba(32,70,130,0.25)', axis: 'rgba(32,70,130,0.5)' },
+    black:  { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#aaa', grid: 'rgba(50,50,50,0.3)', axis: 'rgba(80,80,80,0.5)' },
+    white:  { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#555', grid: 'rgba(200,200,200,0.3)', axis: 'rgba(150,150,150,0.5)' },
+  };
+  var t = THEMES[theme] || THEMES.dark;
+  PAPER_BG = t.paper;
+  PLOT_BG = t.plot;
+  FONT_COLOR = t.font;
+  GRID_COLOR = t.grid;
+  AXIS_COLOR = t.axis;
+  baseLayout.font.color = FONT_COLOR;
+  baseLayout.xaxis.gridcolor = GRID_COLOR;
+  baseLayout.xaxis.zerolinecolor = AXIS_COLOR;
+  baseLayout.xaxis.linecolor = AXIS_COLOR;
+  baseLayout.xaxis.tickcolor = AXIS_COLOR;
+  baseLayout.yaxis.gridcolor = GRID_COLOR;
+  baseLayout.yaxis.zerolinecolor = AXIS_COLOR;
+  baseLayout.yaxis.linecolor = AXIS_COLOR;
+  baseLayout.yaxis.tickcolor = AXIS_COLOR;
+  drawAllHeatmaps(null, document.getElementById('material-filter').value);
+  drawCrossHistograms();
+  drawCrossIVPlot();
+}
+
 function drawCrossIVPlot() {
   if (!currentProtoKey || !currentDevice) {
     Plotly.react('cross-iv-plot', [], {
@@ -1669,6 +1756,7 @@ function drawCrossIVPlot() {
     return;
   }
 
+  var isReal = currentMode === 'real';
   var traces = [];
   var colors = [
     'rgba(0,180,220,0.7)', 'rgba(220,80,80,0.7)', 'rgba(100,200,120,0.7)',
@@ -1679,36 +1767,65 @@ function drawCrossIVPlot() {
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
     var color = colors[i % colors.length];
-    var posV = [], posI = [], negV = [], negI = [];
-    for (var j = 0; j < f.voltage.length; j++) {
-      var v = f.voltage[j];
-      var absI = Math.abs(f.current[j]);
-      if (absI < 1e-14) continue;
-      if (v >= 0) { posV.push(v); posI.push(absI); }
-      else { negV.push(v); negI.push(absI); }
-    }
-    if (posV.length > 0) {
-      traces.push({
-        x: posV, y: posI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: 1.0 },
-        name: f.label || ('#'+ (i+1)),
-        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
-      });
-    }
-    if (negV.length > 0) {
-      traces.push({
-        x: negV, y: negI, type: 'scatter', mode: 'lines',
-        line: { color: color, width: 1.0, dash: 'dash' },
-        showlegend: false,
-        hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
-      });
+    if (isReal) {
+      var rv = [], ri = [];
+      for (var j = 0; j < f.voltage.length; j++) {
+        var cur = f.current[j];
+        if (Math.abs(cur) < 1e-14) continue;
+        rv.push(f.voltage[j]);
+        ri.push(cur);
+      }
+      if (rv.length > 0) {
+        traces.push({
+          x: rv, y: ri, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.0 },
+          name: f.label || ('#'+ (i+1)),
+          hovertemplate: 'V: %{x:.3f} V<br>I: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+        });
+      }
+    } else {
+      var posV = [], posI = [], negV = [], negI = [];
+      for (var j = 0; j < f.voltage.length; j++) {
+        var v = f.voltage[j];
+        var absI = Math.abs(f.current[j]);
+        if (absI < 1e-14) continue;
+        if (v >= 0) { posV.push(v); posI.push(absI); }
+        else { negV.push(v); negI.push(absI); }
+      }
+      if (posV.length > 0) {
+        traces.push({
+          x: posV, y: posI, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.0 },
+          name: f.label || ('#'+ (i+1)),
+          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+        });
+      }
+      if (negV.length > 0) {
+        traces.push({
+          x: negV, y: negI, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.0, dash: 'dash' },
+          showlegend: false,
+          hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+        });
+      }
     }
   }
 
   // Vset / Vreset markers (toggleable)
+  var maxCur = 0, minCur = 0;
+  if (isReal) {
+    for (var fi = 0; fi < files.length; fi++) {
+      for (var fj = 0; fj < files[fi].current.length; fj++) {
+        var cv = files[fi].current[fj];
+        if (cv > maxCur) maxCur = cv;
+        if (cv < minCur) minCur = cv;
+      }
+    }
+  }
   if (document.getElementById('toggle-vset').checked && vset != null) {
+    var vsetY = isReal ? 0.9 * maxCur : 1e-3;
     traces.push({
-      x: [vset], y: [1e-3], type: 'scatter', mode: 'markers+text',
+      x: [vset], y: [vsetY], type: 'scatter', mode: 'markers+text',
       marker: { color: '#ef4444', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
       text: ['Vset'], textposition: 'top center', textfont: { size: 9, color: '#ef4444' },
       name: 'Vset', showlegend: true,
@@ -1717,8 +1834,9 @@ function drawCrossIVPlot() {
   }
   if (document.getElementById('toggle-vreset').checked && vreset != null) {
     var vresetSign = vreset < 0 ? vreset : -vreset;
+    var vresetY = isReal ? 0.9 * minCur : 1e-3;
     traces.push({
-      x: [vresetSign], y: [1e-3], type: 'scatter', mode: 'markers+text',
+      x: [vresetSign], y: [vresetY], type: 'scatter', mode: 'markers+text',
       marker: { color: '#3b82f6', size: 8, symbol: 'circle', line: { color: '#fff', width: 1 } },
       text: ['Vreset'], textposition: 'top center', textfont: { size: 9, color: '#3b82f6' },
       name: 'Vreset', showlegend: true,
@@ -1735,12 +1853,12 @@ function drawCrossIVPlot() {
       zeroline: true, zerolinecolor: 'rgba(100,150,200,0.3)', tickfont: { size: 9 }
     },
     yaxis: {
-      ...baseLayout.yaxis, title: { text: '|Current| (A)', font: { size: 10 } },
-      type: 'log', tickfont: { size: 9 }
+      ...baseLayout.yaxis, title: { text: isReal ? 'Current (A)' : '|Current| (A)', font: { size: 10 } },
+      type: isReal ? 'linear' : 'log', tickfont: { size: 9 }
     },
     legend: {
       ...baseLayout.legend, x: 1.01, y: 0.95, xanchor: 'left',
-      bgcolor: 'rgba(8,14,28,0.7)', font: { size: 9 }
+      bgcolor: 'rgba(0,0,0,0)', font: { size: 9 }
     },
     showlegend: true
   }, plotConfig);
@@ -1962,15 +2080,17 @@ def _fmt_kpi_ratio(val) -> str:
 # ════════════════════════════════════════════════════════════════
 
 _CSS = r"""
-:root {
+[data-theme="dark"] {
   --bg-deep: #050a14;
   --bg-base: #080e1c;
   --bg-panel: #0c1525;
   --bg-card: #0f1a2e;
   --bg-card2: #111e33;
   --bg-hover: #162038;
+  --bg-surface: rgba(15, 26, 46, 0.6);
   --border: rgba(32, 70, 130, 0.35);
   --border-bright: rgba(0, 200, 255, 0.25);
+  --accent: #00d4ff;
   --cyan: #00d4ff;
   --cyan-dim: rgba(0, 212, 255, 0.6);
   --cyan-glow: rgba(0, 212, 255, 0.15);
@@ -1994,7 +2114,94 @@ _CSS = r"""
   --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.2), 0 0 40px rgba(0, 212, 255, 0.08);
   --glow-blue: 0 0 20px rgba(59, 130, 246, 0.2), 0 0 40px rgba(59, 130, 246, 0.08);
   --shadow: 0 4px 20px rgba(0,0,0,0.5);
+  --plotly-paper: rgba(0,0,0,0); --plotly-plot: rgba(0,0,0,0); --plotly-font: #8ba3c7; --plotly-grid: rgba(32,70,130,0.25); --plotly-axis: rgba(32,70,130,0.5);
 }
+
+[data-theme="black"] {
+  --bg-deep: #000000;
+  --bg-base: #080808;
+  --bg-panel: #0f0f0f;
+  --bg-card: #141414;
+  --bg-card2: #1a1a1a;
+  --bg-hover: #222222;
+  --bg-surface: rgba(26, 26, 26, 0.6);
+  --border: rgba(80, 80, 80, 0.4);
+  --border-bright: rgba(0, 230, 255, 0.35);
+  --accent: #00e5ff;
+  --cyan: #00e5ff;
+  --cyan-dim: rgba(0, 229, 255, 0.6);
+  --cyan-glow: rgba(0, 229, 255, 0.15);
+  --blue: #5b9cf6;
+  --blue-bright: #7bb8ff;
+  --purple: #c070ff;
+  --purple-dim: rgba(192, 112, 255, 0.6);
+  --teal: #3dd9c4;
+  --orange: #ff8833;
+  --red: #ff5555;
+  --green: #3dd97a;
+  --yellow: #eebb00;
+  --text-primary: #f0f0f0;
+  --text-secondary: #aaaaaa;
+  --text-dim: #666666;
+  --text-mono: #88ddff;
+  --sidebar-w: 240px;
+  --header-h: 52px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.2), 0 0 40px rgba(0, 229, 255, 0.08);
+  --glow-blue: 0 0 20px rgba(91, 156, 246, 0.2), 0 0 40px rgba(91, 156, 246, 0.08);
+  --shadow: 0 4px 20px rgba(0,0,0,0.6);
+  --plotly-paper: rgba(0,0,0,0); --plotly-plot: rgba(0,0,0,0); --plotly-font: #aaa; --plotly-grid: rgba(50,50,50,0.3); --plotly-axis: rgba(80,80,80,0.5);
+}
+
+:root, [data-theme="white"] {
+  --bg-deep: #ffffff;
+  --bg-base: #f5f5f5;
+  --bg-panel: #eeeeee;
+  --bg-card: #e0e0e0;
+  --bg-card2: #d4d4d4;
+  --bg-hover: #cccccc;
+  --bg-surface: rgba(212, 212, 212, 0.6);
+  --border: rgba(160, 160, 160, 0.4);
+  --border-bright: rgba(0, 136, 170, 0.3);
+  --accent: #0088aa;
+  --cyan: #0088aa;
+  --cyan-dim: rgba(0, 136, 170, 0.7);
+  --cyan-glow: rgba(0, 136, 170, 0.12);
+  --blue: #2563eb;
+  --blue-bright: #1d4ed8;
+  --purple: #7c3aed;
+  --purple-dim: rgba(124, 58, 237, 0.7);
+  --teal: #0d9488;
+  --orange: #d97706;
+  --red: #dc2626;
+  --green: #16a34a;
+  --yellow: #a16207;
+  --text-primary: #1a1a1a;
+  --text-secondary: #555555;
+  --text-dim: #888888;
+  --text-mono: #2563eb;
+  --sidebar-w: 240px;
+  --header-h: 52px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --glow-cyan: 0 0 15px rgba(0, 136, 170, 0.15), 0 0 30px rgba(0, 136, 170, 0.06);
+  --glow-blue: 0 0 15px rgba(37, 99, 235, 0.15), 0 0 30px rgba(37, 99, 235, 0.06);
+  --shadow: 0 4px 20px rgba(0,0,0,0.1);
+  --plotly-paper: rgba(0,0,0,0); --plotly-plot: rgba(0,0,0,0); --plotly-font: #555; --plotly-grid: rgba(200,200,200,0.3); --plotly-axis: rgba(150,150,150,0.5);
+}
+
+.theme-picker {
+  display: flex; align-items: center; gap: 4px;
+  margin-left: 4px;
+}
+.theme-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  cursor: pointer; border: 2px solid var(--border);
+  transition: all 0.18s; flex-shrink: 0;
+}
+.theme-dot:hover { transform: scale(1.2); }
+.theme-dot.active { border-color: var(--accent); box-shadow: 0 0 6px var(--accent); }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; background: var(--bg-deep); color: var(--text-primary); font-family: 'DM Sans', sans-serif; font-size: 13px; }
@@ -2386,6 +2593,13 @@ var CURRENT_MATERIAL = '';
 var selectedCellId = null;
 var selectedCell = null;
 var ivScaleMode = 'iv';
+var currentMode = 'abs';
+var currentTheme = localStorage.getItem('dash-theme') || 'white';
+document.documentElement.dataset.theme = currentTheme;
+(function() {
+  var dots = document.querySelectorAll('.theme-dot');
+  dots.forEach(function(d) { d.classList.toggle('active', d.dataset.theme === currentTheme); });
+})();
 
 function switchMaterial(mat) {
   CURRENT_MATERIAL = mat;
@@ -2703,6 +2917,47 @@ function setIVScale(mode) {
   if (selectedCell) drawIVPlot(selectedCell);
 }
 
+function setCurrentMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.scale-btn[data-curr-mode]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.currMode === mode);
+  });
+  if (selectedCell) drawIVPlot(selectedCell);
+}
+
+function setTheme(theme) {
+  currentTheme = theme;
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem('dash-theme', theme);
+  document.querySelectorAll('.theme-dot').forEach(function(d) {
+    d.classList.toggle('active', d.dataset.theme === theme);
+  });
+  var THEMES = {
+    dark:   { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#8ba3c7', grid: 'rgba(32,70,130,0.25)', axis: 'rgba(32,70,130,0.5)' },
+    black:  { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#aaa', grid: 'rgba(50,50,50,0.3)', axis: 'rgba(80,80,80,0.5)' },
+    white:  { paper: 'rgba(0,0,0,0)', plot: 'rgba(0,0,0,0)', font: '#555', grid: 'rgba(200,200,200,0.3)', axis: 'rgba(150,150,150,0.5)' },
+  };
+  var t = THEMES[theme] || THEMES.dark;
+  PAPER_BG = t.paper;
+  PLOT_BG = t.plot;
+  FONT_COLOR = t.font;
+  GRID_COLOR = t.grid;
+  AXIS_COLOR = t.axis;
+  baseLayout.font.color = FONT_COLOR;
+  baseLayout.xaxis.gridcolor = GRID_COLOR;
+  baseLayout.xaxis.zerolinecolor = AXIS_COLOR;
+  baseLayout.xaxis.linecolor = AXIS_COLOR;
+  baseLayout.xaxis.tickcolor = AXIS_COLOR;
+  baseLayout.yaxis.gridcolor = GRID_COLOR;
+  baseLayout.yaxis.zerolinecolor = AXIS_COLOR;
+  baseLayout.yaxis.linecolor = AXIS_COLOR;
+  baseLayout.yaxis.tickcolor = AXIS_COLOR;
+  if (selectedCell) drawIVPlot(selectedCell);
+  var metric = document.getElementById('heatmap-metric');
+  if (metric) drawHeatmap(metric.value);
+  drawHistograms();
+}
+
 function drawIVPlot(deviceInfo) {
   var cellId = 'R'+(deviceInfo.row+1)+'C'+(deviceInfo.col+1);
   var files = IV_RAW_DATA[cellId] || [];
@@ -2736,55 +2991,73 @@ function drawIVPlot(deviceInfo) {
   var traces = [];
   var fileName = '';
 
+  var isReal = currentMode === 'real';
+
   for (var i = 0; i < files.length; i++) {
     if (isSingleSweep && i !== sweepIdx) continue;
     var f = files[i];
-    // Determine trace color: by cycle index if colorByCycle, else by position
     var color = cycleColor(i, files.length);
 
-    var posV = [], posI = [], negV = [], negI = [];
-    for (var j = 0; j < f.voltage.length; j++) {
-      var v = f.voltage[j];
-      var absI = Math.abs(f.current[j]);
-      if (absI < 1e-14) continue;
-      if (v >= 0) { posV.push(v); posI.push(absI); }
-      else { negV.push(v); negI.push(absI); }
-    }
-    if (!isSingleSweep) {
-      if (isLn) {
-        // ln-ln: merge both branches into single |V| trace
-        var allV = [], allI = [];
-        for (var j = 0; j < posV.length; j++) { allV.push(posV[j]); allI.push(posI[j]); }
-        for (var j = 0; j < negV.length; j++) { allV.push(Math.abs(negV[j])); allI.push(negI[j]); }
-        if (allV.length > 0) {
-          traces.push({
-            x: allV, y: allI, type: 'scatter', mode: 'lines',
-            line: { color: color, width: 1.2 },
-            name: 'IV', showlegend: false,
-            hovertemplate: '|V|: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
-          });
-        }
-      } else {
-        if (posV.length > 0) {
-          traces.push({
-            x: posV, y: posI, type: 'scatter', mode: 'lines',
-            line: { color: color, width: 1.2 },
-            name: 'IV', showlegend: false,
-            hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
-          });
-        }
-        if (negV.length > 0) {
-          traces.push({
-            x: negV, y: negI, type: 'scatter', mode: 'lines',
-            line: { color: color, width: 1.2, dash: 'dash' },
-            showlegend: false,
-            hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
-          });
+    if (isReal) {
+      var rv = [], ri = [];
+      for (var j = 0; j < f.voltage.length; j++) {
+        var cur = f.current[j];
+        if (Math.abs(cur) < 1e-14) continue;
+        rv.push(f.voltage[j]);
+        ri.push(cur);
+      }
+      if (!isSingleSweep && rv.length > 0) {
+        traces.push({
+          x: rv, y: ri, type: 'scatter', mode: 'lines',
+          line: { color: color, width: 1.2 },
+          name: 'IV', showlegend: false,
+          hovertemplate: 'V: %{x:.3f} V<br>I: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+        });
+      }
+    } else {
+      var posV = [], posI = [], negV = [], negI = [];
+      for (var j = 0; j < f.voltage.length; j++) {
+        var v = f.voltage[j];
+        var absI = Math.abs(f.current[j]);
+        if (absI < 1e-14) continue;
+        if (v >= 0) { posV.push(v); posI.push(absI); }
+        else { negV.push(v); negI.push(absI); }
+      }
+      if (!isSingleSweep) {
+        if (isLn) {
+          var allV = [], allI = [];
+          for (var j = 0; j < posV.length; j++) { allV.push(posV[j]); allI.push(posI[j]); }
+          for (var j = 0; j < negV.length; j++) { allV.push(Math.abs(negV[j])); allI.push(negI[j]); }
+          if (allV.length > 0) {
+            traces.push({
+              x: allV, y: allI, type: 'scatter', mode: 'lines',
+              line: { color: color, width: 1.2 },
+              name: 'IV', showlegend: false,
+              hovertemplate: '|V|: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+            });
+          }
+        } else {
+          if (posV.length > 0) {
+            traces.push({
+              x: posV, y: posI, type: 'scatter', mode: 'lines',
+              line: { color: color, width: 1.2 },
+              name: 'IV', showlegend: false,
+              hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra>'+(f.label||'')+'</extra>'
+            });
+          }
+          if (negV.length > 0) {
+            traces.push({
+              x: negV, y: negI, type: 'scatter', mode: 'lines',
+              line: { color: color, width: 1.2, dash: 'dash' },
+              showlegend: false,
+              hovertemplate: 'V: %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
+            });
+          }
         }
       }
     }
 
-    // Per-file Vset/Vreset markers — find I at switching voltage from trace data
+    // Per-file Vset/Vreset markers
     function traceCurrentAt(V, arrV, arrI) {
       if (V == null || !arrV || !arrI || arrV.length < 2) return null;
       var idx = 0, minD = Infinity;
@@ -2794,9 +3067,20 @@ function drawIVPlot(deviceInfo) {
       }
       return Math.abs(arrI[idx]);
     }
+    function traceCurrentAtRaw(V, arrV, arrI) {
+      if (V == null || !arrV || !arrI || arrV.length < 2) return null;
+      var idx = 0, minD = Infinity;
+      for (var k = 0; k < arrV.length; k++) {
+        var d = Math.abs(arrV[k] - V);
+        if (d < minD) { minD = d; idx = k; }
+      }
+      return arrI[idx];
+    }
     var showMarkerLegend = isSingleSweep;
-    var vsetI = f.i_set != null ? Math.abs(f.i_set) : traceCurrentAt(f.v_set, f.voltage, f.current);
-    if (f.v_set != null && vsetI != null && vsetI > 0) {
+    var vsetI = isReal
+      ? (f.i_set != null ? f.i_set : traceCurrentAtRaw(f.v_set, f.voltage, f.current))
+      : (f.i_set != null ? Math.abs(f.i_set) : traceCurrentAt(f.v_set, f.voltage, f.current));
+    if (f.v_set != null && vsetI != null && (isReal || vsetI > 0)) {
       traces.push({
         x: [isLn ? Math.abs(f.v_set) : f.v_set], y: [vsetI], type: 'scatter', mode: 'markers+text',
         marker: { color: '#ef4444', size: isSingleSweep ? 10 : 7, symbol: 'circle', line: { color: '#fff', width: 1.5 } },
@@ -2805,8 +3089,10 @@ function drawIVPlot(deviceInfo) {
         hovertemplate: 'Vset = ' + f.v_set.toFixed(3) + ' V<br>I = ' + vsetI.toFixed(3) + ' A<extra></extra>'
       });
     }
-    var vresetI = f.i_reset != null ? Math.abs(f.i_reset) : traceCurrentAt(f.v_reset, f.voltage, f.current);
-    if (f.v_reset != null && vresetI != null && vresetI > 0) {
+    var vresetI = isReal
+      ? (f.i_reset != null ? f.i_reset : traceCurrentAtRaw(f.v_reset, f.voltage, f.current))
+      : (f.i_reset != null ? Math.abs(f.i_reset) : traceCurrentAt(f.v_reset, f.voltage, f.current));
+    if (f.v_reset != null && vresetI != null && (isReal || vresetI > 0)) {
       var rSign = isLn ? Math.abs(f.v_reset) : (f.v_reset < 0 ? f.v_reset : -f.v_reset);
       traces.push({
         x: [rSign], y: [vresetI], type: 'scatter', mode: 'markers+text',
@@ -2820,7 +3106,7 @@ function drawIVPlot(deviceInfo) {
   }
 
   // Time-colored segments for single-cycle mode
-  if (isSingleSweep) {
+  if (isSingleSweep && !isReal) {
     var f = files[sweepIdx];
     if (f.voltage && f.current && f.voltage.length > 2) {
       var n = f.voltage.length;
@@ -2845,7 +3131,42 @@ function drawIVPlot(deviceInfo) {
           showlegend: false, hovertemplate: (isLn ? '|V|' : 'V') + ': %{x:.3f} V<br>|I|: %{y:.3e} A<extra></extra>'
         });
       }
-      // Color bar
+      traces.push({
+        x: [null], y: [null], type: 'scatter', mode: 'markers',
+        marker: {
+          colorscale: [[0, 'rgb(20,180,220)'], [1, 'rgb(230,40,20)']],
+          cmin: 0, cmax: 1,
+          colorbar: { title: { text: 'Time →', font: { size: 9 } }, tickfont: { size: 8 }, len: 0.3, thickness: 8 },
+          size: 0
+        },
+        showlegend: false, hoverinfo: 'none'
+      });
+    }
+  } else if (isSingleSweep && isReal) {
+    var f = files[sweepIdx];
+    if (f.voltage && f.current && f.voltage.length > 2) {
+      var n = f.voltage.length;
+      var groupSize = Math.max(1, Math.floor(n / 30));
+      for (var si = 0; si < n - 1; si += groupSize) {
+        var ei = Math.min(si + groupSize + 1, n);
+        var segV = [], segI = [];
+        for (var j = si; j < ei; j++) {
+          var cur = f.current[j];
+          if (Math.abs(cur) < 1e-14) continue;
+          segV.push(f.voltage[j]);
+          segI.push(cur);
+        }
+        if (segV.length < 2) continue;
+        var t = si / (n - 1);
+        var r = Math.round(20 + 210 * t);
+        var g = Math.round(180 - 140 * t);
+        var b = Math.round(220 - 200 * t);
+        traces.push({
+          x: segV, y: segI, type: 'scatter', mode: 'lines',
+          line: { color: 'rgba(' + r + ',' + g + ',' + b + ',0.9)', width: 1.8 },
+          showlegend: false, hovertemplate: 'V: %{x:.3f} V<br>I: %{y:.3e} A<extra></extra>'
+        });
+      }
       traces.push({
         x: [null], y: [null], type: 'scatter', mode: 'markers',
         marker: {
@@ -2858,7 +3179,6 @@ function drawIVPlot(deviceInfo) {
       });
     }
   } else if (files.length > 1) {
-    // Color bar for overlay mode
     traces.push({
       x: [null], y: [null], type: 'scatter', mode: 'markers',
       marker: {
@@ -2882,12 +3202,12 @@ function drawIVPlot(deviceInfo) {
       tickfont: { size: 9 }
     },
     yaxis: {
-      ...baseLayout.yaxis, title: { text: '|Current| (A)', font: { size: 10 } },
-      type: 'log', tickfont: { size: 9 }
+      ...baseLayout.yaxis, title: { text: isReal ? 'Current (A)' : '|Current| (A)', font: { size: 10 } },
+      type: isReal ? 'linear' : 'log', tickfont: { size: 9 }
     },
     legend: {
       ...baseLayout.legend, x: 1.01, y: 0.95, xanchor: 'left',
-      bgcolor: 'rgba(8,14,28,0.7)', font: { size: 9 }
+      bgcolor: 'rgba(0,0,0,0)', font: { size: 9 }
     },
     showlegend: true
   }, plotConfig);
@@ -3104,3 +3424,342 @@ window.addEventListener('resize', function() {
   if (selectedCell) drawIVPlot(selectedCell);
 });
 """
+
+
+# ════════════════════════════════════════════════════════════════
+# Main Dashboard Index
+# ════════════════════════════════════════════════════════════════
+
+_MAIN_CSS = """
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-card: #1c2333;
+  --border: #30363d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg-primary); color: var(--text-primary); padding: 32px 24px;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+.subtitle { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+.summary-bar {
+  display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap;
+}
+.summary-card {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 24px; flex: 1; min-width: 140px;
+}
+.summary-card .num { font-size: 28px; font-weight: 700; }
+.summary-card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.protocol-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.protocol-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; transition: border-color 0.2s;
+  position: relative;
+}
+.protocol-card:hover { border-color: var(--accent); }
+.protocol-card a {
+  color: var(--accent); text-decoration: none; font-size: 16px; font-weight: 600;
+}
+.protocol-card a:hover { color: var(--accent-hover); }
+.protocol-card .stats { margin-top: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+.protocol-card .stat { font-size: 13px; }
+.protocol-card .stat .val { font-weight: 600; }
+.protocol-card .stat .lbl { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+.protocol-card .status-ok { color: var(--green); }
+.protocol-card .status-warn { color: var(--orange); }
+.protocol-card .status-none { color: var(--text-secondary); }
+.protocol-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+.protocol-card .actions a {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-secondary);
+  color: var(--text-secondary); text-decoration: none;
+}
+.protocol-card .actions a:hover { border-color: var(--accent); color: var(--accent); }
+.materials { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mat-item {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 4px 8px; border-radius: 4px;
+  background: var(--bg-secondary); color: var(--accent); text-decoration: none;
+}
+.mat-item:hover { background: var(--bg-card); color: var(--accent-hover); }
+.mat-item-plain { color: var(--text-secondary); cursor: default; }
+.mat-item-plain:hover { background: var(--bg-secondary); }
+.mat-stat { font-size: 11px; color: var(--text-secondary); }
+.footer { margin-top: 32px; color: var(--text-secondary); font-size: 12px; text-align: center; }
+"""
+
+
+def _build_main_index_html(
+    project_name: str,
+    protocols: list[dict],
+    date_str: str,
+) -> str:
+    """Build a dark-themed main dashboard HTML that links to per-protocol dashboards.
+
+    Args:
+        project_name: Name of the project.
+        protocols: List of dicts with keys:
+            name, dashboard_rel, n_files, n_materials, n_cells,
+            n_analyzed, median_vset, median_vreset, median_ratio.
+        date_str: Generation date string.
+    """
+    total_files = sum(p.get("n_files", 0) for p in protocols)
+    total_mats = sum(p.get("n_materials", 0) for p in protocols)
+    total_cells = sum(p.get("n_cells", 0) for p in protocols)
+    total_analyzed = sum(p.get("n_analyzed", 0) for p in protocols)
+    n_protocols = len(protocols)
+    n_with_dash = sum(1 for p in protocols if p.get("dashboard_rel"))
+
+    rows = []
+    for p in protocols:
+        name = p["name"]
+        dash_link = p.get("dashboard_rel", "")
+        nf = p.get("n_files", 0)
+        nm = p.get("n_materials", 0)
+        nc = p.get("n_cells", 0)
+        na = p.get("n_analyzed", 0)
+        vs = p.get("median_vset")
+        vr = p.get("median_vreset")
+        ratio = p.get("median_ratio")
+        has_dash = bool(dash_link)
+
+        yield_pct = round(na / nf * 100, 1) if nf > 0 else 0
+        yield_cls = "status-ok" if yield_pct >= 50 else ("status-warn" if yield_pct > 0 else "status-none")
+
+        mat_items = ""
+        for m in p.get("materials", []):
+            mn = m["name"]
+            mf = m["n_files"]
+            mvs = m.get("median_vset")
+            vs_str = f" Vₛₑₜ={mvs}V" if mvs else ""
+            mlink = f'{dash_link}' if has_dash else ""
+            if mlink:
+                mat_items += f'<a href="{mlink}" class="mat-item">{mn}<span class="mat-stat">{mf} files{vs_str}</span></a>'
+            else:
+                mat_items += f'<span class="mat-item mat-item-plain">{mn}<span class="mat-stat">{mf} files{vs_str}</span></span>'
+
+        name_html = f'<a href="{dash_link}">{name}</a>' if has_dash else f'<span class="status-none">{name}</span>'
+        dash_btn = f'<a href="{dash_link}">Open Dashboard</a>' if has_dash else ""
+
+        rows.append(f"""<div class="protocol-card">
+  {name_html}
+  <div class="stats">
+    <div class="stat"><span class="val">{nf}</span> <span class="lbl">files</span></div>
+    <div class="stat"><span class="val">{nm}</span> <span class="lbl">materials</span></div>
+    <div class="stat"><span class="val">{nc}</span> <span class="lbl">cells</span></div>
+    <div class="stat {yield_cls}"><span class="val">{yield_pct}%</span> <span class="lbl">yield</span></div>
+  </div>
+  <div class="materials">{mat_items}</div>
+  {f'<div class="actions">{dash_btn}</div>' if dash_btn else ''}
+</div>""")
+
+    protocol_grid = "\n".join(rows)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{project_name} — Dashboard Index</title>
+<style>{_MAIN_CSS}</style>
+</head>
+<body>
+<div class="container">
+  <h1>{project_name}</h1>
+  <div class="subtitle">Generated {date_str} &middot; {n_protocols} protocol(s), {n_with_dash} with dashboard</div>
+  <div class="summary-bar">
+    <div class="summary-card"><div class="num">{n_protocols}</div><div class="label">Protocols</div></div>
+    <div class="summary-card"><div class="num">{total_files}</div><div class="label">Files</div></div>
+    <div class="summary-card"><div class="num">{total_mats}</div><div class="label">Materials</div></div>
+    <div class="summary-card"><div class="num">{total_cells}</div><div class="label">Cells</div></div>
+    <div class="summary-card"><div class="num">{total_analyzed}</div><div class="label">Analyzed</div></div>
+  </div>
+  <div class="protocol-grid">
+    {protocol_grid}
+  </div>
+  <div class="footer">science-cli &middot; {date_str}</div>
+</div>
+</body>
+</html>"""
+
+
+def generate_main_dashboard(
+    project_dir: Path,
+    output_path: str | Path,
+    protocol_filter: str = "",
+    force: bool = False,
+) -> Path:
+    """Generate per-protocol dashboards and a main index page.
+
+    Args:
+        project_dir: Path to project root.
+        output_path: Where to write the main index HTML.
+        protocol_filter: If set, only this protocol name.
+        force: Re-generate even if already exists.
+
+    Returns:
+        Path to main index HTML.
+    """
+    from science_cli.memristor.device import read_devices
+    from science_cli.memristor.db import open_db, close_db
+
+    # Collect protocol dirs
+    proto_dir = project_dir / "protocol"
+    if protocol_filter:
+        dirs = [proto_dir / protocol_filter]
+    else:
+        dirs = sorted(proto_dir.iterdir()) if proto_dir.exists() else []
+
+    protocols_meta: list[dict] = []
+    conn = None
+    try:
+        conn = open_db(project_dir)
+
+        for pdir in dirs:
+            if not pdir.is_dir():
+                continue
+            proto_name = pdir.name
+
+            # ── Per-protocol dashboard ──
+            config = read_devices(pdir)
+            dash_rel = ""
+
+            if config is not None:
+                # Determine step dir: DB first (always accurate), then config
+                step_dir_name = ""
+                if conn:
+                    try:
+                        sr = conn.execute(
+                            "SELECT DISTINCT step FROM files WHERE protocol = ? ORDER BY step LIMIT 1",
+                            (proto_name,),
+                        ).fetchone()
+                        if sr:
+                            step_dir_name = sr[0]
+                    except Exception:
+                        pass
+                if not step_dir_name:
+                    for tech_key in ("iv-sweep", "iv"):
+                        if tech_key in config.steps:
+                            step_dir_name = config.steps[tech_key]
+                            break
+                if not step_dir_name:
+                    step_dir_name = "4_iv"
+
+                results_dir = pdir / step_dir_name / "results"
+                results_dir.mkdir(parents=True, exist_ok=True)
+                proto_out = results_dir / "dashboard.html"
+
+                try:
+                    generate_dashboard(config, results_dir, proto_out)
+                    dash_rel = "../" + str(proto_out.relative_to(project_dir))
+                except (ValueError, Exception) as exc:
+                    logger.warning(f"Dashboard skip {proto_name}: {exc}")
+
+            # ── Query summary stats from DB ──
+            n_files = 0
+            n_materials = 0
+            n_cells = 0
+            n_analyzed = 0
+            median_vset: float | None = None
+            median_vreset: float | None = None
+            median_ratio: float | None = None
+            materials: list[dict] = []
+
+            if conn:
+                try:
+                    row = conn.execute(
+                        """SELECT COUNT(*) AS nf,
+                                  COUNT(DISTINCT material) AS nm,
+                                  COUNT(DISTINCT CAST(row AS TEXT) || '-' || CAST(col AS TEXT)) AS nc,
+                                  COUNT(v_set) AS na
+                           FROM files WHERE protocol = ?""",
+                        (proto_name,),
+                    ).fetchone()
+                    if row:
+                        n_files = row[0]
+                        n_materials = row[1]
+                        n_cells = row[2] or 0
+                        n_analyzed = row[3]
+
+                    # Median Vset/Vreset
+                    vs_row = conn.execute(
+                        """SELECT AVG(v_set), AVG(v_reset), AVG(on_off_ratio)
+                           FROM files WHERE protocol = ? AND v_set IS NOT NULL""",
+                        (proto_name,),
+                    ).fetchone()
+                    if vs_row:
+                        median_vset = round(vs_row[0], 3) if vs_row[0] is not None else None
+                        median_vreset = round(vs_row[1], 3) if vs_row[1] is not None else None
+                        median_ratio = round(vs_row[2], 1) if vs_row[2] is not None else None
+
+                    # Per-material stats
+                    mat_rows = conn.execute(
+                        """SELECT material,
+                                  COUNT(*) AS nf,
+                                  COUNT(v_set) AS na,
+                                  AVG(v_set) AS vs
+                           FROM files WHERE protocol = ?
+                           GROUP BY material ORDER BY material""",
+                        (proto_name,),
+                    ).fetchall()
+                    for mr in mat_rows:
+                        mat_name = mr[0]
+                        mat_nf = mr[1]
+                        mat_na = mr[2]
+                        mat_vs = round(mr[3], 3) if mr[3] is not None else None
+                        materials.append({
+                            "name": mat_name,
+                            "n_files": mat_nf,
+                            "n_analyzed": mat_na,
+                            "median_vset": mat_vs,
+                        })
+                except Exception:
+                    pass
+
+            if n_files == 0 and not dash_rel:
+                continue
+            protocols_meta.append({
+                "name": proto_name,
+                "dashboard_rel": dash_rel,
+                "n_files": n_files,
+                "n_materials": n_materials,
+                "n_cells": n_cells,
+                "n_analyzed": n_analyzed,
+                "median_vset": median_vset,
+                "median_vreset": median_vreset,
+                "median_ratio": median_ratio,
+                "materials": materials,
+            })
+
+    finally:
+        if conn:
+            close_db(conn)
+
+    # ── Build main index ──
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    html = _build_main_index_html(
+        project_dir.name,
+        protocols_meta,
+        date_str,
+    )
+
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    logger.info(f"Main dashboard index written to {out}")
+    return out
