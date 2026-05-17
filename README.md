@@ -2,13 +2,31 @@
 
 A Python CLI for managing, plotting, and analyzing experimental data — IV curves, CV, CA, EIS, memristor switching, endurance, and retention. Built for researchers who work with measurement files in the terminal.
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Installation](documentation/guides/installation.md) | Install from PyPI, source, or one-liner |
+| [Electrochemistry](documentation/guides/electrochemistry.md) | CV, CA, EIS analysis & plotting workflow |
+| [Memristor](documentation/guides/memristor.md) | Crossbar device characterization pipeline |
+| [CHANGELOG](CHANGELOG.md) | Release history |
+
 ## Quick Install
 
 ```bash
+# One-liner (auto-installs via pipx or pip):
+curl -fsSL https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.sh | bash
+
 # Requires Python 3.9+
 pip install science-cli
 
-# Or from source:
+# Or with pipx (isolated, recommended for CLI tools):
+pipx install science-cli
+
+# Or with uv (Rust-based, faster):
+uv tool install science-cli
+
+# From source (editable, for development):
 git clone https://github.com/taixuann/science-cli.git
 cd science-cli
 pip install -e .
