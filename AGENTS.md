@@ -221,12 +221,14 @@ PLAN-config-expansion
 ├── bin/sci                            ← Shell entry point
 ├── scripts/                           ← Dev/utility scripts
 ├── theme-previews/                    ← Generated theme preview PDFs (gitignored)
-├── test_guardrails.py                 ← Architecture guardrail tests
+├── tests/                             ← 78 pytest tests (core, memristor, session, CLI)
 ├── .codegraph/                        ← CodeGraph index
 ├── .gitignore                         ← Standard blocklist (repo isolated, no allowlist needed)
 ├── src/science_cli/                   ← Canonical source root
 │   ├── __init__.py                    ← __version__
+│   ├── __main__.py                    ← `python -m science_cli` entry point
 │   ├── app.py                         ← CLI entry point (run_cli + REPL)
+│   ├── repl.py                        ← prompt_toolkit REPL session
 │   ├── config.py                      ← Legacy config (theme, projects_root)
 │   ├── cli/                           ← CLI dispatch layer
 │   │   ├── commands/                  ← One module per command
@@ -247,7 +249,7 @@ PLAN-config-expansion
 │   │   └── parquet_store.py
 │   ├── plot/                          ← Plot engine
 │   │   ├── __init__.py / base.py / ca.py / cv.py
-│   │   ├── eis.py / eis_circuits.py / overlays.py
+│   │   ├── eis.py / overlays.py
 │   ├── theme/                         ← Theme & template system
 │   │   ├── __init__.py / registry.py
 │   │   ├── themes/                    ← 7 style themes (*.yaml)
@@ -452,6 +454,9 @@ from science_cli.core.technique import (
 | fzf TUI subprocess dispatch | 2026-05-16 | `tui/app.py` uses subprocess.run with stop/start application mode; `fzf_utils.py` uses `/dev/tty` stderr |
 | Consolidate devices.yaml into protocol YAML | version-2.1.1 | `core/protocol.py` created; SQLite schema v4; `read_devices()` reads protocol YAML first; `write_devices()` deprecated; `memristor init` writes to protocol YAML; sweep metadata sync pipeline |
 | Repo restructuring (science-cli/* → repo root) | version-2.1.1 | `git mv science-cli/* .` — repo root IS science-cli; extensions/ removed; .gitignore simplified to standard blocklist |
+| Log-log IV plot toggle | refactor/2.1.0 | `dashboard.py` — `IV` | `ln-ln` mode toggle in Device Explorer; `ivScaleMode` tracking; `setIVScale()` JS |
+| Dashboard redesign: material groups, single-cycle viewer, Vset/Vreset markers | refactor/2.1.0 | Per-material JS data chunks, `i_set`/`i_reset` columns in SQLite, single-cycle IV viewer with `<` `>` navigation, distribution collapse toggles |
+| Dashboard themes (Dark, Full Black, Full White) + fzf column standardization | feature/dashboard-themes-fzf-columns | 3 dashboard themes, `build_fzf_display()` helper, standardized `protocol  step  filename` fzf columns across all pickers |
 
 ### Active Gaps (Need Execution)
 

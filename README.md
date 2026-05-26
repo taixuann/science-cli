@@ -99,7 +99,7 @@ GROUP 4: DEVICE & TECHNIQUES
 ### Config Subcommands (Sprint 8)
 
 ```bash
-config edit                           # Edit per-project sci-config.yaml
+config edit <technique>               # Edit per-technique config
 config edit --global                  # Edit global config
 config edit devices                   # Edit global device registry
 config edit grammar                   # Edit file naming patterns
@@ -226,7 +226,7 @@ The dashboard auto-extracts switching parameters:
 | Keysight Clarius+ | `.csv` (B1500A) | Keysight |
 | Biologic | `.mpt` | Biologic |
 
-Filenames follow **universal grammar fields** separated by `_` (hardcoded): `date_code_material_matrix_technique_suffix` (e.g., `140526_Ta-PDA-ITO_r0c0_iv_01.csv`). The 5 universal fields are: `date_code`, `material`, `technique`, `matrix`, `suffix`. Parenthesized suffixes like `(c)`, `(q)`, `(n)` in filenames are part of `material`, not batch/suffix.
+Filenames follow **universal grammar fields** separated by `_` (hardcoded): `date_code_material_matrix_technique_suffix` (e.g., `140526_Ta-PDA-ITO_r0c0_iv_01.csv`). The 5 universal fields are: `date_code`, `material`, `matrix`, `technique`, `suffix`. Parenthesized suffixes like `(c)`, `(q)`, `(n)` in filenames are part of `material`, not batch/suffix.
 
 ## Theme System
 
@@ -276,7 +276,7 @@ science-cli/
 │   ├── iv/                        ← IV analysis models
 │   ├── theme/                     ← 7 themes + per-technique templates
 │   └── tui/                       ← Textual TUI (full-screen UI)
-└── test_guardrails.py             ← 58 architecture guardrail tests
+└── tests/                         ← 78 pytest tests (core, memristor, session, CLI)
 ```
 
 ## 4-Tier Config System
