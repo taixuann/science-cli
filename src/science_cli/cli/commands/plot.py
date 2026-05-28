@@ -643,8 +643,8 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
         console.print(f"[red]Failed to load file: {e}[/red]")
         return
 
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     apply_theme(get_active_theme())
@@ -664,10 +664,12 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
 
     plot_type = flags.get("type", "line")
     color = flags.get("color", None)
-    linewidth = float(flags.get("linewidth", 1.5)) if flags.get("linewidth") else 1.5
-    linestyle = flags.get("linestyle", "solid")
+    _def_lw = mpl.rcParams.get("lines.linewidth", 1.0)
+    _def_ms = mpl.rcParams.get("lines.markersize", 4)
+    linewidth = float(flags.get("linewidth", _def_lw)) if flags.get("linewidth") else _def_lw
+    linestyle = flags.get("linestyle", mpl.rcParams.get("lines.linestyle", "solid"))
     marker = flags.get("marker", None)
-    markersize = float(flags.get("markersize", 6)) if flags.get("markersize") else 6
+    markersize = float(flags.get("markersize", _def_ms)) if flags.get("markersize") else _def_ms
     cmap = flags.get("cmap", None)
 
     plot_kw = {}
@@ -700,7 +702,8 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
 
     plt.close(fig)
@@ -721,8 +724,8 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
 
 def _do_eis_plot(filepath: str, flags: dict) -> None:
     """Generate Nyquist, Bode, and optionally circuit-fit-nyquist for an EIS file."""
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -764,7 +767,8 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
     apply_theme(get_active_theme())
     stem = Path(filepath).stem
     out_dir = _get_results_dir(filepath)
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
 
     want_nyquist = not flags.get("bode")
     want_bode = not flags.get("nyquist")
@@ -874,8 +878,8 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
 
 
 def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     from science_cli.core.data_loader import load_data_file
@@ -883,10 +887,10 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     apply_theme(get_active_theme())
     fig, ax = plt.subplots(figsize=_figsize(flags))
     # Use theme color cycle instead of hardcoded viridis
-    import matplotlib as mpl
     cycle = mpl.rcParams["axes.prop_cycle"]
     theme_colors = [entry["color"] for entry in cycle]
     colors = [theme_colors[i % len(theme_colors)] for i in range(len(files))]
+    _def_lw = float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 0.75)))
 
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
@@ -905,7 +909,7 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
             if len(xi) == 0 or len(yi) == 0:
                 continue
             label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax.plot(xi, yi, label=label, color=colors[i], linewidth=1.5)
+            ax.plot(xi, yi, label=label, color=colors[i], linewidth=_def_lw)
         except Exception:
             continue
 
@@ -918,7 +922,8 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] Overlay saved: {save_path}")
@@ -949,7 +954,8 @@ def _figsize(flags: dict) -> tuple:
             return float(parts[0]), float(parts[1])
         except (ValueError, IndexError):
             pass
-    return (10, 7)
+    import matplotlib as mpl
+    return mpl.rcParams.get("figure.figsize", (3.46, 2.75))
 
 
 def _apply_figure_kw(ax, flags: dict, title_default: str) -> None:
