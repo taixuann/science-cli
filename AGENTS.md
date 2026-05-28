@@ -155,6 +155,7 @@ When the user asks for a change, **always create a Plan artifact first**.
 - **`plotting-guy` OpenCode agent**: New subagent in `~/.opencode/agents/plotting-guy.md` that drives science-cli for visualization tasks
 - **`AGENTS_SCHEMA.md`**: Reference document at `documentation/AGENTS_SCHEMA.md` — schema and workflow for AI agents
 - **Intent-router updated**: Routes plot/viz/data-discovery requests to plotting-guy
+- **Template refactoring**: All 8 technique templates refactored with publication-quality presets (Helvetica, 600 DPI, standard figsize, per-technique colors, presets for IUPAC conventions, switching markers, conduction mechanisms, etc.)
 
 #### Remaining Future Considerations (No PLANs Yet)
 

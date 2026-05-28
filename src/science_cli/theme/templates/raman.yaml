@@ -1,13 +1,13 @@
-technique: mem-switching
+technique: raman
 plot_type: line
 figure:
   figsize: [3.54, 2.76]
   dpi: 600
   facecolor: white
 axes:
-  xlabel: "Voltage (V)"
-  ylabel: "Current (A)"
-  xlim: null
+  xlabel: "Raman shift (cm⁻¹)"
+  ylabel: "Intensity (a.u.)"
+  xlim: [200, 1800]
   ylim: null
   tick_direction: in
   tick_length: 3
@@ -26,21 +26,19 @@ font:
   title_size: 8
   legend_size: 6
 colors:
-  qualitative: ["#000000", "#D55E00", "#0072B2", "#009E73"]
+  qualitative: ["#000000", "#D55E00", "#0072B2", "#009E73", "#CC79A7"]
 savefig:
   format: pdf
   dpi: 600
   bbox_inches: tight
   pad_inches: 0.05
 presets:
-  x_units: "V"
-  y_units: "A"
-  semi_log_y: false
-  cycle_count: 1
-  show_set_voltage: true
-  show_reset_voltage: true
-  show_rs_ratio: true
-  set_voltage_marker: "▲"
-  reset_voltage_marker: "▼"
-  compliance_current: null
-  annotate_switching_direction: true
+  x_units: "cm⁻¹"
+  y_units: "a.u."
+  fingerprint_region: [200, 1800]
+  high_frequency_region: [1800, 3500]
+  show_full_range: false
+  annotate_peaks: true
+  peak_prominence_pct: 15
+  baseline_method: asls
+  label_peaks: true

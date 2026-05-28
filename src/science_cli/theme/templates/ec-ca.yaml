@@ -1,8 +1,42 @@
 technique: ec-ca
 plot_type: line
+figure:
+  figsize: [3.54, 2.76]
+  dpi: 600
+  facecolor: white
+axes:
+  xlabel: "Time (s)"
+  ylabel: "I (mA)"
+  xlim: null
+  ylim: null
+  tick_direction: in
+  tick_length: 3
+  tick_width: 0.5
+  linewidth: 0.5
+  grid: false
+  aspect: auto
 defaults:
-  linewidth: 1.5
+  linewidth: 0.75
   linestyle: "-"
-labels:
-  xlabel: Time (s)
-  ylabel: Current (A)
+  color: "#D55E00"
+font:
+  family: Helvetica
+  label_size: 7
+  tick_size: 6
+  title_size: 8
+  legend_size: 6
+colors:
+  qualitative: ["#D55E00", "#0072B2", "#009E73", "#CC79A7"]
+savefig:
+  format: pdf
+  dpi: 600
+  bbox_inches: tight
+  pad_inches: 0.05
+presets:
+  x_units: "s"
+  y_units: "mA"
+  show_step_potential: true
+  step_potential_label: "Step (V)"
+  x_scale: linear
+  y_scale: linear
+  show_time_regions: true

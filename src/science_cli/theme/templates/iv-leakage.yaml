@@ -1,8 +1,46 @@
 technique: iv-leakage
 plot_type: line
+figure:
+  figsize: [3.54, 2.76]
+  dpi: 600
+  facecolor: white
+axes:
+  xlabel: "Voltage (V)"
+  ylabel: "Current density (A/cm²)"
+  xlim: null
+  ylim: null
+  tick_direction: in
+  tick_length: 3
+  tick_width: 0.5
+  linewidth: 0.5
+  grid: false
+  aspect: auto
 defaults:
-  linewidth: 1.5
+  linewidth: 0.75
   linestyle: "-"
-labels:
-  xlabel: Voltage (V)
-  ylabel: "|Current| (A)"
+  color: "#0072B2"
+font:
+  family: Helvetica
+  label_size: 7
+  tick_size: 6
+  title_size: 8
+  legend_size: 6
+colors:
+  qualitative: ["#0072B2", "#D55E00", "#009E73"]
+savefig:
+  format: pdf
+  dpi: 600
+  bbox_inches: tight
+  pad_inches: 0.05
+presets:
+  x_units: "V"
+  y_units: "A/cm²"
+  semi_log_y: true
+  show_thickness: true
+  thickness_label: "Thickness (nm)"
+  show_electric_field: false
+  conduction_mechanisms:
+    - "ohmic"
+    - "pf-emission"
+    - "schottky"
+    - "fn-tunneling"

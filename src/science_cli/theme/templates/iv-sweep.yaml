@@ -1,12 +1,44 @@
 technique: iv-sweep
 plot_type: line
+figure:
+  figsize: [3.54, 2.76]
+  dpi: 600
+  facecolor: white
+axes:
+  xlabel: "Voltage (V)"
+  ylabel: "Current (A)"
+  xlim: null
+  ylim: null
+  tick_direction: in
+  tick_length: 3
+  tick_width: 0.5
+  linewidth: 0.5
+  grid: false
+  aspect: auto
 defaults:
-  linewidth: 1.5
+  linewidth: 0.75
   linestyle: "-"
-labels:
-  xlabel: Voltage (V)
-  ylabel: Current (A)
-sweep:
-  rate_v_s: auto
-  direction: auto
-  segments: auto
+  color: "#000000"
+font:
+  family: Helvetica
+  label_size: 7
+  tick_size: 6
+  title_size: 8
+  legend_size: 6
+colors:
+  qualitative: ["#000000", "#0072B2", "#D55E00", "#009E73"]
+savefig:
+  format: pdf
+  dpi: 600
+  bbox_inches: tight
+  pad_inches: 0.05
+presets:
+  x_units: "V"
+  y_units: "A"
+  semi_log_y: false
+  show_switching: true
+  switching_cycle: "both"
+  sweep_direction: "forward+reverse"
+  show_rate: true
+  rate_label: "Sweep rate (V/s)"
+  segments: 2

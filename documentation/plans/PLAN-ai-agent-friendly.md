@@ -183,6 +183,19 @@ Add `plotting-guy` to intent-router's `task:` permissions.
 | `documentation/AGENTS_SCHEMA.md` | **CREATE** | AI agent reference document |
 | `~/.opencode/agents/plotting-guy.md` | **CREATE** | New OpenCode subagent |
 | `~/.opencode/agents/intent-router.md` | EDIT | Add plotting-guy to task permissions |
+| `src/science_cli/theme/templates/*.yaml` | EDIT | Refactored all 8 templates with publication-quality presets |
+
+#### Post-implementation: Template refactoring
+
+All 8 technique templates (`ec-ca`, `ec-cv`, `ec-eis`, `iv-sweep`, `iv-breakdown`, `iv-leakage`, `mem-switching`, `mem-endurance`, `mem-retention`) refactored from bare-bones to full publication-quality configs:
+
+- **figure**: `[3.54, 2.76]` figsize (standard 9cm width), 600 DPI, white facecolor
+- **axes**: Full tick config (`in` direction, 3pt length, 0.5pt width), grid false, aspect ratio
+- **defaults**: Refined `linewidth: 0.75`, per-technique colors/markers/alpha
+- **font**: Helvetica, label 7pt, tick 6pt, title 8pt, legend 6pt
+- **colors**: Technique-specific qualitative palettes (Wong palette), LRS/HRS dual colors
+- **savefig**: PDF output, 600 DPI, tight bbox, 0.05in padding
+- **presets**: Technique-specific configs (units, IUPAC convention, scan arrows, switching markers, breakdown highlighting, conduction mechanisms, log scales, temperature)
 
 ## Dependencies
 
@@ -214,4 +227,4 @@ None. No other PLANs touch the CLI command layer or output formatting.
 - [x] B2: intent-router updated
 - [x] TEST passed (JSON validity, output schema verified)
 - [x] DOCS updated (README, AGENTS.md, PLAN)
-- [ ] COMMIT done
+- [x] COMMIT done (d38b583)
