@@ -218,7 +218,7 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
 class SciServeServer:
     def __init__(
         self,
-        port: int = 6000,
+        port: int = 8000,
         project_override: str | None = None,
         dev_mode: bool = False,
     ):

@@ -31,7 +31,7 @@ COMMAND_DESCRIPTIONS = {
     "chat":    "AI chat — natural language to plot commands via LLM",
     "plot":    "Generic plot — fzf-based, auto-detects technique",
     "analyze": "Generic analyze — fzf-based, technique-aware",
-    "serve":   "Start interactive dashboard server at localhost:6000",
+    "serve":   "Start interactive dashboard server at localhost:8000",
     "memristor": "Memristor IV/endurance/retention — plot, dashboard, sync",
     "raman":   "Raman spectroscopy — list, inspect, plot, analyze",
     "uv-vis":  "UV-Vis spectroscopy (coming)",
@@ -197,11 +197,11 @@ COMMAND_HELP: Dict[str, dict] = {
         ],
     },
     "serve": {
-        "usage": "serve [--port 6000] [--project /path] [--dev] [--open]",
+        "usage": "serve [--port 8000] [--project /path] [--dev] [--open]",
         "desc": "Start interactive dashboard server (Group 3). Serves frontend on localhost with REST API.",
         "subcommands": {},
         "flags": {
-            "--port":     {"desc": "Port to listen on (default: 6000 or $SCI_SERVE_PORT)"},
+            "--port":     {"desc": "Port to listen on (default: 8000 or $SCI_SERVE_PORT)"},
             "--project":  {"desc": "Override project path (otherwise uses session)"},
             "--dev":      {"desc": "Enable CORS and verbose logging"},
             "--open":     {"desc": "Auto-open browser on start"},

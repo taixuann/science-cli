@@ -22,8 +22,12 @@ def _parse_flags(args: list) -> tuple:
         if is_flag(a):
             key = a.lstrip("-")
             if i + 1 < len(args) and not is_flag(args[i + 1]):
-                flags[key] = args[i + 1]
-                i += 2
+                i += 1
+                tokens = []
+                while i < len(args) and not is_flag(args[i]):
+                    tokens.append(args[i])
+                    i += 1
+                flags[key] = " ".join(tokens)
             else:
                 flags[key] = True
                 i += 1
@@ -127,11 +131,11 @@ TECHNIQUE_HINTS = {
     },
     "raman": {
         "plot_style": "--type line | --color | --linewidth",
-        "figure": "-n spectrum.pdf | --xlabel 'Raman shift (cm⁻¹)' | --ylabel 'Intensity (counts)' | --grid | --zoom x1,x2",
+        "figure": "-n spectrum.pdf | --xlabel Raman shift (cm⁻¹) | --ylabel Intensity (counts) | --grid | --zoom x1,x2",
     },
     "uv-vis": {
         "plot_style": "--type line | --color | --linewidth",
-        "figure": "-n uv-vis.pdf | --xlabel 'Wavelength (nm)' | --ylabel 'T%' | --grid | --zoom x1,x2,y1,y2",
+        "figure": "-n uv-vis.pdf | --xlabel Wavelength (nm) | --ylabel Transmission (%) | --grid | --zoom x1,x2,y1,y2",
     },
 }
 
@@ -413,11 +417,13 @@ def _plot_interactive(extra_args: list | None = None) -> None:
     if not auto_technique and selected:
         auto_technique = _detect_technique(selected[0])
 
-    # Pre-fill flags from technique template
+    # Pre-fill flags from technique template + config labels
     all_flags: dict = {}
     if auto_technique:
         from science_cli.theme import template_to_flags
         all_flags.update(template_to_flags(auto_technique))
+        from science_cli.core.config import get_plot_labels
+        all_flags.update(get_plot_labels(auto_technique))
 
     # Apply active theme defaults
     from science_cli.core.session import get_active_theme
@@ -491,6 +497,16 @@ def _plot_direct(files: list, rest_args: list) -> None:
     if not technique and resolved:
         from science_cli.core.technique import detect_technique
         technique = detect_technique(Path(resolved[0]).name)
+
+    # Layer defaults: template → config → CLI (last wins)
+    if technique:
+        from science_cli.theme import template_to_flags
+        from science_cli.core.config import get_plot_labels
+        merged = {}
+        merged.update(template_to_flags(technique))
+        merged.update(get_plot_labels(technique))
+        merged.update(flags)
+        flags = merged
 
     if len(resolved) == 1:
         _do_plot(resolved[0], flags, technique)

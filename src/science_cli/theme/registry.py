@@ -153,7 +153,7 @@ def template_to_flags(technique: str) -> dict:
         val = defaults.get(key)
         if val is not None:
             flags[key] = str(val)
-    labels = data.get("labels", {})
+    labels = data.get("axes", {})
     for key in ("xlabel", "ylabel"):
         val = labels.get(key)
         if val:

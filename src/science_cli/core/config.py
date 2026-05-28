@@ -367,6 +367,29 @@ def get_technique_config(
     return dict(tech_section)
 
 
+def get_plot_labels(
+    technique: str,
+    project_root: Path | None = None,
+) -> dict[str, str]:
+    """Return per-technique plot labels from config, or empty dict.
+
+    Reads from the ``plot.labels.<technique>`` section of the merged config.
+
+    Example config.yaml::
+
+        plot:
+          labels:
+            uv-vis:
+              xlabel: "Wavelength (nm)"
+              ylabel: "Transmission (%)"
+
+    Resolution chain at runtime::
+        CLI --xlabel/--ylabel > config > column detection > template default
+    """
+    config = get_merged_config(project_root)
+    return dict(config.get("plot", {}).get("labels", {}).get(technique, {}))
+
+
 def get_file_naming_patterns(project_root: Path | None = None) -> list[dict]:
     """Return file naming pattern configs from merged config.
 
