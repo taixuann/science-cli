@@ -135,6 +135,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ls_cmd.py`: handle enriched file entries (dicts with `file` key) in matrix display
 - Matrix grid rendering: inverted axes, missing column headers
 
+## [2.7.0] - 2026-05-28
+
+### Added
+- **Publication-Nature as Global Default Theme**: Full Nature journal compliance — Helvetica 5-7pt, ticks in, open axes (top/right spines off), 300/600 DPI, `pdf.fonttype=42` for editable vector output, Wong colorblind-friendly palette (black-first)
+- **`sci serve` Interactive Dashboard Server**: Zero-dependency stdlib HTTP server with REST API endpoints (`/api/project`, `/api/protocol/{name}/summary`, `/api/protocol/{name}/heatmap`, `/api/protocol/{name}/device/{cell}/iv`, `/api/protocol/{name}/histograms`, `/api/gallery`) — serves Plotly.js-powered per-project protocol/step navigation
+- **AI Studio Frontend Template**: Complete dashboard frontend (`documentation/frontend 2/`) with React + TypeScript + Vite, gallery page, Plotly.js integration
+- **Per-Technique Plot Template Overrides**: `theme/plot-templates/` YAMLs now configure per-technique visual overrides (linewidth, markers, axis labels) on top of global theme
+
+### Changed
+- **Global Default Theme**: Changed from `publication-acs` to `publication-nature` across all 17 Python files — every plot command now defaults to Nature style
+- **Theme Directory Rename**: `theme/themes/` → `theme/plot-theme/`, `theme/templates/` → `theme/plot-templates/` for clarity
+- **fzf as Default Selection Mode**: All file/step/protocol selection uses fzf by default with manual fallback
+- **Help Restructured**: Merged GROUP 4 into GROUP 3 as technique-specific subsection for cleaner DX
+- **TUI Updated**: `_is_fzf_command` logic updated for fzf-as-default mode
+- **Removed Migration Guide**: `documentation/README-1.0.0.md` deleted — `CHANGELOG.md` serves the same purpose
+- **All 4 Active Plans Completed**: `refactor`, `ai_integration`, `dashboard`, `themes` — marked done
+
+### Fixed
+- **Plot Theme Compliance**: Overlay and single-plot commands (`_do_plot`, `_do_overlap`, `_do_eis_plot`) now read `rcParams` for figsize, linewidth, markersize, and DPI instead of hardcoded `(10,7)`, `1.5`, `6`, `150`
+- **fzf Fallback**: Graceful fallback when active protocol has no files
+- **Duplicate Step Names**: `add-metadata` and `edit-rm-step` now handle duplicate step names correctly
+
 ## [2.2.0] - 2026-05-28
 
 ### Added
