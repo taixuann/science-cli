@@ -168,4 +168,13 @@ When the user asks for a change, **always create a Plan artifact first**.
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. PLAN-ai-agent-friendly (2026-05-28) is completed on `feature/ai-agent-friendly`. The `refactor/2.1.0` branch contains all original implementations. `280526_repo_restructure` and `280526_documentation_reorg` track the current repository re-organization.
+- **Active Workspace Plans (`documentation/artifacts/`)**:
+  - `280526_artifacts_and_reference_guides.md`: Coordinating plans restructuring and archiving (In-Progress).
+  - [280526_ai_integration.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_ai_integration.md): AI Agent Integration & Local Intent Routing (Draft/Approved).
+  - [280526_dashboard.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_dashboard.md): Project-Aware Dashboard Backend & Plot Engine (Draft/Approved).
+  - [280526_refactor.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_refactor.md): Code Reorganization & Technique-Library Consolidation (Draft/Approved).
+  - `280526_repo_restructure.md`: Outlining root restructuring (Completed).
+  - `280526_documentation_reorg.md`: Outlining documentation folder cleanup (Completed).
+
+- **Historical Plans & Reports**:
+  - All legacy non-date-prefixed plans (`PLAN-*.md` and `test-report-*.md`) have been safely archived under `documentation/artifacts/archive/` to keep the active planning workspace clean and focused.
