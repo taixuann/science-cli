@@ -95,13 +95,14 @@ def _load_with_device_config(
     """Load a file using explicit device configuration.
 
     Uses device_cfg for: delimiter, decimal sep, header_lines, encoding,
-    and column name remapping.
+    column name remapping, and optional explicit column names for header-less files.
     """
     delimiter = device_cfg.get("delimiter")
     decimal = device_cfg.get("decimal", ".")
     header_lines = device_cfg.get("header_lines", 0)
     encoding = device_cfg.get("encoding", "utf-8")
     columns = device_cfg.get("columns", {})
+    names = device_cfg.get("names")
 
     # Auto-detect delimiter if not specified
     if delimiter is None:
@@ -114,35 +115,27 @@ def _load_with_device_config(
             else None
         )
 
-    if delimiter:
-        df = pd.read_csv(
-            path,
-            sep=delimiter,
-            decimal=decimal,
-            skiprows=header_lines,
-            encoding=encoding,
-            engine="python",
-        )
-    else:
-        df = pd.read_csv(
-            path,
-            sep=r"\s+",
-            decimal=decimal,
-            skiprows=header_lines,
-            encoding=encoding,
-            engine="python",
-        )
+    read_kwargs = {
+        "sep": delimiter or r"\s+",
+        "decimal": decimal,
+        "skiprows": header_lines,
+        "encoding": encoding,
+        "engine": "python",
+    }
+
+    if names:
+        read_kwargs["header"] = None
+        read_kwargs["names"] = names
+
+    df = pd.read_csv(path, **read_kwargs)
 
     df.columns = [c.strip().strip('"') for c in df.columns]
 
     # Remap columns if device config provides a column mapping
     if columns:
-        # columns maps role→actual_column_name (e.g. voltage→"SourceV")
-        # We create a reverse map to rename actual columns to role names
         rename_map: dict[str, str] = {}
         for role, actual_name in columns.items():
             if actual_name in df.columns:
-                # Don't rename if it would overwrite another column
                 if actual_name not in rename_map.values():
                     rename_map[actual_name] = role
         if rename_map:
@@ -153,13 +146,22 @@ def _load_with_device_config(
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    return df, {
+    # Extract Raman metadata if applicable
+    raman_meta = {}
+    if technique == "raman":
+        raman_meta = _extract_raman_header_metadata(path)
+
+    meta = {
         "format": path.suffix.lstrip("."),
         "columns": list(df.columns),
         "path": str(path),
         "device": device,
         "technique": technique,
     }
+    if raman_meta:
+        meta["raman_metadata"] = raman_meta
+
+    return df, meta
 
 
 def _load_mpt(path: Path) -> tuple[pd.DataFrame, dict]:
@@ -254,3 +256,31 @@ def fit_file(filepath: str, model: str = "linear", xcol: str = "", ycol: str = "
     except Exception as e:
         print(f"Fit failed: {e}")
         return None
+
+
+def extract_raman_metadata(filepath: str | Path) -> dict:
+    """Parse the #-prefixed header from a Horiba LabRAM file and return metadata dict.
+
+    Keys are normalized snake_case versions of the header field names.
+    """
+    path = Path(filepath)
+    meta: dict[str, str] = {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line.startswith("#"):
+                    break
+                # Strip leading # and split on first =
+                content = line.lstrip("#").strip()
+                if "=" in content:
+                    key_raw, val = content.split("=", 1)
+                    key = key_raw.strip().lower().replace(" ", "_").replace(".", "").replace("(", "").replace(")", "").replace("/", "_per_")
+                    meta[key] = val.strip()
+    except OSError:
+        pass
+    return meta
+
+
+# Re-export for convenience
+_extract_raman_header_metadata = extract_raman_metadata

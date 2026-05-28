@@ -127,6 +127,14 @@ def _technique_hints(technique: str) -> dict:
             "plot_style": "--type scatter | --color | --marker o | --markersize",
             "figure": "-n switching.pdf | --xlabel Cycle # | --ylabel Voltage (V) | --zoom x1,x2,y1,y2",
         },
+        "raman": {
+            "plot_style": "--type line | --color | --linewidth",
+            "figure": "-n spectrum.pdf | --xlabel 'Raman shift (cm⁻¹)' | --ylabel 'Intensity (counts)' | --grid | --zoom x1,x2",
+        },
+        "uv-vis": {
+            "plot_style": "--type line | --color | --linewidth",
+            "figure": "-n uv-vis.pdf | --xlabel 'Wavelength (nm)' | --ylabel 'T%' | --grid | --zoom x1,x2,y1,y2",
+        },
     }
     return hints.get(technique, hints.get("", {}))
 
@@ -569,6 +577,16 @@ def _resolve_xy_columns(
             "WE(1).Current (A)",
             "Bi", "Bias Current (A)", "bias_current",
         ):
+            if candidate in df.columns:
+                ycol = candidate
+                break
+
+    elif technique == "uv-vis":
+        for candidate in ("wavelength", "Wavelength nm.", "Wavelength", "nm"):
+            if candidate in df.columns:
+                xcol = candidate
+                break
+        for candidate in ("transmittance", "T%", "T", "Transmittance"):
             if candidate in df.columns:
                 ycol = candidate
                 break

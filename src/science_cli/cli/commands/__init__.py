@@ -10,6 +10,7 @@ from science_cli.cli.commands.ls_cmd import ls_handler
 from science_cli.cli.commands.memristor import memristor_handler
 from science_cli.cli.commands.open_cmd import open_handler
 from science_cli.cli.commands.plot import plot_handler
+from science_cli.cli.commands.raman import raman_handler
 from science_cli.cli.commands.results import results_handler
 from science_cli.cli.commands.status import status_handler
 from science_cli.cli.commands.techniques import techniques_handler
@@ -27,5 +28,6 @@ COMMAND_TREE = {
     "status":  {"handler": status_handler, "desc": "Show current context status (group 3)"},
     "results": {"handler": results_handler, "desc": "List saved results by protocol and step (group 3)"},
     "memristor": {"handler": memristor_handler, "desc": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check, plot, dashboard) (group 4)"},
+    "raman": {"handler": raman_handler, "desc": "Raman spectroscopy: list, inspect metadata, plot spectra (group 4)"},
     "techniques": {"handler": techniques_handler, "desc": "List techniques (deprecated: use 'config list techniques')"},
 }
