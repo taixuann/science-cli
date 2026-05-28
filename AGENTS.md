@@ -33,7 +33,7 @@ Before doing *any* work in this codebase, you **must** follow these three steps:
 ## 📋 The Workspace Plan Template
 
 When the user asks for a change, **always create a Plan artifact first**.
-- Workspace plans **must** be created under `documentation/plans/` as markdown files named **`DDMMYY_<short_topic>.md`** (e.g. `280526_repo_restructure.md`).
+- Workspace plans **must** be created under `documentation/artifacts/` as markdown files named **`DDMMYY_<short_topic>.md`** (e.g. `280526_repo_restructure.md`).
 - Date format is DDMMYY (e.g., 28 May 2026 is `280526`).
 - Always present the plan to the user for approval first. Do not make code edits or run modifying commands until the plan is approved.
 
@@ -102,7 +102,7 @@ When the user asks for a change, **always create a Plan artifact first**.
 | AGENTS.md workflow | cleanup/architecture-guardrails | 5-phase workflow, cross-PLAN tracking, CodeGraph integration |
 | Sprint 2: Help menu restructure | Sprint 2 | 4-group commands, TechniquesBox TUI banner, --filter removed |
 | Sprint 3: Cross-Protocol Dashboard | Sprint 3 | `dashboard --all`, stacked heatmaps, material filter, analysis_data.json cache |
-| documentation/ structure | cleanup/architecture-guardrails | plans/ and instructions/ directories created |
+| documentation/ structure | cleanup/architecture-guardrails | artifacts/ and library/ directories created |
 | Architecture guardrail tests | cleanup/architecture-guardrails | test_guardrails.py — 16 tests passing |
 | PLAN files created | cleanup/architecture-guardrails | 4 PLANs created with cross-PLAN relationships |
 | Sprint 8: Global Config Registry | Sprint 8 | 4-tier config, global device/technique registry, sync/analyze split, SQLite v2 auto-construction |
@@ -168,4 +168,4 @@ When the user asks for a change, **always create a Plan artifact first**.
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. PLAN-ai-agent-friendly (2026-05-28) is completed on `feature/ai-agent-friendly`. The `refactor/2.1.0` branch contains all original implementations. `280526_repo_restructure` tracks the current repository reorganization.
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. PLAN-ai-agent-friendly (2026-05-28) is completed on `feature/ai-agent-friendly`. The `refactor/2.1.0` branch contains all original implementations. `280526_repo_restructure` and `280526_documentation_reorg` track the current repository re-organization.
