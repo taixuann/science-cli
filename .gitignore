@@ -1,9 +1,13 @@
 # Standard blocklist (repo is isolated — no allowlist needed)
 # Only deny what should be excluded
 
-# Ignore AGENTS.md files, generated PLAN files at root level, test artifacts
+# Ignore AGENTS.md, RULES.md, SCHEMA.md files, generated PLAN files at root level, test artifacts
 AGENTS.md
 **/AGENTS.md
+RULES.md
+**/RULES.md
+SCHEMA.md
+**/SCHEMA.md
 /PLAN-*.md
 tests/
 test_*.py

@@ -1,0 +1,2259 @@
+#!/usr/bin/env python3
+"""Standalone CLI for crossbar device management.
+
+devices.yaml lives at protocol/<proto>/devices.yaml with a steps:
+mapping that connects techniques to step subdirectories.
+
+Usage:
+    mem-device init --rows 4 --cols 4 --label "My Device" [--steps iv:4_iv,endurance:5_end]
+    mem-device ls [--matrix] [--technique iv]
+    mem-device info --row 0 --col 0
+    mem-device add --row 0 --col 0 --file data.txt [--technique iv]
+    mem-device add --fzf
+
+    # Plot all:
+    mem-device plot --all [--overlay] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+
+    # Interactive:
+    mem-device plot [--fzf] [--overlay | --all] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device dashboard [--output path] [--open]
+    
+In the sci REPL, use 'memristor' instead of 'mem-device'.
+"""
+
+import argparse
+import json
+import logging
+import re
+import sqlite3
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+from rich import print as rprint
+from rich.table import Table
+
+from science_cli.core.session import (
+    load_session,
+    set_last_step,
+)
+from science_cli.library.memristor.device import (
+    FileEntry,
+    MatrixPoint,
+    TechniqueGroup,
+    extract_material_batch,
+    find_orphaned_files,
+    generate_rich_grid,
+    read_devices,
+    sync_devices,
+    write_devices,
+)
+from science_cli.library.memristor.device import (
+    validate as validate_config,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── Protocol directory resolution ───────────────────────────
+
+
+def _resolve_protocol_dir(args) -> Path:
+    """Resolve protocol directory: --step-dir -> session -> cwd()."""
+    if getattr(args, "step_dir", None):
+        return Path(args.step_dir).resolve()
+
+    sess = load_session()
+    last_proj = sess.get("last_project", "")
+    last_proto = sess.get("last_protocol", "")
+
+    if last_proj and last_proto:
+        from science_cli.core.project import get_current_project_path
+        proj = get_current_project_path()
+        if proj:
+            pdir = proj / "protocol" / last_proto
+            if pdir.exists():
+                return pdir.resolve()
+
+    return Path.cwd()
+
+
+def _validate_protocol_dir(pdir: Path) -> bool:
+    """Validate protocol dir. Returns False only if directory does not exist.
+    
+    devices.yaml is optional — sync and analyze use grammar-based workflows
+    that don't require it. Older commands that need devices.yaml will fail
+    when they call read_devices().
+    """
+    if not pdir.exists():
+        print(f"Directory does not exist: {pdir}")
+        print("Use 'open -m protocol -n <name>' or navigate to a protocol directory.")
+        return False
+    return True
+
+
+def _resolve_step_context(proto_dir: Path) -> tuple:
+    """Resolve (protocol_name, technique) from a protocol directory."""
+    name = proto_dir.name
+    protocol_dir = proto_dir.parent
+    if protocol_dir.name == "protocol":
+        from science_cli.core.paths import ProjectPaths
+        # proto_dir.parent.parent is the project root
+        proj_root = protocol_dir.parent
+        paths = ProjectPaths(proj_root)
+        proto_yaml = paths.protocol_yaml(name)
+        if proto_yaml.exists():
+            import yaml
+            with open(proto_yaml) as f:
+                data = yaml.safe_load(f) or {}
+            return name, ""
+    return name, ""
+
+
+# ── Technique inference ─────────────────────────────────────
+
+
+def _build_tech_map(project_root=None) -> dict[str, str]:
+    """Build technique name → short name mapping from config.
+
+    Reads from config ``techniques.<name>.short_name`` first.
+    Falls back to hardcoded TECH_MAP if config doesn't define a mapping.
+    """
+    HARDCODED_TECH_MAP = {
+        "iv-sweep": "iv",
+        "iv-breakdown": "iv",
+        "iv-leakage": "iv",
+        "mem-endurance": "endurance",
+        "mem-retention": "retention",
+        "mem-switching": "switching",
+    }
+    try:
+        from science_cli.core.config import get_technique_config
+        result: dict[str, str] = {}
+        for tech, fallback in HARDCODED_TECH_MAP.items():
+            tconfig = get_technique_config(tech, project_root)
+            if tconfig and "short_name" in tconfig:
+                result[tech] = tconfig["short_name"]
+            else:
+                result[tech] = fallback
+        return result
+    except ImportError:
+        return dict(HARDCODED_TECH_MAP)
+
+
+def _infer_technique(filename: str) -> str:
+    """Infer technique from filename alone."""
+    from science_cli.core.technique import detect_technique
+
+    ft = detect_technique(filename)
+    tech_map = _build_tech_map()
+    return tech_map.get(ft, "")
+
+
+# ── Filename parsing ────────────────────────────────────────
+
+CANONICAL_RE = re.compile(
+    r'^'
+    r'(?P<date>\d{4})'                         # DDMM
+    r'_'
+    r'(?P<material>[A-Za-z0-9\-\(\)]+?)'       # Material (lazy)
+    r'_'
+    r'b(?P<bottom>\d+)'                        # Bottom electrode # (1-indexed)
+    r'-'
+    r't(?P<top>\d+)'                           # Top electrode # (1-indexed)
+    r'_'
+    r'(?P<technique>[A-Za-z0-9\-]+?)'          # Technique (e.g., IV-DC)
+    r'_'
+    r'(?P<sweep_type>f|sp|sn|uc|p|n)'           # Sweep type code
+    r'_'
+    r'(?P<order>\d{1,3})'                      # Sequence number
+    r'\.'
+    r'(?P<ext>csv|txt|dat|tsv|log)'            # Extension
+    r'$'
+)
+
+
+def parse_canonical_filename(filename: str) -> dict | None:
+    """Parse a canonical crossbar filename.
+
+    Format: DDMM_Material_b#-t#_Technique_Type_#.ext
+
+    Returns dict or None if not matching.
+    """
+    m = CANONICAL_RE.search(filename)
+    if not m:
+        return None
+    return {
+        "date": m.group("date"),
+        "material": m.group("material"),
+        "row": int(m.group("top")) - 1,      # T → 0-indexed row
+        "col": int(m.group("bottom")) - 1,    # B → 0-indexed col
+        "technique": m.group("technique"),
+        "sweep_type": m.group("sweep_type"),  # f, sp, sn, uc
+        "order": int(m.group("order")),
+        "ext": m.group("ext"),
+        "technique_mapped": "",               # filled by infer_technique
+    }
+
+
+def _parse_filename_metadata(filename: str) -> dict:
+    """Parse row, col, technique, sweep_type from filename convention.
+
+    Tries grammar-based parsing first, falls back to hardcoded patterns.
+    """
+    meta = {
+        "row": None,
+        "col": None,
+        "technique": "",
+        "sweep_type": None,
+        "sweep_order": None,
+    }
+
+    # Try grammar-based parsing first
+    try:
+        from science_cli.core.technique import parse_filename_grammar
+        grammar_result = parse_filename_grammar(filename)
+        if "parse_error" not in grammar_result:
+            # Extract row/col from grammar result if available
+            if "row" in grammar_result:
+                try:
+                    meta["row"] = int(grammar_result["row"])
+                except (ValueError, TypeError):
+                    pass
+            if "col" in grammar_result:
+                try:
+                    meta["col"] = int(grammar_result["col"])
+                except (ValueError, TypeError):
+                    pass
+            if "technique" in grammar_result:
+                meta["technique"] = grammar_result["technique"]
+            if "sweep_type" in grammar_result:
+                meta["sweep_type"] = grammar_result["sweep_type"]
+            if meta["row"] is not None or meta["col"] is not None or meta["technique"]:
+                return meta
+    except ImportError:
+        pass
+
+    # Fall back to hardcoded patterns
+    m = re.search(r'r(\d+)c(\d+)', filename, re.IGNORECASE)
+    if m:
+        meta["row"] = int(m.group(1))
+        meta["col"] = int(m.group(2))
+
+    tech_patterns = [
+        (r'_(iv|IV)_(set|SET)\b', "iv", "SET"),
+        (r'_(iv|IV)_(reset|RESET)\b', "iv", "RESET"),
+        (r'_(iv|IV)_(forming|FORMING)\b', "iv", "FORMING"),
+        (r'_(iv|IV)_(read|READ)\b', "iv", "READ"),
+        (r'_(endurance|ENDURANCE)\b', "endurance", None),
+        (r'_(retention|RETENTION)\b', "retention", None),
+        (r'_(switching|SWITCHING)\b', "switching", None),
+        (r'_iv[^a-z]', "iv", None),
+        (r'[._]iv$', "iv", None),
+    ]
+    for pattern, tech, stype in tech_patterns:
+        if re.search(pattern, filename, re.IGNORECASE):
+            meta["technique"] = tech
+            meta["sweep_type"] = stype
+            break
+    return meta
+
+
+# ── Material tag helpers ─────────────────────────────────────
+
+
+def _add_material_tag(pt: MatrixPoint, filename: str) -> None:
+    """Extract material+batch from a canonical filename and add to point tags.
+
+    Adds a tag like ``"material:Ta-PDA-ITO(1)"`` if the filename
+    matches the canonical format.  Duplicates are silently skipped.
+    """
+    result = extract_material_batch(filename)
+    if result:
+        material, batch = result
+        material_key = f"{material}({batch})" if batch else material
+        tag = f"material:{material_key}"
+        if tag not in pt.tags:
+            pt.tags.append(tag)
+
+
+def _format_material_display(material_key: str) -> str:
+    """Format ``"Ta-PDA-ITO(1)"`` → ``"Ta-PDA-ITO (batch 1)"`` for display."""
+    m = re.match(r"^(.+)\((\d+)\)$", material_key)
+    if m:
+        return f"{m.group(1)} (batch {m.group(2)})"
+    return material_key
+
+
+# ── Data file helpers ───────────────────────────────────────
+
+
+def _device_data_files_recursive(proto_dir: Path) -> list[tuple[str, str, Path]]:
+    """List data files recursively across step subdirs.
+
+    Returns list of (rel_path, step_dir_name, Path) tuples.
+    """
+    from science_cli.library.memristor.device import DATA_SUFFIXES, YAML_EXCLUDE
+
+    results: list[tuple[str, str, Path]] = []
+    for f in proto_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        if f.name in YAML_EXCLUDE or f.parent.name == "results":
+            continue
+        if f.suffix not in DATA_SUFFIXES:
+            continue
+        rel = f.relative_to(proto_dir)
+        step_dir_name = str(f.parent.name) if f.parent != proto_dir else ""
+        results.append((str(rel), step_dir_name, f))
+    return sorted(results, key=lambda x: x[0])
+
+
+# ── Command: init ───────────────────────────────────────────
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    import re
+
+    # Resolve rows/cols from --matrix shorthand or explicit --rows/--cols
+    rows, cols = getattr(args, "rows", None), getattr(args, "cols", None)
+    matrix_str = getattr(args, "matrix", "") or ""
+    if matrix_str:
+        m = re.match(r"r(\d+)[-.]c(\d+)", matrix_str)
+        if m:
+            rows, cols = int(m.group(1)), int(m.group(2))
+        else:
+            print(f"  Error: --matrix format should be rN-cN (e.g. r6-c6), got '{matrix_str}'")
+            sys.exit(1)
+    elif rows is None or cols is None:
+        print("  Error: provide --matrix rN-cN or --rows N --cols N")
+        sys.exit(1)
+
+    label = getattr(args, "label", "") or ""
+    if not label:
+        label = f"{rows}x{cols} crossbar"
+
+    pdir = _resolve_protocol_dir(args)
+
+    # ── NEW: Write to protocol YAML instead of devices.yaml ──
+    protocol_yaml = pdir / f"{pdir.name}.yaml"
+
+    # Check if protocol YAML exists
+    if not protocol_yaml.exists():
+        print(f"  Error: protocol YAML not found at {protocol_yaml}")
+        print("  Create a protocol first with 'protocol create' or navigate to a protocol directory.")
+        sys.exit(1)
+
+    # Check if device section already exists
+    from science_cli.core.protocol import has_device_section, write_device_section
+    if has_device_section(protocol_yaml):
+        print("  Protocol YAML already has a device section. Use --matrix to update.")
+
+    # Build geometry dict
+    geometry = {
+        "rows": rows,
+        "cols": cols,
+        "label": label,
+        "id": f"crossbar-{rows}x{cols}",
+    }
+    if not write_device_section(protocol_yaml, geometry):
+        print(f"  Error: Failed to write device section to {protocol_yaml}")
+        sys.exit(1)
+
+    # Build steps mapping from protocol YAML (or --step arg)
+    proto_data = {}
+    try:
+        import yaml
+        with open(protocol_yaml) as f:
+            proto_data = yaml.safe_load(f) or {}
+    except Exception:
+        pass
+
+    step_techniques = {}
+    for s in proto_data.get("steps", []):
+        if isinstance(s, dict) and s.get("name") and s.get("technique"):
+            step_techniques[s["name"]] = s["technique"]
+
+    steps = {}
+    raw = getattr(args, "steps", "") or ""
+    if raw:
+        for raw_part in raw.split(","):
+            part = raw_part.strip()
+            if not part:
+                continue
+            if ":" in part:
+                tech, step_dir_name = part.split(":", 1)
+                steps[tech.strip()] = step_dir_name.strip()
+            else:
+                # Look up technique from protocol YAML
+                tech = step_techniques.get(part, "")
+                if tech:
+                    steps[tech] = part
+                else:
+                    # Try auto-detection
+                    from science_cli.core.config import resolve_technique_from_grammar
+                    from science_cli.core.technique import detect_technique
+                    ft = detect_technique(part)
+                    if ft:
+                        tid = resolve_technique_from_grammar(ft)
+                        if tid:
+                            steps[tid] = part
+                            continue
+                    print(f"  Warning: could not infer technique from '{part}', skipping")
+
+    print(f"Initialized device in {protocol_yaml}")
+    print(f"  Device: {label} ({rows}x{cols})")
+    print(f"  Cells: {rows * cols}")
+    if steps:
+        print(f"  Steps mapping: {steps}")
+
+    # Optional: migrate legacy devices.yaml
+    legacy_path = pdir / "devices.yaml"
+    if legacy_path.exists():
+        from science_cli.library.memristor.device import _migrate_devices_yaml
+        report = _migrate_devices_yaml(pdir)
+        if report.get("migrated"):
+            print(f"  Migrated {report.get('files_migrated', 0)} file(s) from legacy devices.yaml")
+
+    set_last_step(pdir.name)
+
+
+# ── Command: ls ─────────────────────────────────────────────
+
+
+def cmd_ls(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        print("  (Check for protocol YAML with device section or legacy devices.yaml)")
+        sys.exit(1)
+
+    material_filter = getattr(args, "material", "") or ""
+    technique = args.technique or ""
+
+    if args.matrix:
+        from rich.console import Console
+
+        # Load cell counts from SQLite
+        proj = pdir.parent.parent
+        cell_counts: dict[tuple[int, int], int] = {}
+        try:
+            from science_cli.library.memristor.db import get_db_path
+            db_path = get_db_path(proj)
+            if db_path.exists():
+                import sqlite3
+                with sqlite3.connect(db_path) as _conn:
+                    rows = _conn.execute(
+                        "SELECT row, col, n_files FROM cells WHERE protocol=?",
+                        (pdir.name,),
+                    ).fetchall()
+                    for r, c, n in rows:
+                        cell_counts[(r, c)] = n
+        except Exception:
+            pass
+
+        console = Console()
+        material_groups = config.get_points_by_material()
+
+        if material_filter:
+            # Single-material view (filtered)
+            points = material_groups.get(material_filter, [])
+            occupied: set[tuple[int, int]] = {(p.row, p.col) for p in points}
+            if technique and points:
+                occupied = {
+                    (p.row, p.col)
+                    for p in points
+                    if p.has_technique(technique)
+                }
+            title = (
+                f"Material: {_format_material_display(material_filter)} "
+                f"— {len(occupied)} cell(s)"
+            )
+            console.print(
+                generate_rich_grid(
+                    config, occupied=occupied, technique=technique, title=title,
+                    cell_counts=cell_counts or None,
+                )
+            )
+        elif not material_groups:
+            # No material data — single grid (backward-compatible)
+            console.print(generate_rich_grid(config, technique=technique, cell_counts=cell_counts or None))
+        else:
+            # All materials — one table per material+batch
+            first = True
+            for mat_key in sorted(material_groups.keys()):
+                points = material_groups[mat_key]
+                occupied = {(p.row, p.col) for p in points}
+                if technique:
+                    occupied = {
+                        (p.row, p.col)
+                        for p in points
+                        if p.has_technique(technique)
+                    }
+                if not occupied:
+                    continue
+                if not first:
+                    console.print()  # blank line between tables
+                first = False
+                display_name = _format_material_display(mat_key)
+                title = (
+                    f"Material: {display_name} "
+                    f"— {len(occupied)} cell(s)"
+                )
+                console.print(
+                    generate_rich_grid(
+                        config,
+                        occupied=occupied,
+                        technique=technique,
+                        title=title,
+                        cell_counts=cell_counts or None,
+                    )
+                )
+        return
+
+    # ── Plain (non-matrix) listing ────────────────────────────
+
+    print(f"Device: {config.device.label} ({config.device.id})")
+    print(f"  Geometry: {config.device.rows} rows x {config.device.cols} cols")
+    print(f"  Measured: {config.measured_cells}/{config.device.total_cells} cells")
+    print(f"  Files: {config.total_files}")
+    print(f"  Techniques: {', '.join(sorted(config.technique_coverage.keys()))}")
+    if config.steps:
+        print(f"  Steps mapping: {dict(config.steps)}")
+
+    if args.technique:
+        tech = args.technique
+        pts = config.get_points_with_technique(tech)
+        if material_filter:
+            material_groups = config.get_points_by_material()
+            mat_positions: set[tuple[int, int]] = set()
+            for p in material_groups.get(material_filter, []):
+                mat_positions.add((p.row, p.col))
+            pts = [p for p in pts if (p.row, p.col) in mat_positions]
+        print(f"\nPoints with {tech}: {len(pts)}")
+        for pt in sorted(pts, key=lambda p: (p.row, p.col)):
+            files = pt.get_files(tech)
+            flist = ", ".join(fe.file for fe in files)
+            print(f"  r{pt.row}c{pt.col}: {flist}")
+
+    set_last_step(pdir.name)
+
+
+# ── Command: matrix ─────────────────────────────────────────
+
+
+def _render_matrix_grid(
+    protocol: str,
+    material: str,
+    cells: dict[tuple[int, int], int],
+    technique: str = "",
+    grid_rows: int | None = None,
+    grid_cols: int | None = None,
+) -> Table | None:
+    """Render a Rich Table grid of file counts for one protocol+material from DB data.
+
+    Args:
+        protocol: Protocol name (for title).
+        material: Material name (for title).
+        cells: Dict of (row, col) -> file count.
+        technique: Optional technique filter label.
+        grid_rows: Fixed grid rows from protocol YAML (default: infer from data).
+        grid_cols: Fixed grid columns from protocol YAML (default: infer from data).
+    """
+    if grid_rows is not None and grid_cols is not None:
+        rows, cols = grid_rows, grid_cols
+    elif cells:
+        rows = max(r for r, _ in cells) + 1
+        cols = max(c for _, c in cells) + 1
+    else:
+        return None
+
+    title_parts = [protocol, material]
+    if technique:
+        title_parts.append(f"[{technique}]")
+    title = " / ".join(title_parts)
+
+    table = Table(
+        title=title,
+        show_header=True,
+        header_style="bold cyan",
+        border_style="cyan",
+        show_lines=True,
+        padding=(0, 1),
+    )
+
+    table.add_column("", style="bold bright_white", width=3)
+    for j in range(cols):
+        table.add_column(f"C{j + 1}", justify="right", width=5)
+
+    for i in range(rows):
+        row_data: list[str] = []
+        for j in range(cols):
+            n = cells.get((i, j), 0)
+            if n > 0:
+                row_data.append(f"[bold green]{n}[/]")
+            else:
+                row_data.append("[dim]----[/]")
+        table.add_row(f"R{i + 1}", *row_data)
+
+    return table
+
+
+def _get_protocol_grid_dims(proj: Path, protocol_name: str) -> tuple[int | None, int | None]:
+    """Read device grid dimensions from protocol YAML device section.
+
+    Returns (rows, cols) or (None, None) if not defined.
+    """
+    yaml_path = proj / "protocol" / protocol_name / f"{protocol_name}.yaml"
+    if not yaml_path.exists():
+        return None, None
+    try:
+        import yaml
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f) or {}
+        device = data.get("device", {})
+        rows = device.get("rows")
+        cols = device.get("cols")
+        if rows is not None and cols is not None:
+            return int(rows), int(cols)
+    except Exception:
+        pass
+    return None, None
+
+
+def cmd_matrix(args: argparse.Namespace) -> None:
+    """Show device matrix from SQLite (no YAML required).
+
+    Queries the ``files`` table for row/col coordinates parsed from filenames
+    and renders a grid per protocol+material.
+
+    Flags:
+        --all: Show matrix for ALL protocols in the project.
+        --material: Filter by exact material name.
+        --technique: Filter by technique (e.g., ``iv-sweep``).
+        --status: Show summary of what's loaded in the database.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import close_db, open_db
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    db_path = proj / f"{proj.name}.db"
+    if not db_path.exists():
+        print(f"No database found at {db_path}")
+        print("Run 'memristor sync' first to populate the database.")
+        return
+
+    technique = getattr(args, "technique", "") or ""
+    material = getattr(args, "material", "") or ""
+
+    # ── --status mode: summary table ──
+    if getattr(args, "status", False):
+        conn = open_db(proj)
+        try:
+            rows = conn.execute(
+                """SELECT protocol,
+                          COUNT(DISTINCT material) AS n_materials,
+                          COUNT(DISTINCT CASE WHEN row IS NOT NULL AND col IS NOT NULL
+                            THEN CAST(row AS TEXT) || '-' || CAST(col AS TEXT) END) AS n_cells,
+                          COUNT(*) AS n_files
+                   FROM files
+                   GROUP BY protocol
+                   ORDER BY protocol"""
+            ).fetchall()
+            if not rows:
+                print("No data in database.")
+                return
+            print(f"Database: {db_path.name}")
+            print(f"{'Protocol':45s} {'Materials':>10s} {'Cells':>8s} {'Files':>8s}")
+            print("-" * 75)
+            for r in rows:
+                print(f"{r[0]:45s} {r[1]:>10d} {r[2]:>8d} {r[3]:>8d}")
+            print("-" * 75)
+            total = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            print(f"{'TOTAL':45s} {'':>10s} {'':>8s} {total:>8d}")
+        finally:
+            close_db(conn)
+        return
+
+    # ── Matrix mode ──
+
+    # Determine which protocols to show
+    all_flag = getattr(args, "all", False)
+    if all_flag:
+        conn = open_db(proj)
+        try:
+            proto_rows = conn.execute(
+                "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+            ).fetchall()
+            protocols = [r[0] for r in proto_rows]
+        finally:
+            close_db(conn)
+        if not protocols:
+            print("No protocols found in database.")
+            print("Run 'memristor sync --all' first to populate the database.")
+            return
+    else:
+        pdir = _resolve_protocol_dir(args)
+        protocol_name = pdir.name
+
+        # Check if this protocol has data in the DB
+        conn_check = open_db(proj)
+        try:
+            has_data = conn_check.execute(
+                "SELECT 1 FROM files WHERE protocol = ? LIMIT 1", (protocol_name,)
+            ).fetchone()
+        finally:
+            close_db(conn_check)
+
+        if not has_data:
+            # Show available protocols from DB
+            conn_check2 = open_db(proj)
+            try:
+                available = [
+                    r[0] for r in conn_check2.execute(
+                        "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+                    ).fetchall()
+                ]
+            finally:
+                close_db(conn_check2)
+
+            if available:
+                print(f"Protocol '{protocol_name}' has no data in the database.")
+                print(f"Available protocols: {', '.join(available)}")
+                print("Use 'memristor matrix --all' or 'open -m protocol -n <name>'")
+            else:
+                print("No data in database. Run 'memristor sync' first.")
+            return
+
+        protocols = [protocol_name]
+
+    conn = open_db(proj)
+    try:
+        first = True
+        for protocol_name in protocols:
+            # Query matrix data
+            sql = """SELECT material, row, col, COUNT(*) AS n_files
+                     FROM files
+                     WHERE protocol = ?
+                       AND row IS NOT NULL
+                       AND col IS NOT NULL"""
+            params: list = [protocol_name]
+            if material:
+                sql += " AND material = ?"
+                params.append(material)
+            if technique:
+                sql += " AND technique_id = ?"
+                params.append(technique)
+            sql += " GROUP BY material, row, col ORDER BY material, row, col"
+
+            qrows = conn.execute(sql, params).fetchall()
+            if not qrows:
+                continue
+
+            # Group by material
+            mat_cells: dict[str, dict[tuple[int, int], int]] = {}
+            for qr in qrows:
+                mat_name = qr[0]
+                r, c = qr[1], qr[2]
+                n = qr[3]
+                mat_cells.setdefault(mat_name, {})[(r, c)] = n
+
+            if not first:
+                print()
+            first = False
+
+            g_rows, g_cols = _get_protocol_grid_dims(proj, protocol_name)
+
+            # --grid override
+            grid_str = getattr(args, "grid", "") or ""
+            if grid_str:
+                m = re.match(r"r(\d+)[-._]?c(\d+)", grid_str.strip(), re.IGNORECASE)
+                if m:
+                    g_rows, g_cols = int(m.group(1)), int(m.group(2))
+
+            for mat_name in sorted(mat_cells.keys()):
+                grid = _render_matrix_grid(
+                    protocol_name, mat_name, mat_cells[mat_name], technique,
+                    grid_rows=g_rows, grid_cols=g_cols,
+                )
+                if grid:
+                    rprint(grid)
+                    rprint()
+    finally:
+        close_db(conn)
+
+
+# ── Command: info ───────────────────────────────────────────
+
+
+def cmd_info(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        sys.exit(1)
+
+    pt = config.get_point(args.row, args.col)
+    if pt is None:
+        print(f"No data for r{args.row}c{args.col}")
+        sys.exit(1)
+
+    label = config.device.cell_label(args.row, args.col)
+    tag_str = f" - tags: {', '.join(pt.tags)}" if pt.tags else ""
+    print(f"Point r{args.row}c{args.col} ({label}){tag_str}")
+    for tech_name, tg in pt.techniques.items():
+        step_info = ""
+        if config.steps.get(tech_name):
+            step_info = f" [in {config.steps[tech_name]}/]"
+        print(f"  {tech_name}:{step_info}")
+        for i, fe in enumerate(tg.sorted_files()):
+            parts = [f"[{i + 1}]"]
+            if fe.sweep_type:
+                parts.append(fe.sweep_type)
+            parts.append(fe.file)
+            if fe.sweep:
+                s = fe.sweep[0]
+                parts.append(
+                    f"({s.get('direction', '?')}, "
+                    f"{s.get('sweep_rate_v_s', '?')} V/s, "
+                    f"{s.get('voltage_range', '?')} V)"
+                )
+            if fe.temperature is not None:
+                parts.append(f"({fe.temperature} K)")
+            print("    " + " ".join(parts))
+
+
+# ── Command: add ────────────────────────────────────────────
+
+
+def cmd_add(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+
+    if not args.file and not args.pattern:
+        cmd_add_fzf(args)
+        return
+        cmd_add_pattern(args)
+        return
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    technique = args.technique or _infer_technique(args.file)
+    if not technique:
+        print(
+            "Cannot determine technique. "
+            "Use --technique <name> to specify."
+        )
+        sys.exit(1)
+
+    pt = config.get_point(args.row, args.col)
+    if pt is None:
+        pt = MatrixPoint(row=args.row, col=args.col)
+        config.points.append(pt)
+    if technique not in pt.techniques:
+        pt.techniques[technique] = TechniqueGroup(technique=technique)
+    fe = FileEntry(
+        file=args.file,
+        sweep_order=args.sweep_order,
+        sweep_type=args.sweep_type,
+        temperature=getattr(args, "temperature", None),
+    )
+    pt.techniques[technique].files.append(fe)
+    _add_material_tag(pt, args.file)
+    write_devices(pdir, config)
+    print(f"Added {args.file} -> r{args.row}c{args.col}/{technique}")
+    set_last_step(pdir.name)
+
+
+def cmd_add_pattern(args: argparse.Namespace) -> None:
+    """Batch-assign files matching a regex pattern, recursive scan."""
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    try:
+        pattern = re.compile(args.pattern)
+    except re.error as e:
+        print(f"Invalid regex pattern: {e}")
+        sys.exit(1)
+
+    technique = args.technique or ""
+    sweep_type = args.sweep_type or None
+    assigned = set(config.file_map.keys())
+    all_files = _device_data_files_recursive(pdir)
+    unassigned = [(r, s, p) for r, s, p in all_files if p.name not in assigned]
+    matches: list[tuple[Path, int, int]] = []
+
+    for rel_path, step_name, fpath in unassigned:
+        m = pattern.search(fpath.name)
+        if m:
+            try:
+                row = int(m.group(1))
+                col = int(m.group(2))
+            except (IndexError, ValueError):
+                continue
+            if row >= config.device.rows or col >= config.device.cols:
+                print(f"  Skipping {rel_path}: position r{row}c{col} out of bounds")
+                continue
+            matches.append((fpath, row, col))
+
+    if not matches:
+        print("No files match pattern.")
+        return
+
+    tech = technique or _infer_technique(matches[0][0].name) or "iv"
+
+    print(f"\nPattern: {args.pattern}")
+    print(f"Technique: {tech}")
+    print(f"Matches: {len(matches)} file(s)")
+    print(f"  {'File':40s} {'Row':4s} {'Col':4s}")
+    print("  " + "-" * 55)
+    for f, r, c in matches:
+        print(f"  {f.name:40s} {r:4d} {c:4d}")
+
+    if args.dry_run:
+        print("\n[Dry run] No changes written.")
+        return
+
+    if not args.yes:
+        try:
+            ok = input("\nApply these assignments? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            ok = ""
+        if ok != "y":
+            print("Cancelled.")
+            return
+
+    for f, r, c in matches:
+        pt = config.get_point(r, c)
+        if pt is None:
+            pt = MatrixPoint(row=r, col=c)
+            config.points.append(pt)
+        if tech not in pt.techniques:
+            pt.techniques[tech] = TechniqueGroup(technique=tech)
+        fe = FileEntry(file=f.name, sweep_type=sweep_type)
+        pt.techniques[tech].files.append(fe)
+        _add_material_tag(pt, f.name)
+
+    write_devices(pdir, config)
+    print(f"Added {len(matches)} file(s) via pattern.")
+    set_last_step(pdir.name)
+
+
+def cmd_add_fzf(args: argparse.Namespace) -> None:
+    """Interactive fzf file picker — scans all step subdirs recursively."""
+    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    assigned = set(config.file_map.keys())
+    all_files = _device_data_files_recursive(pdir)
+    unassigned = [(r, s, p) for r, s, p in all_files if p.name not in assigned]
+
+    if not unassigned:
+        print("No unassigned data files found.")
+        return
+
+    proto_name = pdir.name
+    display_names = [build_fzf_display(proto_name, step_name, rel, show_protocol=False) for rel, step_name, _ in unassigned]
+
+    selected = fzf_select(
+        items=display_names,
+        prompt=f"{proto_name} | Select data files to assign >",
+        multi=True,
+    )
+    if not selected:
+        print("No files selected.")
+        return
+
+    # Build a lookup from display name → (rel_path, step, path)
+    lookup = {}
+    for rel, step, path in unassigned:
+        display_key = build_fzf_display(proto_name, step, rel, show_protocol=False)
+        lookup[display_key] = (rel, step, path)
+
+    assignments = []
+    for display in selected:
+        rel_path, step_name, fpath = lookup[display]
+        # Try canonical parser first, fall back to legacy parser
+        canonical = parse_canonical_filename(fpath.name)
+        if canonical:
+            tech = canonical["technique_mapped"] or _infer_technique(fpath.name) or "iv"
+            row = args.row if args.row is not None else canonical["row"]
+            col = args.col if args.col is not None else canonical["col"]
+            sweep_type = canonical["sweep_type"]
+        else:
+            meta = _parse_filename_metadata(fpath.name)
+            tech = meta["technique"] or _infer_technique(fpath.name) or "iv"
+            row = args.row if args.row is not None else (meta["row"] or 0)
+            col = args.col if args.col is not None else (meta["col"] or 0)
+            sweep_type = meta["sweep_type"]
+        assignments.append({
+            "file": fpath.name,
+            "row": row,
+            "col": col,
+            "technique": tech,
+            "sweep_type": sweep_type,
+            "step_name": step_name,
+            "fpath": fpath,
+        })
+
+    print("\nAssignments:")
+    print(f"  {'File':30s} {'Row':4s} {'Col':4s} {'Technique':12s} {'Type'}")
+    print("  " + "-" * 65)
+    for a in assignments:
+        st = a["sweep_type"] or "-"
+        print(f"  {a['file']:30s} {a['row']:4d} {a['col']:4d} {a['technique']:12s} {st}")
+
+    try:
+        ok = input("\nApply these assignments? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        ok = ""
+    if ok != "y":
+        print("Cancelled.")
+        return
+
+    for a in assignments:
+        pt = config.get_point(a["row"], a["col"])
+        if pt is None:
+            pt = MatrixPoint(row=a["row"], col=a["col"])
+            config.points.append(pt)
+        if a["technique"] not in pt.techniques:
+            pt.techniques[a["technique"]] = TechniqueGroup(technique=a["technique"])
+        fe = FileEntry(file=a["file"], sweep_type=a["sweep_type"])
+        pt.techniques[a["technique"]].files.append(fe)
+        _add_material_tag(pt, a["file"])
+
+    write_devices(pdir, config)
+    print(f"Added {len(assignments)} file(s).")
+
+    # Auto-sync sweep metadata if --sync flag was passed
+    if getattr(args, "sync", False):
+        from science_cli.core.sweep_metadata import extract_sweep_from_file
+
+        synced_count = 0
+        for a in assignments:
+            pt = config.get_point(a["row"], a["col"])
+            if pt is None:
+                continue
+            tg = pt.techniques.get(a["technique"])
+            if tg is None:
+                continue
+            # Find the FileEntry we just added (match by filename)
+            for fe in tg.files:
+                if fe.file == a["file"]:
+                    fpath = config.resolve_file_path(
+                        pdir, a["technique"], a["file"]
+                    )
+                    segments = extract_sweep_from_file(str(fpath))
+                    if segments:
+                        fe.sweep = segments
+                        synced_count += 1
+                    break
+
+        if synced_count > 0:
+            write_devices(pdir, config)
+            print(f"Auto-synced sweep metadata for {synced_count} file(s).")
+
+    set_last_step(pdir.name)
+
+
+# ── Command: rm ─────────────────────────────────────────────
+
+
+def cmd_rm(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    pt = config.get_point(args.row, args.col)
+    if pt is None:
+        print(f"No point at r{args.row}c{args.col}")
+        sys.exit(1)
+
+    technique = args.technique or (
+        _infer_technique(args.file) if args.file else ""
+    )
+
+    if args.file:
+        if not technique or technique not in pt.techniques:
+            print(f"No technique '{technique}' at r{args.row}c{args.col}")
+            sys.exit(1)
+        tg = pt.techniques[technique]
+        before = len(tg.files)
+        tg.files = [f for f in tg.files if f.file != args.file]
+        removed = before - len(tg.files)
+        if removed == 0:
+            print(f"File '{args.file}' not found in r{args.row}c{args.col}/{technique}")
+            sys.exit(1)
+        if not tg.files:
+            del pt.techniques[technique]
+    elif technique:
+        if technique not in pt.techniques:
+            print(f"No technique '{technique}' at r{args.row}c{args.col}")
+            sys.exit(1)
+        del pt.techniques[technique]
+    else:
+        if not args.confirm:
+            print(f"Use --confirm to remove entire point r{args.row}c{args.col}")
+            sys.exit(1)
+        config.points = [
+            p for p in config.points
+            if not (p.row == args.row and p.col == args.col)
+        ]
+
+    write_devices(pdir, config)
+    print(f"Removed from r{args.row}c{args.col}")
+    set_last_step(pdir.name)
+
+
+# ── Reconcile helper ────────────────────────────────────────
+
+
+def _reconcile_protocol_yaml(pdir: Path) -> dict:
+    """Reconcile protocol YAML step file lists with actual files on disk.
+
+    Reads the protocol YAML (``<protocol>.yaml``), scans each step directory,
+    and updates the YAML's ``steps[].files[]`` to match current disk contents.
+
+    - Files in YAML but not on disk → removed from YAML
+    - Files on disk but not in YAML → appended as plain strings (no sweep metadata)
+    - Sweep metadata for removed files is discarded (identity may have changed)
+
+    Returns dict with keys: steps_found, added, removed, errors
+    """
+    import yaml
+
+    proto_yaml_path = pdir / f"{pdir.name}.yaml"
+    if not proto_yaml_path.exists():
+        return {"steps_found": 0, "added": 0, "removed": 0, "errors": ["protocol YAML not found"]}
+
+    with open(proto_yaml_path) as f:
+        proto_data = yaml.safe_load(f) or {}
+
+    from science_cli.library.memristor.db import DATA_SUFFIXES
+
+    total_added = 0
+    total_removed = 0
+    errors: list[str] = []
+
+    for step in proto_data.get("steps", []):
+        step_name = step.get("name", "")
+        if not step_name:
+            continue
+
+        step_dir = pdir / step_name
+        disk_files: set[str] = set()
+        if step_dir.is_dir():
+            for entry in step_dir.iterdir():
+                if not entry.is_file():
+                    continue
+                if entry.name.startswith("."):
+                    continue
+                if entry.suffix.lower() not in DATA_SUFFIXES:
+                    continue
+                disk_files.add(entry.name)
+
+        # Extract filenames from YAML entries (dict → "file" key, or plain string)
+        yaml_entries = step.get("files", [])
+        yaml_names: dict[str, str | dict] = {}
+        for entry in yaml_entries:
+            if isinstance(entry, dict):
+                fname = entry.get("file", "")
+                if fname:
+                    yaml_names[fname] = entry
+            elif isinstance(entry, str):
+                yaml_names[entry] = entry
+
+        yaml_files = set(yaml_names.keys())
+
+        to_remove = yaml_files - disk_files
+        to_add = disk_files - yaml_files
+
+        if not to_remove and not to_add:
+            continue
+
+        total_removed += len(to_remove)
+        total_added += len(to_add)
+
+        # Build new files list: keep existing entries, remove stale, add new
+        new_files: list = []
+        for entry in yaml_entries:
+            fname = entry["file"] if isinstance(entry, dict) else entry
+            if fname not in to_remove:
+                new_files.append(entry)
+
+        for fname in sorted(to_add):
+            new_files.append(fname)
+
+        step["files"] = new_files
+
+    if total_added > 0 or total_removed > 0:
+        with open(proto_yaml_path, "w") as f:
+            yaml.dump(proto_data, f, default_flow_style=False, sort_keys=False)
+
+    return {
+        "steps_found": len(proto_data.get("steps", [])),
+        "added": total_added,
+        "removed": total_removed,
+        "errors": errors,
+    }
+
+
+# ── Command: sync ───────────────────────────────────────────
+
+
+def _sync_one_protocol(
+    conn: sqlite3.Connection,
+    proj: Path,
+    protocol_name: str,
+    pdir: Path,
+    reconcile: bool,
+    force: bool = False,
+) -> dict:
+    """Sync a single protocol: populate SQLite, prune, sweep-to-yaml.
+
+    Returns the reconcile report (or empty dict if no reconcile).
+    Side effects: prints per-protocol output.
+    """
+    from science_cli.library.memristor.db import (
+        DATA_SUFFIXES,
+        MEMRISTOR_TECHNIQUES,
+        populate_protocol_from_step_dirs,
+        prune_stale_files,
+    )
+
+    # ── Phase 1: Reconcile protocol YAML (if --reconcile) ──
+    reconcile_report = None
+    if reconcile:
+        reconcile_report = _reconcile_protocol_yaml(pdir)
+        if reconcile_report["errors"]:
+            for err in reconcile_report["errors"]:
+                print(f"  [YAML] {err}")
+
+    # ── Phase 2: Force reset (if --force) ──
+    if force:
+        deleted = conn.execute(
+            "DELETE FROM files WHERE protocol = ?", (protocol_name,)
+        ).rowcount
+        print(f"  Force: cleared {deleted} stale file(s)")
+
+    # ── Phase 3: Populate SQLite from grammar (disk scan) ──
+    report = populate_protocol_from_step_dirs(
+        conn, protocol=protocol_name, project_root=proj,
+    )
+
+    # ── Phase 4: Prune stale DB entries (if --reconcile) ──
+    pruned_total = 0
+    if reconcile_report:
+        step_techniques: dict[str, str] = {}
+        try:
+            import yaml as _yaml
+            yaml_path = pdir / f"{protocol_name}.yaml"
+            if yaml_path.is_file():
+                with open(yaml_path) as _f:
+                    _data = _yaml.safe_load(_f)
+                for _s in (_data.get("steps") or []):
+                    if isinstance(_s, dict):
+                        step_techniques[_s.get("name", "")] = _s.get("technique", "")
+        except Exception:
+            pass
+
+        for step_name in sorted(
+            d.name for d in pdir.iterdir()
+            if d.is_dir() and not d.name.startswith(".")
+        ):
+            technique = step_techniques.get(step_name, "")
+            if technique and technique not in MEMRISTOR_TECHNIQUES:
+                continue
+            step_dir = pdir / step_name
+            disk_files = set()
+            if step_dir.is_dir():
+                for entry in step_dir.iterdir():
+                    if not entry.is_file():
+                        continue
+                    if entry.name.startswith("."):
+                        continue
+                    if entry.suffix.lower() not in DATA_SUFFIXES:
+                        continue
+                    disk_files.add(entry.name)
+            pruned_total += prune_stale_files(conn, protocol_name, step_name, disk_files)
+
+    # ── Phase 5: Sync sweep metadata back to protocol YAML ──
+    from science_cli.library.memristor.device import sync_sweep_to_protocol_yaml
+    sweep_report = sync_sweep_to_protocol_yaml(pdir, conn)
+    if sweep_report.get("files_updated", 0) > 0:
+        print(f"  Sweep metadata synced: {sweep_report['files_updated']} file(s)")
+
+    # ── Report ──
+    if reconcile_report:
+        print(f"  Reconcile: {reconcile_report['steps_found']} steps, "
+              f"{reconcile_report['added']} added, "
+              f"{reconcile_report['removed']} removed, "
+              f"{pruned_total} pruned")
+
+    print(f"  Steps: {report['steps_found']} | Files: {report['total_files']} | "
+          f"Matched: {report['total_matched']} | Inserted: {report['total_inserted']}")
+    if report['errors']:
+        for err in report['errors'][:5]:
+            print(f"    - {err}")
+
+    return reconcile_report or {}
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    """Sync: pure filename parsing — scan step dirs, parse filenames via grammar, populate SQLite.
+
+    Does NOT read CSV content. Does NOT compute Vset/Vreset.
+    Use 'memristor analyze' for CSV-based computation.
+
+    With ``--reconcile`` / ``-r``: also reconcile the protocol YAML's
+    file list with actual files on disk, then prune stale SQLite entries.
+
+    With ``--all`` / ``-A``: sync ALL protocols in the current project.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import close_db, open_db, rebuild_cells
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    reconcile = getattr(args, "reconcile", False)
+    force = getattr(args, "force", False)
+
+    # ── --all mode: iterate every protocol in the project ──
+    if getattr(args, "all", False):
+        from science_cli.core.paths import ProjectPaths
+        ppaths = ProjectPaths(proj)
+        protocols = ppaths.protocol_names()
+        if not protocols:
+            print("No protocols found in project.")
+            return
+
+        conn = open_db(proj)
+        try:
+            for protocol_name in protocols:
+                pdir = proj / "protocol" / protocol_name
+                if not pdir.exists():
+                    print(f"  Skipping '{protocol_name}' — directory not found.")
+                    continue
+                print(f"\n── Syncing '{protocol_name}' ──")
+                _sync_one_protocol(conn, proj, protocol_name, pdir, reconcile,
+                                   force=force)
+
+            rebuild_cells(conn)
+            conn.commit()
+            print(f"\nAll protocols synced to {proj.name}.db")
+        except Exception as e:
+            conn.rollback()
+            print(f"  Sync (--all) failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            close_db(conn)
+        return
+
+    # ── Single-protocol mode (default) ──
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+
+    protocol_name = pdir.name
+
+    conn = open_db(proj)
+    try:
+        _sync_one_protocol(conn, proj, protocol_name, pdir, reconcile,
+                           force=force)
+        rebuild_cells(conn)
+        conn.commit()
+        print(f"  SQLite cache updated: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"  Sync failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
+
+    set_last_step(pdir.name)
+
+
+# ── SQLite sync helpers ─────────────────────────────────────
+
+
+def _sqlite_sync_from_yaml(pdir: Path) -> None:
+    """Write current devices.yaml contents into the SQLite cache."""
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import (
+        close_db,
+        insert_file,
+        open_db,
+        rebuild_cells,
+        upsert_protocol,
+    )
+    from science_cli.library.memristor.device import extract_material_batch, read_devices
+
+    proj = get_current_project_path()
+    if not proj:
+        return
+
+    config = read_devices(pdir)
+    if not config:
+        return
+
+    conn = open_db(proj)
+    protocol_name = pdir.name
+    try:
+        # Upsert protocol info
+        upsert_protocol(
+            conn, protocol_name,
+            label=config.device.label,
+            rows=config.device.rows,
+            cols=config.device.cols,
+            materials=json.dumps(
+                sorted(set(
+                    extract_material_batch(fe.file)[0] if extract_material_batch(fe.file) else "unknown"
+                    for pt in config.points
+                    for tg in pt.techniques.values()
+                    for fe in tg.files
+                ))
+            ),
+        )
+
+        # For each point+file, insert into files table
+        for pt in config.points:
+            for tech_name, tg in pt.techniques.items():
+                step_name = config.steps.get(tech_name, "")
+                for fe in tg.files:
+                    # Parse material from filename
+                    mb = extract_material_batch(fe.file)
+                    material = mb[0] if mb else "unknown"
+
+                    # Extract row/col from point
+                    row = pt.row
+                    col = pt.col
+
+                    # Extract plot filename from extra
+                    plot_figure_path = fe.extra.get("plot", None)
+
+                    # Determine mtime from filesystem
+                    try:
+                        fpath = config.resolve_file_path(pdir, tech_name, fe.file)
+                        mtime_str = (
+                            datetime.fromtimestamp(
+                                fpath.stat().st_mtime, tz=timezone.utc
+                            ).isoformat()
+                        )
+                        file_size = fpath.stat().st_size
+                    except OSError:
+                        mtime_str = ""
+                        file_size = 0
+
+                    insert_file(
+                        conn,
+                        protocol=protocol_name,
+                        step=step_name,
+                        filename=fe.file,
+                        technique=tech_name,
+                        material=material,
+                        row=row,
+                        col=col,
+                        cycle_index=fe.sweep_order,
+                        file_size=file_size,
+                        mtime=mtime_str,
+                        plot_figure_path=plot_figure_path,
+                    )
+
+        # Rebuild cells from files
+        rebuild_cells(conn)
+        conn.commit()
+        print(f"  SQLite cache updated: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"  SQLite cache write failed: {e}", file=sys.stderr)
+    finally:
+        close_db(conn)
+
+
+def _sqlite_reindex(pdir: Path) -> None:
+    """Reindex SQLite from YAML only (no CSV re-read).
+
+    Reads devices.yaml and repopulates the SQLite database.
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import (
+        close_db,
+        insert_file,
+        open_db,
+        rebuild_cells,
+        upsert_protocol,
+    )
+    from science_cli.library.memristor.device import extract_material_batch, read_devices
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    config = read_devices(pdir)
+    if not config:
+        print(f"No device configuration found in {pdir}")
+        sys.exit(1)
+
+    conn = open_db(proj)
+    protocol_name = pdir.name
+    try:
+        # Upsert protocol info
+        upsert_protocol(
+            conn, protocol_name,
+            label=config.device.label,
+            rows=config.device.rows,
+            cols=config.device.cols,
+            materials=json.dumps(
+                sorted(set(
+                    extract_material_batch(fe.file)[0] if extract_material_batch(fe.file) else "unknown"
+                    for pt in config.points
+                    for tg in pt.techniques.values()
+                    for fe in tg.files
+                ))
+            ),
+        )
+
+        # For each point+file, insert into files table
+        for pt in config.points:
+            for tech_name, tg in pt.techniques.items():
+                step_name = config.steps.get(tech_name, "")
+                for fe in tg.files:
+                    mb = extract_material_batch(fe.file)
+                    material = mb[0] if mb else "unknown"
+
+                    plot_figure_path = fe.extra.get("plot", None)
+
+                    try:
+                        fpath = config.resolve_file_path(pdir, tech_name, fe.file)
+                        mtime_str = (
+                            datetime.fromtimestamp(
+                                fpath.stat().st_mtime, tz=timezone.utc
+                            ).isoformat()
+                        )
+                        file_size = fpath.stat().st_size
+                    except OSError:
+                        mtime_str = ""
+                        file_size = 0
+
+                    insert_file(
+                        conn,
+                        protocol=protocol_name,
+                        step=step_name,
+                        filename=fe.file,
+                        technique=tech_name,
+                        material=material,
+                        row=pt.row,
+                        col=pt.col,
+                        cycle_index=fe.sweep_order,
+                        file_size=file_size,
+                        mtime=mtime_str,
+                        plot_figure_path=plot_figure_path,
+                    )
+
+        rebuild_cells(conn)
+        conn.commit()
+        print(f"SQLite reindex complete: {proj.name}.db")
+    except Exception as e:
+        conn.rollback()
+        print(f"SQLite reindex failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
+
+
+# ── Command: analyze ────────────────────────────────────────
+
+
+def _analyze_protocol(
+    conn: sqlite3.Connection,
+    proj: Path,
+    protocol_name: str,
+    step_filter: str = "",
+    force: bool = False,
+    single_file: str = "",
+) -> dict:
+    """Analyze all files in one protocol: read CSV, extract IV params, update DB.
+
+    Returns dict with: protocol, total, analyzed, skipped, errors.
+    """
+    from science_cli.library.memristor.db import query_files, update_file_analysis
+    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.memristor.switching import extract_iv_parameters
+
+    pdir = proj / "protocol" / protocol_name
+    if not pdir.exists():
+        return {"protocol": protocol_name, "total": 0, "analyzed": 0, "skipped": 0, "errors": 0,
+                "message": "directory not found"}
+
+    files = query_files(conn, protocol=protocol_name)
+    target_files = [f for f in files if not f.get("parse_error")]
+
+    if not target_files:
+        return {"protocol": protocol_name, "total": 0, "analyzed": 0, "skipped": 0, "errors": 0,
+                "message": "no parseable files"}
+
+    analyzed = 0
+    skipped = 0
+    errors = 0
+
+    for fentry in target_files:
+        step = fentry["step"]
+        filename = fentry["filename"]
+
+        # Step filter
+        if step_filter and step != step_filter:
+            skipped += 1
+            continue
+
+        # Single-file filter
+        if single_file and filename != single_file:
+            skipped += 1
+            continue
+
+        # Skip if already analyzed (unless --force)
+        # compliance_confidence is always set after analysis, even when
+        # no switching is detected (v_set remains NULL).
+        if not force and fentry.get("compliance_confidence") is not None:
+            skipped += 1
+            continue
+
+        # Resolve file path
+        filepath = pdir / step / filename
+        if not filepath.exists():
+            skipped += 1
+            continue
+
+        try:
+            voltage, current, info = read_iv_csv(str(filepath))
+            params = extract_iv_parameters(voltage, current)
+        except Exception as exc:
+            print(f"  [ERR]  {protocol_name}/{step}/{filename}: {exc}")
+            # Mark as failed so it won't be retried
+            update_file_analysis(
+                conn,
+                protocol=protocol_name,
+                step=step,
+                filename=filename,
+                compliance_confidence="error",
+            )
+            errors += 1
+            continue
+
+        update_file_analysis(
+            conn,
+            protocol=protocol_name,
+            step=step,
+            filename=filename,
+            v_set=params.get("v_set"),
+            v_reset=params.get("v_reset"),
+            i_set=params.get("i_set"),
+            i_reset=params.get("i_reset"),
+            on_off_ratio=params.get("on_off_ratio"),
+            current_compliance=params.get("compliance"),
+            compliance_confidence="high" if params.get("switching_detected") else "low",
+        )
+        analyzed += 1
+
+    return {
+        "protocol": protocol_name,
+        "total": len(target_files),
+        "analyzed": analyzed,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+def cmd_analyze(args: argparse.Namespace) -> None:
+    """Analyze: read CSVs, compute Vset/Vreset/ratio/compliance, update SQLite.
+
+    Depends on 'memristor sync' having populated the metadata.
+
+    Modes:
+        --all: analyze ALL protocols in the database.
+        --pt <name>: analyze a specific protocol by name.
+        (default): analyze the current session protocol.
+        --step <name>: filter to a specific step within the protocol(s).
+    """
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import close_db, open_db
+
+    proj = get_current_project_path()
+    if not proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    force = getattr(args, "force", False)
+    single_file = getattr(args, "file", "") or ""
+    step_filter = getattr(args, "step", "") or ""
+
+    conn = open_db(proj)
+
+    try:
+        # ── --all mode: analyze all protocols in DB ──
+        if getattr(args, "all", False):
+            protocol_rows = conn.execute(
+                "SELECT DISTINCT protocol FROM files ORDER BY protocol"
+            ).fetchall()
+            if not protocol_rows:
+                print("No protocols found in database. Run 'memristor sync --all' first.")
+                close_db(conn)
+                return
+
+            protocols = [r[0] for r in protocol_rows]
+            results: list[dict] = []
+            for pt in protocols:
+                print(f"\n── Analyzing '{pt}' ──")
+                r = _analyze_protocol(conn, proj, pt, step_filter, force, single_file)
+                results.append(r)
+
+            conn.commit()
+            print("\n── Analyze (--all) complete ──")
+            total_a = sum(r["analyzed"] for r in results)
+            total_s = sum(r["skipped"] for r in results)
+            total_e = sum(r["errors"] for r in results)
+            for r in results:
+                msg = f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped"
+                if r.get("message"):
+                    msg += f" ({r['message']})"
+                print(msg)
+            print(f"  TOTAL: {total_a} analyzed, {total_s} skipped, {total_e} errors")
+
+        # ── --pt mode: analyze a named protocol ──
+        elif getattr(args, "protocol", "") or getattr(args, "pt", ""):
+            protocol_name = getattr(args, "protocol", "") or getattr(args, "pt", "")
+            pdir = proj / "protocol" / protocol_name
+            if not pdir.exists():
+                print(f"Protocol directory not found: {pdir}")
+                sys.exit(1)
+            print(f"\n── Analyzing '{protocol_name}' ──")
+            r = _analyze_protocol(conn, proj, protocol_name, step_filter, force, single_file)
+            conn.commit()
+            print(f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped, {r['errors']} errors")
+
+        # ── Default: session protocol ──
+        else:
+            pdir = _resolve_protocol_dir(args)
+            if not _validate_protocol_dir(pdir):
+                sys.exit(1)
+            protocol_name = pdir.name
+            print(f"\n── Analyzing '{protocol_name}' ──")
+            r = _analyze_protocol(conn, proj, protocol_name, step_filter, force, single_file)
+            conn.commit()
+            print(f"  {r['protocol']}: {r['analyzed']} analyzed, {r['skipped']} skipped, {r['errors']} errors")
+            set_last_step(pdir.name)
+
+    except Exception as e:
+        conn.rollback()
+        print(f"  Analyze failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        close_db(conn)
+
+
+# ── Command: validate ───────────────────────────────────────
+
+
+def cmd_validate(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+    issues = validate_config(config, protocol_dir=pdir)
+    if not issues:
+        print("No issues found.")
+    else:
+        print(f"Found {len(issues)} issue(s):")
+        for issue in issues:
+            print(f"  - {issue}")
+        sys.exit(1)
+
+
+# ── Command: stats ──────────────────────────────────────────
+
+
+def cmd_stats(args: argparse.Namespace) -> None:
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    if config is None:
+        print(f"No device configuration found in {pdir}")
+        sys.exit(1)
+
+    total = config.device.total_cells
+    print(f"Device: {config.device.id} ({config.device.label})")
+    print(f"Geometry: {config.device.rows} rows x {config.device.cols} cols = {total} cells")
+    print(f"Measured cells: {config.measured_cells}/{total} ({100 * config.measured_cells / total:.1f}%)")
+    print("Technique coverage:")
+    for tech, count in sorted(config.technique_coverage.items()):
+        pct = 100 * count / total
+        print(f"  {tech}: {count}/{total} ({pct:.1f}%)")
+    print(f"Total data files: {config.total_files}")
+    if config.steps:
+        print(f"Steps mapping: {dict(config.steps)}")
+    if config.missing_cells:
+        missing_str = ", ".join(f"r{r}c{c}" for r, c in sorted(config.missing_cells))
+        print(f"Missing cells: [{missing_str}]")
+
+    # ── Per-material breakdown ────────────────────────────────
+    material_groups = config.get_points_by_material()
+    if material_groups:
+        print("\nIV coverage by material:")
+        for mat_key in sorted(material_groups.keys()):
+            points = material_groups[mat_key]
+            iv_points = [p for p in points if p.has_technique("iv")]
+            sorted_iv = sorted(iv_points, key=lambda p: (p.row, p.col))
+            positions_str = ", ".join(f"r{p.row}c{p.col}" for p in sorted_iv)
+            print(f"  {mat_key}: {len(iv_points):3d} cell(s)  ({positions_str})")
+
+
+# ── Command: check ──────────────────────────────────────────
+
+
+def cmd_check(args: argparse.Namespace) -> None:
+    """Find data files not tracked in device configuration (recursive scan)."""
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+
+    orphans = find_orphaned_files(pdir)
+    if not orphans:
+        print("All files are assigned in device configuration.")
+        return
+
+    if args.list:
+        print(f"Unassigned files ({len(orphans)}):")
+        for fn in orphans:
+            print(f"  {fn}")
+    else:
+        print(f"Found {len(orphans)} unassigned file(s).")
+        print("Use 'memristor check --list' to see them.")
+        print("Use 'memristor add --fzf' to assign interactively.")
+        print("Use 'memristor add --pattern <regex>' for batch assignment.")
+
+    sys.exit(1)
+
+
+# ── Command: plot ───────────────────────────────────────────
+
+
+def cmd_plot(args: argparse.Namespace) -> None:
+    """Batch-generate IV curve SVGs from devices.yaml."""
+    from science_cli.library.memristor.plotting import (
+        build_fzf_line,
+        build_plot_filename,
+        build_plot_title,
+        collect_iv_files,
+        generate_iv_overlay_svg,
+        generate_iv_svg,
+        read_iv_csv,
+    )
+
+    pdir = _resolve_protocol_dir(args)
+    if not _validate_protocol_dir(pdir):
+        sys.exit(1)
+    config = read_devices(pdir)
+
+    # ── Issue 1: Auto-sync if no sweep metadata found ──
+    total_sweep = sum(1 for _, fe in config.get_all_files("iv") if fe.sweep)
+    if total_sweep == 0:
+        print("No sweep metadata found. Running sync first...")
+        sync_devices(pdir)
+        config = read_devices(pdir)
+        if config is None:
+            print("Failed to re-read device configuration after sync.")
+            sys.exit(1)
+
+    # Collect all IV files
+    row_filter = args.row if getattr(args, "row", None) is not None else None
+    col_filter = args.col if getattr(args, "col", None) is not None else None
+    material_filter = getattr(args, "material", "") or ""
+
+    targets = collect_iv_files(config, material=material_filter, row=row_filter, col=col_filter)
+
+    if not targets:
+        print("No IV files found in devices.yaml.")
+        return
+
+    # Default to fzf when no specific filter flags given
+    use_fzf = not material_filter and row_filter is None and col_filter is None
+    if use_fzf:
+        from science_cli.core.fzf_utils import fzf_select
+
+        display_map: dict[str, dict] = {}
+        display_lines: list[str] = []
+        for t in targets:
+            line = build_fzf_line(t, protocol=pdir.name)
+            display_lines.append(line)
+            display_map[line] = t
+
+        selected_lines = fzf_select(
+            items=display_lines,
+            prompt=f"{pdir.name} | Select IV files to plot >",
+            multi=True,
+        )
+        if not selected_lines:
+            print("No files selected.")
+            return
+
+        # Map back to targets
+        targets = [display_map[line] for line in selected_lines if line in display_map]
+
+    # Resolve results directory
+    step_dir_name = config.steps.get("iv", "4_iv-characterization")
+    results_dir = pdir / step_dir_name / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    overwrite = getattr(args, "overwrite", False)
+    dpi = getattr(args, "dpi", 150)
+
+    # Determine overlay vs individual mode
+    overlay_mode = getattr(args, "overlay", False)
+    all_mode = getattr(args, "plot_all", False)
+
+    if use_fzf and not overlay_mode and not all_mode and len(targets) > 1:
+        choice = input("  Overlay all (o) or individual plots (i)? [o/i] ").strip().lower()
+        if choice == "i":
+            all_mode = True
+        else:
+            overlay_mode = True
+
+    if overlay_mode and all_mode:
+        all_mode = False
+
+    plotted = 0
+    skipped = 0
+    errors = 0
+
+    if overlay_mode:
+        # ── Overlay mode: one plot with all traces ──
+        all_traces = []
+        for t in targets:
+            fe = t["file_entry"]
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                errors += 1
+                continue
+            title = build_plot_title(
+                order=t["order"],
+                sweep=fe.sweep,
+                sweep_type=t["sweep_type"],
+            )
+            metadata = {
+                "title": title,
+                "sweep": fe.sweep,
+                "sweep_type": fe.sweep_type,
+                "row": t["row"],
+                "col": t["col"],
+                "order": t["order"],
+                "label": fe.file,
+            }
+            all_traces.append((voltage, current, metadata))
+
+        if all_traces:
+            output_path = results_dir / "overlay.svg"
+            try:
+                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi)
+                plotted = len(all_traces)
+                print(f"  ✓ overlay.svg ({len(all_traces)} traces)")
+            except Exception as exc:
+                print(f"  Error generating overlay: {exc}")
+                errors += 1
+    else:
+        # ── Individual mode: one SVG per file ──
+        position_files: dict[tuple[int, int], list[dict]] = {}
+        for t in targets:
+            pos = (t["row"], t["col"])
+            position_files.setdefault(pos, []).append(t)
+        for pos, files in position_files.items():
+            files.sort(key=lambda x: x["order"])
+            for i, f in enumerate(files):
+                f["file_index"] = i
+
+        for t in targets:
+            fe = t["file_entry"]
+            plot_filename = fe.extra.get("plot", "")
+
+            if plot_filename and not overwrite:
+                existing = results_dir / plot_filename
+                if existing.exists():
+                    skipped += 1
+                    continue
+
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                errors += 1
+                continue
+
+            plot_filename = build_plot_filename(
+                row=t["row"],
+                col=t["col"],
+                material_key=t["material_key"],
+                sweep_type=t["sweep_type"],
+                order=t["order"],
+            )
+            title = build_plot_title(
+                order=t["order"],
+                sweep=fe.sweep,
+                sweep_type=t["sweep_type"],
+            )
+
+            metadata = {
+                "title": title,
+                "sweep": fe.sweep,
+                "sweep_type": fe.sweep_type,
+                "row": t["row"],
+                "col": t["col"],
+                "order": t["order"],
+                "file_index": t.get("file_index", 0),
+                "time": info.get("time"),
+            }
+
+            output_path = results_dir / plot_filename
+            try:
+                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi)
+            except Exception as exc:
+                print(f"  Error plotting {fe.file}: {exc}")
+                errors += 1
+                continue
+
+            fe.extra["plot"] = plot_filename
+            plotted += 1
+            print(f"  ✓ {plot_filename}")
+
+        if plotted > 0:
+            write_devices(pdir, config)
+
+    # Summary
+    if overlay_mode and plotted > 0:
+        print(f"\nPlotted: {plotted} | Errors: {errors}")
+        print(f"Results: {results_dir}/")
+    elif not overlay_mode:
+        if plotted > 0:
+            print(f"\nPlotted: {plotted} | Skipped (exists): {skipped} | Errors: {errors}")
+            print(f"Results: {results_dir}/")
+        else:
+            print(f"\nNo new plots generated. {skipped} already exist. Use --overwrite to regenerate.")
+
+    set_last_step(pdir.name)
+
+
+# ── Command: dashboard ──────────────────────────────────────
+
+
+def cmd_dashboard(args: argparse.Namespace) -> None:
+    """Generate per-protocol dashboards + main index page (default)."""
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.dashboard import generate_main_dashboard
+
+    sess = load_session()
+    last_proj = sess.get("last_project", "")
+    if not last_proj:
+        print("No project open. Use 'open -m project <path>' first.")
+        sys.exit(1)
+
+    project_dir = get_current_project_path()
+    if not project_dir or not project_dir.exists():
+        print(f"Project directory not found: {project_dir}")
+        sys.exit(1)
+
+    force = getattr(args, "force", False)
+    proto_filter = getattr(args, "protocol", "") or ""
+
+    # Ensure results dir exists
+    results_dir = project_dir / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = Path(args.output) if args.output else results_dir / "dashboard.html"
+
+    try:
+        out = generate_main_dashboard(
+            project_dir,
+            output_path,
+            protocol_filter=proto_filter,
+            force=force,
+        )
+        print(f"Main dashboard generated: {out}")
+        if getattr(args, "open", False):
+            import subprocess
+            subprocess.run(["open", str(out)], check=False)
+    except Exception as exc:
+        print(f"Error generating dashboard: {exc}")
+        sys.exit(1)
+
+
+# ── CLI entry point ─────────────────────────────────────────
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Crossbar device manager for memristor characterization"
+    )
+    sub = parser.add_subparsers(dest="command")
+    sub.required = True
+
+    p_init = sub.add_parser("init", help="Scaffold device geometry in protocol YAML")
+    p_init.add_argument("--rows", type=int, default=None)
+    p_init.add_argument("--cols", type=int, default=None)
+    p_init.add_argument("--matrix", default="",
+        help="Shorthand: --matrix r6-c6 (sets rows=6, cols=6)")
+    p_init.add_argument("--label", default="")
+    p_init.add_argument(
+        "--pt", "--protocol",
+        dest="protocol_name",
+        default="",
+        help="Protocol name (default: current session protocol)",
+    )
+    p_init.add_argument(
+        "--steps", default="",
+        help="Step dirs: 4_iv-characterization or iv:4_iv,endurance:5_end",
+    )
+    p_init.set_defaults(func=cmd_init)
+
+    p_ls = sub.add_parser("ls", help="List devices or matrix map")
+    p_ls.add_argument("--step-dir", default="")
+    p_ls.add_argument("--matrix", action="store_true", help="Grid view (per-material when data tagged)")
+    p_ls.add_argument("--technique", default="", help="Filter by technique (e.g., iv)")
+    p_ls.add_argument("--material", default="", help="Filter by material+batch (e.g., Ta-PDAc-ITO(1))")
+    p_ls.set_defaults(func=cmd_ls)
+
+    p_info = sub.add_parser("info", help="Show point details")
+    p_info.add_argument("--row", type=int, required=True)
+    p_info.add_argument("--col", type=int, required=True)
+    p_info.add_argument("--step-dir", default="")
+    p_info.set_defaults(func=cmd_info)
+
+    p_add = sub.add_parser("add", help="Add file(s) to a point")
+    p_add.add_argument("--row", type=int, default=None)
+    p_add.add_argument("--col", type=int, default=None)
+    p_add.add_argument("--technique", default="", help="Technique (inferred from filename)")
+    p_add.add_argument("--file", default="")
+    p_add.add_argument("--sweep-order", type=int, default=None)
+    p_add.add_argument("--sweep-type", default=None)
+    p_add.add_argument("--temperature", type=float, default=None)
+    p_add.add_argument("--step-dir", default="")
+    p_add.add_argument(
+        "--pattern", default="",
+        help="Regex for batch: r(\\d+)c(\\d+) groups 1=row, 2=col",
+    )
+    p_add.add_argument("--dry-run", action="store_true", help="Preview without writing")
+    p_add.add_argument("--yes", action="store_true", help="Skip confirmation")
+    p_add.add_argument("--sync", action="store_true", help="Auto-run sweep detection after assignment")
+    p_add.set_defaults(func=cmd_add)
+
+    p_rm = sub.add_parser("rm", help="Remove file, technique, or point")
+    p_rm.add_argument("--row", type=int, required=True)
+    p_rm.add_argument("--col", type=int, required=True)
+    p_rm.add_argument("--technique", default="", help="Technique (inferred from filename)")
+    p_rm.add_argument("--file", default="")
+    p_rm.add_argument("--confirm", action="store_true", help="Confirm entire point removal")
+    p_rm.add_argument("--step-dir", default="")
+    p_rm.set_defaults(func=cmd_rm)
+
+    p_matrix = sub.add_parser("matrix", help="Show device matrix from SQLite (no YAML required)")
+    p_matrix.add_argument("--step-dir", default="")
+    p_matrix.add_argument("--all", "-A", action="store_true",
+                          help="Show matrix for ALL protocols in the project")
+    p_matrix.add_argument("--material", default="", help="Filter by exact material name")
+    p_matrix.add_argument("--technique", default="", help="Filter by technique (e.g., iv-sweep)")
+    p_matrix.add_argument("--grid", default="",
+                          help="Force grid dimensions (e.g. r6-c6). Overrides protocol YAML.")
+    p_matrix.add_argument("--status", action="store_true",
+                          help="Show summary of what's loaded in the database")
+    p_matrix.set_defaults(func=cmd_matrix)
+
+    p_sync = sub.add_parser("sync", help="Sync sweep metadata")
+    p_sync.add_argument("--step-dir", default="")
+    p_sync.add_argument("--all", "-A", action="store_true",
+                        help="Sync ALL protocols in the current project")
+    p_sync.add_argument("--reindex", action="store_true", help="Reindex SQLite from YAML only (no CSV re-read)")
+    p_sync.add_argument("--reconcile", "-r", action="store_true",
+                        help="Reconcile protocol YAML file list with disk, then sync DB")
+    p_sync.add_argument("--force", "-F", action="store_true",
+                        help="Delete stale DB entries first, then re-scan from scratch")
+    p_sync.set_defaults(func=cmd_sync)
+
+    p_val = sub.add_parser("validate", help="Validate device config")
+    p_val.add_argument("--step-dir", default="")
+    p_val.set_defaults(func=cmd_validate)
+
+    p_stats = sub.add_parser("stats", help="Aggregate statistics")
+    p_stats.add_argument("--step-dir", default="")
+    p_stats.set_defaults(func=cmd_stats)
+
+    p_check = sub.add_parser("check", help="Find unassigned files (recursive)")
+    p_check.add_argument("--list", action="store_true", help="List unassigned files")
+    p_check.add_argument("--step-dir", default="")
+    p_check.set_defaults(func=cmd_check)
+
+    p_plot = sub.add_parser("plot", help="Generate IV curve SVGs from devices.yaml")
+    p_plot.add_argument("--step-dir", default="")
+    p_plot.add_argument("--overlay", action="store_true", help="Overlay all selected files in one plot")
+    p_plot.add_argument("--all", action="store_true", dest="plot_all", help="Export each file individually")
+    p_plot.add_argument("--material", default="", help="Plot files for a specific material+batch")
+    p_plot.add_argument("--row", type=int, default=None, help="Filter by matrix row")
+    p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")
+    p_plot.add_argument("--overwrite", action="store_true", help="Re-plot even if SVG already exists")
+    p_plot.add_argument("--dpi", type=int, default=150, help="SVG resolution (default: 150)")
+    p_plot.set_defaults(func=cmd_plot)
+
+    p_dash = sub.add_parser("dashboard", help="Generate per-protocol dashboards + main index page")
+    p_dash.add_argument("--step-dir", default="")
+    p_dash.add_argument("--output", default="", help="Custom output path (default: results/dashboard.html)")
+    p_dash.add_argument("--open", action="store_true", help="Open in browser after generation")
+    p_dash.add_argument("--pt", "--protocol", default="", dest="protocol",
+                        help="Single protocol name (e.g. 'batch-demo')")
+    p_dash.add_argument("--all", action="store_true", help="(default) Build all protocols — kept for compatibility")
+    p_dash.add_argument("--force", action="store_true", help="Force full re-generation, ignore cache")
+    p_dash.set_defaults(func=cmd_dashboard)
+
+    p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")
+    p_analyze.add_argument("--step-dir", default="")
+    p_analyze.add_argument("--all", "-A", action="store_true", help="Analyze all protocols in the database")
+    p_analyze.add_argument("--pt", "--protocol", default="", dest="protocol",
+                           help="Protocol name to analyze (e.g. '5_cu-c_ta-cu')")
+    p_analyze.add_argument("--step", default="", help="Filter to a specific step name (e.g. '4_iv')")
+    p_analyze.add_argument("--force", action="store_true", help="Re-analyze all files (ignore cached analysis)")
+    p_analyze.add_argument("--file", default="", help="Single-file re-analysis")
+    p_analyze.set_defaults(func=cmd_analyze)
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

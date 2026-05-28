@@ -1,0 +1,46 @@
+technique: mem-switching
+plot_type: line
+figure:
+  figsize: [3.54, 2.76]
+  dpi: 600
+  facecolor: white
+axes:
+  xlabel: "Voltage (V)"
+  ylabel: "Current (A)"
+  xlim: null
+  ylim: null
+  tick_direction: in
+  tick_length: 3
+  tick_width: 0.5
+  linewidth: 0.5
+  grid: false
+  aspect: auto
+defaults:
+  linewidth: 0.75
+  linestyle: "-"
+  color: "#000000"
+font:
+  family: Helvetica
+  label_size: 7
+  tick_size: 6
+  title_size: 8
+  legend_size: 6
+colors:
+  qualitative: ["#000000", "#D55E00", "#0072B2", "#009E73"]
+savefig:
+  format: pdf
+  dpi: 600
+  bbox_inches: tight
+  pad_inches: 0.05
+presets:
+  x_units: "V"
+  y_units: "A"
+  semi_log_y: false
+  cycle_count: 1
+  show_set_voltage: true
+  show_reset_voltage: true
+  show_rs_ratio: true
+  set_voltage_marker: "▲"
+  reset_voltage_marker: "▼"
+  compliance_current: null
+  annotate_switching_direction: true

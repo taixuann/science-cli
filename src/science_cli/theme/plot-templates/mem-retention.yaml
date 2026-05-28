@@ -1,0 +1,49 @@
+technique: mem-retention
+plot_type: scatter
+figure:
+  figsize: [3.54, 2.76]
+  dpi: 600
+  facecolor: white
+axes:
+  xlabel: "Time (s)"
+  ylabel: "Resistance (Ω)"
+  xlim: null
+  ylim: null
+  tick_direction: in
+  tick_length: 3
+  tick_width: 0.5
+  linewidth: 0.5
+  grid: false
+  aspect: auto
+defaults:
+  marker: "o"
+  markersize: 2
+  alpha: 0.6
+font:
+  family: Helvetica
+  label_size: 7
+  tick_size: 6
+  title_size: 8
+  legend_size: 6
+colors:
+  lrs: "#009E73"
+  hrs: "#D55E00"
+savefig:
+  format: pdf
+  dpi: 600
+  bbox_inches: tight
+  pad_inches: 0.05
+presets:
+  x_units: "s"
+  y_units: "Ω"
+  x_scale: log
+  y_scale: log
+  show_lrs: true
+  lrs_color: "#009E73"
+  show_hrs: true
+  hrs_color: "#D55E00"
+  show_extrapolation: true
+  extrapolation_linestyle: "--"
+  retention_end_time: 1e5
+  retention_threshold: 10
+  temperature: null

@@ -1,8 +1,0 @@
-technique: mem-endurance
-plot_type: line
-defaults:
-  linewidth: 1.2
-  linestyle: "-"
-labels:
-  xlabel: Cycle #
-  ylabel: Resistance (Ω)

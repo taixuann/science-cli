@@ -14,7 +14,7 @@ def setup_backend(interactive: bool = False):
         matplotlib.use("Agg")
 
 
-def create_figure(theme: str = "publication-acs", figsize: tuple | None = None) -> tuple:
+def create_figure(theme: str = "publication-nature", figsize: tuple | None = None) -> tuple:
     apply_theme(theme)
     fig, ax = plt.subplots(figsize=figsize)
     return fig, ax

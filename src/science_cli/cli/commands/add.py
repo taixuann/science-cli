@@ -226,13 +226,14 @@ def _add_metadata(args: list) -> None:
     techs = [t.strip() for t in techs_raw.split(",") if t.strip()] if techs_raw else []
     devs = [d.strip() for d in devs_raw.split(",") if d.strip()] if devs_raw else []
 
-    existing = {s["name"]: s for s in protocol.get("steps", [])}
     for i, sn in enumerate(step_names):
-        if sn in existing:
-            if i < len(techs):
-                existing[sn]["technique"] = techs[i]
-            if i < len(devs):
-                existing[sn]["device"] = devs[i]
+        found = [s for s in protocol.get("steps", []) if s["name"] == sn]
+        if found:
+            for s in found:
+                if i < len(techs):
+                    s["technique"] = techs[i]
+                if i < len(devs):
+                    s["device"] = devs[i]
         else:
             entry = {"name": sn}
             if i < len(techs):
@@ -259,11 +260,7 @@ def _add_metadata(args: list) -> None:
 def _add_data(args: list) -> None:
     _, flags = _parse_flags(args)
 
-    use_fzf = flags.get("fzf", False)
     use_all = flags.get("all", False)
-    if not use_fzf:
-        console.print("[yellow]Usage: add -m data --fzf [--all][/yellow]")
-        return
 
     from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()

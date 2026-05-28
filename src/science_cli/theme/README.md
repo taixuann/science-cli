@@ -4,31 +4,38 @@
 
 ```
 theme/
-├── __init__.py        ← Public API: MATCHA_COLORS, RICH_STYLES, get_matcha_questionary_style()
-├── registry.py        ← Theme/template loading, YAML parsing, rcParams conversion
-├── themes/            ← Global style themes
+├── __init__.py           ← Public API: MATCHA_COLORS, RICH_STYLES
+├── registry.py           ← Theme/template loading, YAML parsing, rcParams conversion
+├── plot-theme/           ← Global visual style themes (publication-nature is default)
 │   ├── default.yaml
-│   ├── matcha.yaml
 │   ├── tufte.yaml
 │   ├── dark.yaml
 │   ├── publication-acs.yaml
 │   ├── publication-nature.yaml
 │   └── poster.yaml
-└── templates/         ← Per-technique plot defaults
+└── plot-templates/       ← Per-technique plot presets (override global theme)
     ├── iv-sweep.yaml
+    ├── iv-breakdown.yaml
+    ├── iv-leakage.yaml
     ├── ec-cv.yaml
     ├── ec-ca.yaml
     ├── ec-eis.yaml
-    └── ...
+    ├── mem-switching.yaml
+    ├── mem-endurance.yaml
+    ├── mem-retention.yaml
+    ├── raman.yaml
+    └── uv-vis.yaml
 ```
 
 ## Three-Tier System
 
 | Tier | Purpose | Location | Controls |
 |------|---------|----------|----------|
-| **Theme** | Global visual style | `themes/*.yaml` | Colors, fonts, figure size, DPI, grid, spines |
-| **Template** | Per-technique defaults | `templates/*.yaml` | Linewidth, marker, axis labels, scale |
+| **Plot Theme** | Global visual style | `plot-theme/*.yaml` | Colors, fonts, figure size, DPI, grid, spines |
+| **Plot Template** | Per-technique defaults | `plot-templates/*.yaml` | Linewidth, marker, axis labels, scale, aspect |
 | **Plot Presets** | Per-extension config | Extension `__init__.py` | Plot type, custom labels, extension-specific |
+
+The **plot theme** sets the base style (e.g., publication-nature). The **plot template** applies technique-specific overrides on top — e.g., EIS Nyquist forces `aspect: equal` while keeping the Nature font/color palette.
 
 ## Theme YAML Schema
 
@@ -46,59 +53,48 @@ axes:
   spines_right: false
 
 font:
-  family: sans-serif         # or serif, monospace
-  size: 7                   # Base point size
-  axes_labelsize: 8
+  family: Helvetica          # or Arial, sans-serif
+  size: 7                    # Base point size
+  axes_labelsize: 7
 
 colors:
-  prop_cycle:                # Matplotlib color cycle
+  prop_cycle:                # Matplotlib color cycle (Wong palette)
+    - "#000000"
     - "#0072B2"
-    - "#009E73"
-    - "#D55E00"
 
 savefig:
-  dpi: 600                  # Output DPI (always higher)
+  dpi: 600                   # Output DPI (always higher)
   bbox: tight
   format: pdf                # ALWAYS PDF for publication
+
+pdf:
+  fonttype: 42               # Editable text (Nature requirement)
 ```
 
-## How to Add a Theme
+## How to Add a Plot Theme
 
-1. Copy an existing theme from `themes/` as a template
+1. Copy an existing theme from `plot-theme/` as a template
 2. Adjust colors, fonts, figsize, DPI
-3. Save as `themes/<name>.yaml`
+3. Save as `plot-theme/<name>.yaml`
 4. The theme is auto-discovered by `list_themes()` — no code changes needed
 
-## How to Add a Template
+## How to Add a Plot Template
 
-1. Create `templates/<technique>.yaml` using the technique key as filename
-2. Define per-technique defaults:
+1. Create `plot-templates/<technique>.yaml` using the technique key as filename
+2. Define per-technique defaults that override the global theme:
 
 ```yaml
 plot_type: line              # line, scatter, semilogy, loglog
-linewidth: 1.5
-marker: ""                   # or "o", "s", "^"
-markersize: 4
-alpha: 1.0
-xlabel: "Voltage (V)"
-ylabel: "Current (A)"
-xscale: linear
-yscale: linear               # or log
+defaults:
+  linewidth: 0.75
+  marker: ""
+  markersize: 3
+labels:
+  xlabel: "Voltage (V)"
+  ylabel: "Current (A)"
 ```
 
 3. The template is auto-loaded by technique name — no code changes needed
-
-## Matcha Green Palette
-
-Used throughout the REPL for a consistent green aesthetic:
-
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Primary | `#8BAA89` | Headers, prompt text |
-| Dark | `#6B8A6B` | Protocol names, selected text |
-| Light | `#C5D6C5` | Backgrounds, highlights |
-| Accent | `#4A7A4A` | Borders, separators |
-| Dim | `#A0BBA0` | Subtle text, hints |
 
 ## Key API
 
@@ -106,20 +102,9 @@ Used throughout the REPL for a consistent green aesthetic:
 from science_cli.theme import (
     list_themes,        # → list[str] — all available theme names
     get_theme,          # → dict — theme YAML as dict
-    apply_theme,        # → None — applies to matplotlib rcParams + Rich
+    apply_theme,        # → None — applies to matplotlib rcParams
     theme_to_rcparams,  # → dict — matplotlib rcParams dict
-    template_to_flags,  # → dict — template values as plot flags
+    template_to_flags,  # → dict — technique-specific plot flags
     MATCHA_COLORS,      # → dict — matcha green hex values
-    get_matcha_questionary_style,  # → prompt_toolkit Style
 )
 ```
-
-## Theme Previews
-
-Generate preview images for all themes:
-
-```bash
-python scripts/generate-theme-previews.py
-```
-
-Output goes to `theme-previews/{theme}/{plot}.pdf` — excluded from version control.

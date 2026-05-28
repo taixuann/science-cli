@@ -5,14 +5,14 @@ Three-tier LabPlot-inspired system:
   Template    → per-object curve/plot presets
   PlotTemplate → full figure blueprints
 
-This file handles the Theme tier. Templates live in theme/templates/.
+This file handles the Theme tier. Templates live in theme/plot-templates/.
 """
 
 from pathlib import Path
 
 import matplotlib as mpl
 
-_THEME_DIR = Path(__file__).parent / "themes"
+_THEME_DIR = Path(__file__).parent / "plot-theme"
 _THEME_CACHE: dict[str, dict] = {}
 
 BUILTIN_THEMES = [
@@ -115,6 +115,11 @@ def theme_to_rcparams(name: str) -> dict:
     rc["savefig.pad_inches"] = savefig.get("pad_inches", 0.1)
     rc["savefig.format"] = savefig.get("format", "pdf")
 
+    pdf = theme.get("pdf", {})
+    ft = pdf.get("fonttype")
+    if ft is not None:
+        rc["pdf.fonttype"] = ft
+
     return rc
 
 
@@ -126,10 +131,10 @@ def apply_theme(name: str):
 def template_to_flags(technique: str) -> dict:
     """Load a technique template YAML and return a flag dict.
 
-    Templates live in theme/templates/ and define plot_type, defaults
+    Templates live in theme/plot-templates/ and define plot_type, defaults
     (linewidth, linestyle, marker, markersize), and labels (xlabel, ylabel).
     """
-    templates_dir = Path(__file__).parent / "templates"
+    templates_dir = Path(__file__).parent / "plot-templates"
     path = templates_dir / f"{technique}.yaml"
     if not path.exists():
         return {}

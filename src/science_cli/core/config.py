@@ -57,6 +57,8 @@ _DEFAULT_TECHNIQUE_PATTERNS: dict[str, list[str]] = {
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
     "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
     "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
+    "raman": [r"_raman", r"_sers", r"_raman-sers", r"_SERS"],
+    "uv-vis": [r"_uv-vis", r"_uvvis", r"uv-vis", r"uvvis"],
 }
 
 _DEFAULT_TECHNIQUE_DEVICES: dict[str, dict[str, dict]] = {
@@ -70,6 +72,29 @@ _DEFAULT_TECHNIQUE_DEVICES: dict[str, dict[str, dict]] = {
                 "voltage": "Untitled",
                 "current": "Untitled 1",
                 "time": "Untitled 2",
+            },
+        },
+    },
+    "raman": {
+        "horiba-usth": {
+            "label": "Horiba LabRAM HR Evolution (USTH)",
+            "delimiter": "\t",
+            "decimal": ",",
+            "header_lines": 45,
+            "encoding": "latin1",
+            "names": ["shift", "intensity"],
+        },
+    },
+    "uv-vis": {
+        "iop-hanoi": {
+            "label": "UV-Vis Spectrometer (IOP Hanoi)",
+            "delimiter": ",",
+            "decimal": ".",
+            "header_lines": 1,
+            "encoding": "latin1",
+            "columns": {
+                "wavelength": "Wavelength nm.",
+                "transmittance": "T%",
             },
         },
     },
@@ -531,6 +556,14 @@ _DEFAULT_GLOBAL_DEVICES: dict[str, dict] = {
             "time": "Time",
         },
     },
+    "horiba-usth": {
+        "label": "Horiba LabRAM HR Evolution (USTH)",
+        "delimiter": "\t",
+        "decimal": ",",
+        "header_lines": 45,
+        "encoding": "latin1",
+        "names": ["shift", "intensity"],
+    },
 }
 
 # Hardcoded default global technique configs
@@ -554,6 +587,16 @@ _DEFAULT_GLOBAL_TECHNIQUES: dict[str, dict] = {
         "label": "Leakage",
         "grammar_codes": ["leak", "leakage"],
         "default_device": "keithley-2400",
+    },
+    "raman": {
+        "label": "Raman Spectroscopy",
+        "grammar_codes": ["raman", "sers", "raman-sers"],
+        "default_device": "horiba-usth",
+    },
+    "uv-vis": {
+        "label": "UV-Vis Transmittance",
+        "grammar_codes": ["uv-vis", "uvvis", "uv_vis"],
+        "default_device": "iop-hanoi",
     },
 }
 
@@ -581,9 +624,8 @@ def generate_default_config_yaml() -> str:
 
 # Root directory for all projects
 projects_root: "{projects_root}"
-
-# Preferred theme (publication-acs, publication-nature, matcha, tufte, dark, poster)
-theme: publication-acs
+# Preferred theme (publication-nature, publication-acs, matcha, tufte, dark, poster)
+theme: publication-nature
 
 # Default figure output settings
 default_dpi: 300
@@ -634,6 +676,22 @@ devices:
       voltage: "BV"
       current: "BI"
       time: "Time"
+  horiba-usth:
+    label: "Horiba LabRAM HR Evolution (USTH)"
+    delimiter: "\\t"
+    decimal: ","
+    header_lines: 45
+    encoding: "latin1"
+    names: ["shift", "intensity"]
+  iop-hanoi:
+    label: "UV-Vis Spectrometer (IOP Hanoi)"
+    delimiter: ","
+    decimal: "."
+    header_lines: 1
+    encoding: "latin1"
+    columns:
+      wavelength: "Wavelength nm."
+      transmittance: "T%"
 
 # --- Technique Registry ---
 # Global technique definitions shared across all projects.
@@ -649,10 +707,21 @@ techniques:
       set: { label: "Set", step_type: set }
       reset: { label: "Reset", step_type: reset }
 
+  raman:
+    label: "Raman Spectroscopy"
+    grammar_codes: ["raman", "sers", "raman-sers"]
+    default_device: horiba-usth
+  uv-vis:
+    label: "UV-Vis Transmittance"
+    grammar_codes: ["uv-vis", "uvvis", "uv_vis"]
+    default_device: iop-hanoi
+
 # --- Default device per technique ---
 # When no device is specified, use this device for the technique.
 defaults:
   iv-sweep: keithley-2400
+  raman: horiba-usth
+  uv-vis: iop-hanoi
 """.replace("{projects_root}", _DEFAULT_PROJECTS_ROOT)
 
 

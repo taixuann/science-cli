@@ -16,9 +16,9 @@ def plot_overlay(
 ):
     flags = flags or {}
     figsize = parse_figsize(flags)
-    fig, ax = create_figure(flags.get("theme", "publication-acs"), figsize)
+    fig, ax = create_figure(flags.get("theme", "publication-nature"), figsize)
 
-    theme = get_theme(flags.get("theme", "publication-acs"))
+    theme = get_theme(flags.get("theme", "publication-nature"))
     colors = theme.get("colors", {}).get("prop_cycle", [
         "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
         "#9467bd", "#8c564b", "#e377c2", "#7f7f7f",

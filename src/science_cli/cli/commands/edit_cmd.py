@@ -128,21 +128,22 @@ def _edit_protocol(args: list) -> None:
     if new_desc:
         data["description"] = new_desc
 
-    # --rm-step <name>: remove a step from the YAML (with disk deletion confirmation)
+    # --rm-step <name>: remove ALL steps matching name from the YAML (handles duplicates)
     rm_step = flags.get("rm-step")
     if rm_step:
         steps = data.get("steps", [])
-        removed = None
+        removed = []
         new_steps = []
         for s in steps:
             if s["name"] == rm_step:
-                removed = s
+                removed.append(s)
             else:
                 new_steps.append(s)
-        if removed is None:
+        if not removed:
             console.print(f"[yellow]Step '{rm_step}' not found in protocol.[/yellow]")
         else:
             data["steps"] = new_steps
+            rprint(f"[bold green]✓[/bold green] Removed {len(removed)} step(s): '{rm_step}'")
             step_dir = paths.step_dir(safe_name, rm_step)
             import questionary
             if step_dir.exists():

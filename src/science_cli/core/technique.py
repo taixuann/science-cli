@@ -68,6 +68,8 @@ PATTERNS: dict[str, list[str]] = {
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
     "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
     "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
+    "raman": [r"_raman", r"_sers", r"_raman-sers", r"_SERS"],
+    "uv-vis": [r"_uv-vis", r"_uvvis", r"uv-vis", r"uvvis"],
 }
 
 

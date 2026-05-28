@@ -11,9 +11,8 @@ class TestCommandTree:
     def test_has_expected_commands(self):
         keys = sorted(COMMAND_TREE.keys())
         expected = [
-            "add", "analyze", "close", "config", "delete",
-            "edit", "ls", "memristor", "open", "plot",
-            "results", "status", "techniques",
+            'add', 'analyze', 'chat', 'close', 'config', 'delete', 'edit', 'info', 'ls',
+            'memristor', 'open', 'plot', 'raman', 'results', 'serve', 'status', 'techniques'
         ]
         assert keys == expected
 

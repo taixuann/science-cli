@@ -16,10 +16,7 @@ def results_handler(args: list) -> None:
         show_command_help("results")
         return
 
-    # F8: Parse --fzf flag
-    use_fzf = "--fzf" in args
-    if use_fzf:
-        args = [a for a in args if a != "--fzf"]
+    use_fzf = True  # fzf is now default
 
     from science_cli.core.paths import ProjectPaths
     from science_cli.core.project import get_current_project_path

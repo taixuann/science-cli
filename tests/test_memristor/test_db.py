@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from science_cli.memristor.db import (
+from science_cli.library.memristor.db import (
     init_db,
     check_schema,
     open_db,

@@ -36,15 +36,34 @@ pip install -e .
 
 `numpy`, `pandas`, `matplotlib`, `scipy`, `lmfit`, `plotly`, `textual`, `pyyaml`, `rich`, `prompt_toolkit`, `questionary`, `pyarrow`
 
-## Three Interfaces
+## Four Interfaces
 
-science-cli provides three interaction modes:
+science-cli provides four interaction modes:
 
 | Mode | Command | Description |
 |------|---------|-------------|
 | **CLI** | `sci <command> [args]` | Run one command and exit. Scriptable, pipeable. |
 | **CLI-REPL** | `sci --repl` | `prompt_toolkit` interactive shell with persistent session state, tab-completion, and command history. Stays in a project context across commands. |
 | **TUI** | `sci` (no args) | Full Textual terminal UI with live data browser, plot preview, fzf-integrated file picking, and mouse support. |
+| **AI Chat** | `sci chat "<query>"` | Natural language to `sci plot` commands via LLM. Also available as an OpenCode subagent (`plotting-guy`). |
+
+### AI Agent Integration
+
+science-cli is designed to be driven by AI agents (OpenCode, plotting-guy). Key commands:
+
+```bash
+# Full project manifest for AI consumption
+sci info --json
+
+# Machine-readable listing and status
+sci ls --json
+sci status --json
+
+# Natural language plotting via LLM (set SCI_LLM_API_KEY env var)
+sci chat "plot the IV data from protocol 1_iv-test with loglog axes"
+```
+
+AI agents discover project structure via `sci info --json`, find files, look up technique-specific flags, and construct `sci plot` commands. See [`AGENTS.md`](AGENTS.md) and [`SCHEMA.md`](SCHEMA.md) for the complete reference.
 
 ## Quick Start
 
@@ -90,11 +109,37 @@ GROUP 3: DATA ANALYSIS
   config    Manage settings (theme, techniques, devices, grammar)
   status    Show current context status
   results   List saved results by protocol and step
+  info      Project manifest — machine-readable JSON (--json) for AI agents
+  chat      AI chat — natural language to plot commands via LLM
 
 GROUP 4: DEVICE & TECHNIQUES
   memristor   Manage device matrices, sync/analyze, dashboard
+  raman       Raman spectroscopy: list, info, plot, analyze (with fzf)
   techniques  List available techniques and usage guide (deprecated → use config)
 ```
+
+### Raman Spectroscopy
+
+Raman spectra from Horiba LabRAM HR Evolution (USTH) — 45-line `#` header with instrument metadata:
+
+```bash
+# List Raman files with laser/grating/range columns
+sci raman ls
+
+# Show full 30-field metadata table (pick with fzf)
+sci raman info --fzf
+
+# Plot spectrum with annotation (pick with fzf)
+sci raman plot --fzf
+
+# Analyze: baseline correction + normalization + peak finding + CSV export
+sci raman analyze --fzf --baseline --norm --peaks
+
+# Custom peak parameters
+sci raman analyze --fzf --baseline --prominence 200 --distance 10
+```
+
+**Technique:** `raman` | **Device:** `horiba-usth` (tab-delimited, comma decimal, latin1, 45 header lines). Filenames match `*_raman*`, `*_sers*`, `*_raman-sers*`.
 
 ### Config Subcommands (Sprint 8)
 

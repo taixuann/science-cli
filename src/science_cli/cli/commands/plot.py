@@ -88,47 +88,57 @@ def _get_results_dir(filepath: str) -> Path:
     return out
 
 
+TECHNIQUE_HINTS = {
+    "ec-cv": {
+        "plot_style": "--peaks (find redox peaks) | --charge (integrate charge) | --zoom x1,x2,y1,y2",
+        "figure": "-n cv_plot.pdf | --grid (show grid) | --legend (show legend)",
+    },
+    "ec-ca": {
+        "plot_style": "--fit (Cottrell fit) | --zoom x1,x2,y1,y2",
+        "figure": "-n ca_decay.pdf | --label-name 0V,0.25V,... | --grid | --legend",
+    },
+    "ec-eis": {
+        "plot_style": "--nyquist (Z' vs -Z'') | --bode (|Z|, phase vs f) | --circuit (fit circuit) | --kk (K-K check)",
+        "figure": "-n nyquist.pdf | --grid | --legend",
+    },
+    "iv-sweep": {
+        "plot_style": "--type line|scatter | --color | --linewidth | --linestyle",
+        "figure": "-n iv_curve.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
+    },
+    "iv-breakdown": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n breakdown.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
+    },
+    "iv-leakage": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n leakage.pdf | --xlabel Voltage (V) | --ylabel |Current| (A) | --zoom x1,x2,y1,y2",
+    },
+    "mem-endurance": {
+        "plot_style": "--type line|scatter | --color | --linewidth",
+        "figure": "-n endurance.pdf | --xlabel Cycle # | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
+    },
+    "mem-retention": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n retention.pdf | --xlabel Time (s) | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
+    },
+    "mem-switching": {
+        "plot_style": "--type scatter | --color | --marker o | --markersize",
+        "figure": "-n switching.pdf | --xlabel Cycle # | --ylabel Voltage (V) | --zoom x1,x2,y1,y2",
+    },
+    "raman": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n spectrum.pdf | --xlabel 'Raman shift (cm⁻¹)' | --ylabel 'Intensity (counts)' | --grid | --zoom x1,x2",
+    },
+    "uv-vis": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n uv-vis.pdf | --xlabel 'Wavelength (nm)' | --ylabel 'T%' | --grid | --zoom x1,x2,y1,y2",
+    },
+}
+
+
 def _technique_hints(technique: str) -> dict:
     """Return contextual hints for a technique. Keys: plot_style, figure."""
-    hints = {
-        "ec-cv": {
-            "plot_style": "--peaks (find redox peaks) | --charge (integrate charge) | --zoom x1,x2,y1,y2",
-            "figure": "-n cv_plot.pdf | --grid (show grid) | --legend (show legend)",
-        },
-        "ec-ca": {
-            "plot_style": "--fit (Cottrell fit) | --zoom x1,x2,y1,y2",
-            "figure": "-n ca_decay.pdf | --label-name 0V,0.25V,... | --grid | --legend",
-        },
-        "ec-eis": {
-            "plot_style": "--nyquist (Z' vs -Z'') | --bode (|Z|, phase vs f) | --circuit (fit circuit) | --kk (K-K check)",
-            "figure": "-n nyquist.pdf | --grid | --legend",
-        },
-        "iv-sweep": {
-            "plot_style": "--type line|scatter | --color | --linewidth | --linestyle",
-            "figure": "-n iv_curve.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
-        },
-        "iv-breakdown": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n breakdown.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
-        },
-        "iv-leakage": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n leakage.pdf | --xlabel Voltage (V) | --ylabel |Current| (A) | --zoom x1,x2,y1,y2",
-        },
-        "mem-endurance": {
-            "plot_style": "--type line|scatter | --color | --linewidth",
-            "figure": "-n endurance.pdf | --xlabel Cycle # | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
-        },
-        "mem-retention": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n retention.pdf | --xlabel Time (s) | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
-        },
-        "mem-switching": {
-            "plot_style": "--type scatter | --color | --marker o | --markersize",
-            "figure": "-n switching.pdf | --xlabel Cycle # | --ylabel Voltage (V) | --zoom x1,x2,y1,y2",
-        },
-    }
-    return hints.get(technique, hints.get("", {}))
+    return TECHNIQUE_HINTS.get(technique, {})
 
 
 def _plot_results() -> None:
@@ -283,9 +293,6 @@ def plot_handler(args: list) -> None:
         rprint("[dim]Use 'config theme set <name>' to change.[/dim]")
         rprint(f"[dim]Available: {', '.join(themes)}[/dim]")
         return
-    if args[0] == "--fzf":
-        _plot_interactive(args[1:])
-        return
 
     if args[0] == "results":
         _plot_results()
@@ -297,13 +304,8 @@ def plot_handler(args: list) -> None:
         _plot_delete(args[1] if len(args) > 1 else "")
         return
 
-    if args[0] == "-f":
-        files_str = args[1] if len(args) > 1 else ""
-        rest = args[2:] if len(args) > 2 else []
-        files = [f.strip() for f in files_str.split(",") if f.strip()]
-        _plot_direct(files, rest)
-    else:
-        console.print("[yellow]Usage: plot [--fzf | -f file1,file2 [options]][/yellow]")
+    # Default to fzf interactive with remaining args as extra flags
+    _plot_interactive(args)
 
 
 def _plot_interactive(extra_args: list | None = None) -> None:
@@ -359,6 +361,8 @@ def _plot_interactive(extra_args: list | None = None) -> None:
             display_items.append(build_fzf_display(proto, step, name, show_protocol=show_proto))
         elif not active_proto:
             display_items.append(name)
+        else:
+            display_items.append(name)  # fallback: show all when protocol has no matched files
 
     prompt = f"{active_proto} | Select file(s) >" if active_proto else "Select file(s) (Tab to multi-select):"
     selected = fzf_select(
@@ -573,6 +577,16 @@ def _resolve_xy_columns(
                 ycol = candidate
                 break
 
+    elif technique == "uv-vis":
+        for candidate in ("wavelength", "Wavelength nm.", "Wavelength", "nm"):
+            if candidate in df.columns:
+                xcol = candidate
+                break
+        for candidate in ("transmittance", "T%", "T", "Transmittance"):
+            if candidate in df.columns:
+                ycol = candidate
+                break
+
     elif technique in ("mem-endurance", "mem-retention"):
         # Endurance/retention: cycle/time vs resistance
         numeric = [
@@ -617,13 +631,20 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     from science_cli.core.data_loader import load_data_file
 
     try:
-        df, info = load_data_file(filepath)
+        load_kwargs = {}
+        if technique:
+            from science_cli.core.config import get_default_device
+            device = get_default_device(technique)
+            if device:
+                load_kwargs["technique"] = technique
+                load_kwargs["device"] = device
+        df, info = load_data_file(filepath, **load_kwargs)
     except Exception as e:
         console.print(f"[red]Failed to load file: {e}[/red]")
         return
 
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     apply_theme(get_active_theme())
@@ -643,10 +664,12 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
 
     plot_type = flags.get("type", "line")
     color = flags.get("color", None)
-    linewidth = float(flags.get("linewidth", 1.5)) if flags.get("linewidth") else 1.5
-    linestyle = flags.get("linestyle", "solid")
+    _def_lw = mpl.rcParams.get("lines.linewidth", 1.0)
+    _def_ms = mpl.rcParams.get("lines.markersize", 4)
+    linewidth = float(flags.get("linewidth", _def_lw)) if flags.get("linewidth") else _def_lw
+    linestyle = flags.get("linestyle", mpl.rcParams.get("lines.linestyle", "solid"))
     marker = flags.get("marker", None)
-    markersize = float(flags.get("markersize", 6)) if flags.get("markersize") else 6
+    markersize = float(flags.get("markersize", _def_ms)) if flags.get("markersize") else _def_ms
     cmap = flags.get("cmap", None)
 
     plot_kw = {}
@@ -679,7 +702,8 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
 
     plt.close(fig)
@@ -700,8 +724,8 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
 
 def _do_eis_plot(filepath: str, flags: dict) -> None:
     """Generate Nyquist, Bode, and optionally circuit-fit-nyquist for an EIS file."""
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -737,13 +761,14 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
     mag = df[mag_col].values if mag_col else None
     phase = df[phase_col].values if phase_col else None
 
-    from science_cli.electrochem.models import EISData
+    from science_cli.library.electrochem.models import EISData
     from science_cli.plot.eis import plot_eis_bode, plot_eis_fit, plot_eis_nyquist
 
     apply_theme(get_active_theme())
     stem = Path(filepath).stem
     out_dir = _get_results_dir(filepath)
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
 
     want_nyquist = not flags.get("bode")
     want_bode = not flags.get("nyquist")
@@ -774,7 +799,7 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
     # ── Circuit fit (--circuit) ──────────────────────────────────────
     circuit_model = flags.get("circuit")
     if circuit_model is not False and circuit_model is not None:
-        from science_cli.electrochem.eis import best_circuit_fit, circuit_fit
+        from science_cli.library.electrochem.eis import best_circuit_fit, circuit_fit
 
         eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
 
@@ -831,7 +856,7 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
 
     # ── KK test (--kk) ──────────────────────────────────────────────
     if flags.get("kk"):
-        from science_cli.electrochem.eis import kramers_kronig
+        from science_cli.library.electrochem.eis import kramers_kronig
         eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
         kk = kramers_kronig(eis_data)
         status = "✓ passed" if kk.get("passes") else "✗ failed"
@@ -853,8 +878,8 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
 
 
 def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
-    import matplotlib
-    matplotlib.use("Agg")
+    import matplotlib as mpl
+    mpl.use("Agg")
     import matplotlib.pyplot as plt
 
     from science_cli.core.data_loader import load_data_file
@@ -862,22 +887,29 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     apply_theme(get_active_theme())
     fig, ax = plt.subplots(figsize=_figsize(flags))
     # Use theme color cycle instead of hardcoded viridis
-    import matplotlib as mpl
     cycle = mpl.rcParams["axes.prop_cycle"]
     theme_colors = [entry["color"] for entry in cycle]
     colors = [theme_colors[i % len(theme_colors)] for i in range(len(files))]
+    _def_lw = float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 0.75)))
 
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
 
     for i, fp in enumerate(files):
         try:
-            df, info = load_data_file(fp)
+            load_kwargs = {}
+            if technique:
+                from science_cli.core.config import get_default_device
+                device = get_default_device(technique)
+                if device:
+                    load_kwargs["technique"] = technique
+                    load_kwargs["device"] = device
+            df, info = load_data_file(fp, **load_kwargs)
             xi, yi, _, _ = _resolve_xy_columns(df, info, technique)
             if len(xi) == 0 or len(yi) == 0:
                 continue
             label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax.plot(xi, yi, label=label, color=colors[i], linewidth=1.5)
+            ax.plot(xi, yi, label=label, color=colors[i], linewidth=_def_lw)
         except Exception:
             continue
 
@@ -890,7 +922,8 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", 150))
+    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+    dpi = int(flags.get("dpi", _def_dpi))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] Overlay saved: {save_path}")
@@ -921,7 +954,8 @@ def _figsize(flags: dict) -> tuple:
             return float(parts[0]), float(parts[1])
         except (ValueError, IndexError):
             pass
-    return (10, 7)
+    import matplotlib as mpl
+    return mpl.rcParams.get("figure.figsize", (3.46, 2.75))
 
 
 def _apply_figure_kw(ax, flags: dict, title_default: str) -> None:
