@@ -235,7 +235,8 @@ PLAN-config-expansion
 │   │   │   ├── data_cmd.py / delete_cmd.py / edit_cmd.py
 │   │   │   ├── eis.py / fit.py / ls_cmd.py / memristor.py
 │   │   │   ├── metadata.py / open_cmd.py / parse.py
-│   │   │   ├── plot.py / protocol.py / raman.py / results.py
+│   │   │   ├── chat_cmd.py / info.py / plot.py
+│   │   │   ├── protocol.py / raman.py / results.py
 │   │   │   ├── status.py / techniques.py
 │   │   └── help.py                    ← Help text rendering
 │   ├── core/                          ← Core library — no CLI coupling
@@ -502,6 +503,16 @@ from science_cli.core.technique import (
 - **TUI README**: `src/science_cli/tui/README.md`
 - **Migration guide**: `MIGRATION.md` (1.x → 2.0.0)
 
+#### AI Agent Integration Gaps
+
+✅ **All gaps closed** (2026-05-28):
+- **`sci info --json`**: Full project manifest as machine-readable JSON — protocols, steps, files, themes, techniques, plot hints
+- **`--json` on `sci ls` and `sci status`**: Machine-readable output for AI agents
+- **`sci chat`**: Natural language to `sci plot` command router via LLM (configurable via `SCI_LLM_API_KEY` env var)
+- **`plotting-guy` OpenCode agent**: New subagent in `~/.opencode/agents/plotting-guy.md` that drives science-cli for visualization tasks
+- **`AGENTS_SCHEMA.md`**: Reference document at `documentation/AGENTS_SCHEMA.md` — schema and workflow for AI agents
+- **Intent-router updated**: Routes plot/viz/data-discovery requests to plotting-guy
+
 #### Remaining Future Considerations (No PLANs Yet)
 
 | Item | Type | Notes |
@@ -513,7 +524,7 @@ from science_cli.core.technique import (
 
 ### Pending PLANs
 
-All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. The `refactor/2.1.0` branch contains all original implementations.
+All original PLANs (1-4) are now completed or superseded. All Sprint plans (1-8) in PLAN-enhanced-dashboard are completed. PLAN-tui-fzf-pty and PLAN-device-step-metadata are also completed. PLAN-consolidate-devices-yaml is completed on `version-2.1.1`. PLAN-ai-agent-friendly (2026-05-28) is completed on `feature/ai-agent-friendly`. The `refactor/2.1.0` branch contains all original implementations.
 
 **When creating a new PLAN, check if it relates to any future considerations above.**
 

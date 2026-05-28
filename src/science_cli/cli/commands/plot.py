@@ -88,55 +88,57 @@ def _get_results_dir(filepath: str) -> Path:
     return out
 
 
+TECHNIQUE_HINTS = {
+    "ec-cv": {
+        "plot_style": "--peaks (find redox peaks) | --charge (integrate charge) | --zoom x1,x2,y1,y2",
+        "figure": "-n cv_plot.pdf | --grid (show grid) | --legend (show legend)",
+    },
+    "ec-ca": {
+        "plot_style": "--fit (Cottrell fit) | --zoom x1,x2,y1,y2",
+        "figure": "-n ca_decay.pdf | --label-name 0V,0.25V,... | --grid | --legend",
+    },
+    "ec-eis": {
+        "plot_style": "--nyquist (Z' vs -Z'') | --bode (|Z|, phase vs f) | --circuit (fit circuit) | --kk (K-K check)",
+        "figure": "-n nyquist.pdf | --grid | --legend",
+    },
+    "iv-sweep": {
+        "plot_style": "--type line|scatter | --color | --linewidth | --linestyle",
+        "figure": "-n iv_curve.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
+    },
+    "iv-breakdown": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n breakdown.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
+    },
+    "iv-leakage": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n leakage.pdf | --xlabel Voltage (V) | --ylabel |Current| (A) | --zoom x1,x2,y1,y2",
+    },
+    "mem-endurance": {
+        "plot_style": "--type line|scatter | --color | --linewidth",
+        "figure": "-n endurance.pdf | --xlabel Cycle # | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
+    },
+    "mem-retention": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n retention.pdf | --xlabel Time (s) | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
+    },
+    "mem-switching": {
+        "plot_style": "--type scatter | --color | --marker o | --markersize",
+        "figure": "-n switching.pdf | --xlabel Cycle # | --ylabel Voltage (V) | --zoom x1,x2,y1,y2",
+    },
+    "raman": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n spectrum.pdf | --xlabel 'Raman shift (cm⁻¹)' | --ylabel 'Intensity (counts)' | --grid | --zoom x1,x2",
+    },
+    "uv-vis": {
+        "plot_style": "--type line | --color | --linewidth",
+        "figure": "-n uv-vis.pdf | --xlabel 'Wavelength (nm)' | --ylabel 'T%' | --grid | --zoom x1,x2,y1,y2",
+    },
+}
+
+
 def _technique_hints(technique: str) -> dict:
     """Return contextual hints for a technique. Keys: plot_style, figure."""
-    hints = {
-        "ec-cv": {
-            "plot_style": "--peaks (find redox peaks) | --charge (integrate charge) | --zoom x1,x2,y1,y2",
-            "figure": "-n cv_plot.pdf | --grid (show grid) | --legend (show legend)",
-        },
-        "ec-ca": {
-            "plot_style": "--fit (Cottrell fit) | --zoom x1,x2,y1,y2",
-            "figure": "-n ca_decay.pdf | --label-name 0V,0.25V,... | --grid | --legend",
-        },
-        "ec-eis": {
-            "plot_style": "--nyquist (Z' vs -Z'') | --bode (|Z|, phase vs f) | --circuit (fit circuit) | --kk (K-K check)",
-            "figure": "-n nyquist.pdf | --grid | --legend",
-        },
-        "iv-sweep": {
-            "plot_style": "--type line|scatter | --color | --linewidth | --linestyle",
-            "figure": "-n iv_curve.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
-        },
-        "iv-breakdown": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n breakdown.pdf | --label-name label1,label2,... | --xlabel Voltage (V) | --ylabel Current (A) | --zoom x1,x2,y1,y2",
-        },
-        "iv-leakage": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n leakage.pdf | --xlabel Voltage (V) | --ylabel |Current| (A) | --zoom x1,x2,y1,y2",
-        },
-        "mem-endurance": {
-            "plot_style": "--type line|scatter | --color | --linewidth",
-            "figure": "-n endurance.pdf | --xlabel Cycle # | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
-        },
-        "mem-retention": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n retention.pdf | --xlabel Time (s) | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
-        },
-        "mem-switching": {
-            "plot_style": "--type scatter | --color | --marker o | --markersize",
-            "figure": "-n switching.pdf | --xlabel Cycle # | --ylabel Voltage (V) | --zoom x1,x2,y1,y2",
-        },
-        "raman": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n spectrum.pdf | --xlabel 'Raman shift (cm⁻¹)' | --ylabel 'Intensity (counts)' | --grid | --zoom x1,x2",
-        },
-        "uv-vis": {
-            "plot_style": "--type line | --color | --linewidth",
-            "figure": "-n uv-vis.pdf | --xlabel 'Wavelength (nm)' | --ylabel 'T%' | --grid | --zoom x1,x2,y1,y2",
-        },
-    }
-    return hints.get(technique, hints.get("", {}))
+    return TECHNIQUE_HINTS.get(technique, {})
 
 
 def _plot_results() -> None:

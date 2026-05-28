@@ -1,5 +1,6 @@
 """status command handler — show current context (project/protocol/step)."""
 
+import json
 from pathlib import Path
 
 import yaml
@@ -50,6 +51,12 @@ def status_handler(args: list) -> None:
 
     pos, flags = _parse_flags(args)
     mode = flags.get("m") or flags.get("mode", "")
+    use_json = flags.get("json", False)
+
+    if use_json:
+        data = _status_json()
+        print(json.dumps(data, indent=2, default=str))
+        return
 
     if mode == "project":
         _status_project()
@@ -251,3 +258,69 @@ def _count_protocol_yamls(proto_dir: Path) -> int:
         if y.stem not in found:
             found.add(y.stem)
     return len(found)
+
+
+def _status_json() -> dict:
+    from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path, list_projects
+    from science_cli.core.session import load_session
+
+    sess = load_session()
+    current_project = sess.get("last_project", "")
+    current_protocol = sess.get("last_protocol", "")
+    current_step = sess.get("last_step", "")
+
+    result: dict = {
+        "session": {
+            "last_project": current_project,
+            "last_protocol": current_protocol,
+            "last_step": current_step,
+            "theme": sess.get("theme", "publication-acs"),
+        },
+        "project": None,
+        "protocol": None,
+        "all_projects": [],
+    }
+
+    proj = get_current_project_path()
+    if proj and current_project:
+        paths = ProjectPaths(proj)
+        raw_dir = proj / "data" / "raw"
+        proto_dir = proj / "protocol"
+        result["project"] = {
+            "name": current_project,
+            "path": str(proj),
+            "raw_file_count": len(list(raw_dir.iterdir())) if raw_dir.exists() else 0,
+            "protocol_count": _count_protocol_yamls(proto_dir),
+        }
+
+        if current_protocol:
+            yaml_path = paths.protocol_yaml(current_protocol)
+            if yaml_path.exists():
+                with open(yaml_path) as f:
+                    proto = yaml.safe_load(f) or {}
+                steps = proto.get("steps", [])
+                step_info: list[dict] = []
+                for s in steps:
+                    if not isinstance(s, dict):
+                        continue
+                    sn = s.get("name", "?")
+                    step_info.append({
+                        "name": sn,
+                        "technique": s.get("technique", ""),
+                        "device": s.get("device", ""),
+                        "file_count": len(s.get("files", [])),
+                        "current": sn == current_step,
+                    })
+                result["protocol"] = {
+                    "name": current_protocol,
+                    "description": proto.get("description", ""),
+                    "created": proto.get("created", ""),
+                    "current_step": current_step,
+                    "steps": step_info,
+                }
+
+    projects = list_projects()
+    result["all_projects"] = [p for p in projects]
+
+    return result

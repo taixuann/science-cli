@@ -13,7 +13,7 @@ console = Console()
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
     "GROUP 2: CONTEXT NAVIGATION": ["open", "close"],
-    "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config", "status", "results"],
+    "GROUP 3: DATA ANALYSIS": ["plot", "analyze", "config", "status", "results", "info", "chat"],
     "GROUP 4: DEVICE & TECHNIQUES": ["memristor", "raman"],
     "ADDITIONAL": ["help", "version", "clear", "history"],
 }
@@ -30,6 +30,8 @@ COMMAND_DESCRIPTIONS = {
     "config":  "Configure settings",
     "status":  "Show current context status",
     "results": "List saved results by protocol and step",
+    "info": "Project manifest — machine-readable JSON via --json flag",
+    "chat": "AI chat — natural language to plot commands via LLM",
     "memristor": "Crossbar device management (init, add, ls, info, sync, validate, stats, rm, check, plot, dashboard)",
     "raman": "Raman spectroscopy: list, inspect metadata, plot spectra",
     "help":    "Show this help",

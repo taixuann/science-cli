@@ -1,5 +1,6 @@
 """ls command handler — list protocols/steps/files (global, not session-bound)."""
 
+import json
 from pathlib import Path
 
 import yaml
@@ -40,10 +41,14 @@ def ls_handler(args: list) -> None:
 
     pos, flags = _parse_flags(args)
     mode = flags.get("m") or flags.get("mode", "")
+    use_json = flags.get("json", False)
 
     # -m project works globally — no project context required
     if mode == "project":
-        _ls_projects()
+        if use_json:
+            print(json.dumps(_ls_projects_json(), indent=2, default=str))
+        else:
+            _ls_projects()
         return
 
     # F4: Remove ls -m file — guide user to workflow
@@ -67,7 +72,10 @@ def ls_handler(args: list) -> None:
         if not proj:
             console.print("[yellow]No project open. Use 'open -m project <name>' first.[/yellow]")
             return
-        _ls_step(proj, step_name)
+        if use_json:
+            print(json.dumps(_ls_step_json(proj, step_name), indent=2, default=str))
+        else:
+            _ls_step(proj, step_name)
         return
 
     # F1: Context-aware detection when no explicit mode or positional arg
@@ -77,20 +85,31 @@ def ls_handler(args: list) -> None:
         last_project = sess.get("last_project", "")
 
         if last_step and proj:
-            console.print(f"[dim]── Showing files in step '{last_step}' (context-aware) ──[/dim]")
-            _ls_step(proj, last_step)
+            if use_json:
+                print(json.dumps(_ls_step_json(proj, last_step), indent=2, default=str))
+            else:
+                console.print(f"[dim]── Showing files in step '{last_step}' (context-aware) ──[/dim]")
+                _ls_step(proj, last_step)
             return
         elif last_protocol and proj:
-            console.print(f"[dim]── Showing steps for protocol '{last_protocol}' (context-aware) ──[/dim]")
-            _ls_default(proj)
+            if use_json:
+                print(json.dumps(_ls_protocol_json(proj), indent=2, default=str))
+            else:
+                console.print(f"[dim]── Showing steps for protocol '{last_protocol}' (context-aware) ──[/dim]")
+                _ls_default(proj)
             return
         elif last_project and proj:
-            console.print(f"[dim]── Showing protocols in project '{last_project}' (context-aware) ──[/dim]")
-            _ls_default(proj)
+            if use_json:
+                print(json.dumps(_ls_protocol_json(proj), indent=2, default=str))
+            else:
+                console.print(f"[dim]── Showing protocols in project '{last_project}' (context-aware) ──[/dim]")
+                _ls_default(proj)
             return
         else:
-            # No context at all → list all projects globally
-            _ls_projects()
+            if use_json:
+                print(json.dumps(_ls_projects_json(), indent=2, default=str))
+            else:
+                _ls_projects()
             return
 
     if not proj:
@@ -106,11 +125,20 @@ def ls_handler(args: list) -> None:
         step_name = pos[0]
 
     if mode == "protocol" or show_all or show_step or show_files:
-        _ls_protocol(proj, show_all=show_all, show_step=show_step, show_files=show_files)
+        if use_json:
+            print(json.dumps(_ls_protocol_json(proj), indent=2, default=str))
+        else:
+            _ls_protocol(proj, show_all=show_all, show_step=show_step, show_files=show_files)
     elif step_name:
-        _ls_step(proj, step_name)
+        if use_json:
+            print(json.dumps(_ls_step_json(proj, step_name), indent=2, default=str))
+        else:
+            _ls_step(proj, step_name)
     else:
-        _ls_default(proj)
+        if use_json:
+            print(json.dumps(_ls_protocol_json(proj), indent=2, default=str))
+        else:
+            _ls_default(proj)
 
 
 def _ls_default(proj: Path) -> None:
@@ -341,3 +369,85 @@ def _count_protocol_yamls_local(proto_dir: Path) -> int:
         if y.stem not in found:
             found.add(y.stem)
     return len(found)
+
+
+def _ls_projects_json() -> list[dict]:
+    from science_cli.core.project import _get_projects_root, get_current_project_path, list_projects
+    from science_cli.core.session import load_session
+
+    projects = list_projects()
+    current = load_session().get("last_project", "")
+    proj = get_current_project_path()
+    root = _get_projects_root()
+
+    result: list[dict] = []
+    for p in projects:
+        entry: dict = {"name": p, "current": p == current}
+        candidate = root / p
+        if candidate.exists():
+            entry["path"] = str(candidate)
+            raw_dir = candidate / "data" / "raw"
+            entry["raw_file_count"] = len(list(raw_dir.iterdir())) if raw_dir.exists() else 0
+            proto_dir = candidate / "protocol"
+            entry["protocol_count"] = _count_protocol_yamls_local(proto_dir)
+        result.append(entry)
+    return result
+
+
+def _ls_protocol_json(proj: Path) -> list[dict]:
+    from science_cli.core.paths import ProjectPaths
+
+    paths = ProjectPaths(proj)
+    proto_yamls = paths.list_protocol_yamls()
+    result: list[dict] = []
+
+    for py in proto_yamls:
+        with open(py) as f:
+            data = yaml.safe_load(f) or {}
+        steps = data.get("steps", [])
+        step_entries: list[dict] = []
+        for s in steps:
+            if not isinstance(s, dict):
+                continue
+            sfiles = s.get("files", [])
+            file_names = [f["file"] if isinstance(f, dict) else str(f) for f in sfiles]
+            step_entries.append({
+                "name": s.get("name", "?"),
+                "technique": s.get("technique", ""),
+                "device": s.get("device", ""),
+                "file_count": len(sfiles),
+                "files": file_names,
+            })
+        result.append({
+            "name": py.stem,
+            "description": data.get("description", ""),
+            "device": data.get("device", {}),
+            "step_count": len(steps),
+            "steps": step_entries,
+        })
+    return result
+
+
+def _ls_step_json(proj: Path, step_name: str) -> list[dict]:
+    proto_dir = proj / "protocol"
+    results: list[dict] = []
+
+    if proto_dir.exists():
+        for proto_subdir in sorted(proto_dir.iterdir()):
+            if proto_subdir.is_dir() and not proto_subdir.name.endswith(".yaml"):
+                candidate = proto_subdir / step_name
+                if candidate.exists():
+                    files = []
+                    for f in sorted(candidate.iterdir()):
+                        if f.name == "results":
+                            continue
+                        files.append({
+                            "name": f.name,
+                            "size": f.stat().st_size,
+                        })
+                    results.append({
+                        "protocol": proto_subdir.name,
+                        "step": step_name,
+                        "files": files,
+                    })
+    return results
