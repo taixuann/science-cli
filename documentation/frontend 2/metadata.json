@@ -1,6 +1,0 @@
-{
-  "name": "science-cli Dashboard",
-  "description": "Interactive web dashboard for science-cli, a scientific data analysis and plotting hub for memristor and electrochemistry research.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
