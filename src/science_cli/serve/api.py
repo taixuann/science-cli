@@ -587,6 +587,39 @@ def _bin_1d(values: list[float], vmin: float, vmax: float, n_bins: int) -> dict:
     return {"bins": bins, "counts": counts}
 
 
+def get_protocol_files(
+    project_path: Path,
+    protocol_name: str,
+) -> dict:
+    proto_dir = project_path / "protocol" / protocol_name
+    if not proto_dir.exists():
+        return {"error": f"protocol '{protocol_name}' not found", "steps": []}
+
+    steps = []
+    for step_sub in sorted(proto_dir.iterdir()):
+        if not step_sub.is_dir() or step_sub.name.startswith("."):
+            continue
+
+        results_dir = step_sub / "results"
+        files = []
+        if results_dir.exists():
+            for f in sorted(results_dir.iterdir()):
+                if f.suffix.lower() in (".png", ".pdf", ".svg"):
+                    files.append({
+                        "name": f.name,
+                        "path": f"protocol/{protocol_name}/{step_sub.name}/results/{f.name}",
+                        "type": f.suffix.lower().lstrip("."),
+                        "size": f.stat().st_size,
+                    })
+
+        steps.append({
+            "name": step_sub.name,
+            "files": files,
+        })
+
+    return {"protocol": protocol_name, "steps": steps}
+
+
 def get_gallery_data(
     project_path: Path,
 ) -> dict:

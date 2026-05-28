@@ -46,6 +46,11 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_gallery()
                 return
 
+            m = re.match(r"^/api/protocol/([^/]+)/files$", path)
+            if m:
+                self._api_protocol_files(m.group(1))
+                return
+
             m = re.match(r"^/api/protocol/([^/]+)/summary$", path)
             if m:
                 self._api_protocol_summary(m.group(1))
@@ -68,22 +73,15 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_histograms(m.group(1))
                 return
 
-            if path == "/dashboard":
-                self.path = "/dashboard.html"
-                return super().do_GET()
-
-            if path == "/gallery":
-                self.path = "/gallery.html"
-                return super().do_GET()
-
-            m = re.match(r"^/dashboard/(.+)$", path)
-            if m:
-                self.path = "/dashboard.html"
-                return super().do_GET()
-
             if path == "/":
                 self.path = "/index.html"
                 return super().do_GET()
+
+            # Serve files from project's protocol/ directory
+            m = re.match(r"^/files/(.+)$", path)
+            if m:
+                self._serve_project_file(m.group(1))
+                return
 
             super().do_GET()
 
@@ -181,6 +179,40 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         from science_cli.serve.api import get_histograms
         data = get_histograms(proj, protocol_name)
         self._send_json(data)
+
+    def _api_protocol_files(self, protocol_name: str):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+        from science_cli.serve.api import get_protocol_files
+        data = get_protocol_files(proj, protocol_name)
+        if "error" in data:
+            return self._send_error(404, data["error"])
+        self._send_json(data)
+
+    def _serve_project_file(self, file_path: str):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+        full_path = (proj / file_path).resolve()
+        if not str(full_path).startswith(str(proj.resolve())):
+            return self._send_error(403, "path traversal denied")
+        if not full_path.exists() or not full_path.is_file():
+            return self._send_error(404, "file not found")
+        ctype = self.guess_type(str(full_path))
+        try:
+            f = open(full_path, "rb")
+        except OSError:
+            return self._send_error(404, "file not found")
+        try:
+            fs = os.fstat(f.fileno())
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(fs[6]))
+            self.end_headers()
+            self.copyfile(f, self.wfile)
+        finally:
+            f.close()
 
     def send_head(self):
         path = self.translate_path(self.path)
