@@ -173,6 +173,7 @@ When the user asks for a change, **always create a Plan artifact first**.
   - [280526_ai_integration.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_ai_integration.md): AI Agent Integration & Local Intent Routing (Draft/Approved).
   - [280526_dashboard.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_dashboard.md): Project-Aware Dashboard Backend & Plot Engine (Draft/Approved).
   - [280526_refactor.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_refactor.md): Code Reorganization & Technique-Library Consolidation (Draft/Approved).
+  - [280526_themes.md](file:///Users/tai/workspace/tools/science-cli/documentation/artifacts/280526_themes.md): Symmetrical Themes & Per-Technique Plot Templates (Draft).
   - `280526_repo_restructure.md`: Outlining root restructuring (Completed).
   - `280526_documentation_reorg.md`: Outlining documentation folder cleanup (Completed).
 
