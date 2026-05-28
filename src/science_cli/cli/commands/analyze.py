@@ -89,13 +89,32 @@ def analyze_handler(args: list) -> None:
         show_command_help("analyze")
         return
 
-    if args[0] == "-f":
-        files_str = args[1] if len(args) > 1 else ""
-        rest = args[2:] if len(args) > 2 else []
-        files = [f.strip() for f in files_str.split(",") if f.strip()]
-        _analyze_direct(files, rest)
-    else:
-        console.print("[yellow]Usage: analyze -f <file> [options][/yellow]")
+    # Default to fzf file selection, then analyze
+    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.project import get_current_project_path
+    proj = get_current_project_path()
+    if not proj:
+        console.print("[yellow]No project open.[/yellow]")
+        return
+
+    raw_dir = proj / "data" / "raw"
+    if not raw_dir.exists():
+        console.print("[red]data/raw/ not found.[/red]")
+        return
+
+    files = sorted(raw_dir.iterdir())
+    if not files:
+        console.print("[yellow]No files in data/raw/[/yellow]")
+        return
+
+    item_names = [f.name for f in files]
+    selected = fzf_select(item_names, prompt="Select a file to analyze:", multi=False)
+    if not selected:
+        console.print("[yellow]No file selected.[/yellow]")
+        return
+
+    filepath = str(raw_dir / selected[0])
+    _analyze_direct([filepath], args)
 
 
 def _analyze_direct(files: list, rest_args: list) -> None:

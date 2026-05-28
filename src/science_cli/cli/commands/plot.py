@@ -293,9 +293,6 @@ def plot_handler(args: list) -> None:
         rprint("[dim]Use 'config theme set <name>' to change.[/dim]")
         rprint(f"[dim]Available: {', '.join(themes)}[/dim]")
         return
-    if args[0] == "--fzf":
-        _plot_interactive(args[1:])
-        return
 
     if args[0] == "results":
         _plot_results()
@@ -307,13 +304,8 @@ def plot_handler(args: list) -> None:
         _plot_delete(args[1] if len(args) > 1 else "")
         return
 
-    if args[0] == "-f":
-        files_str = args[1] if len(args) > 1 else ""
-        rest = args[2:] if len(args) > 2 else []
-        files = [f.strip() for f in files_str.split(",") if f.strip()]
-        _plot_direct(files, rest)
-    else:
-        console.print("[yellow]Usage: plot [--fzf | -f file1,file2 [options]][/yellow]")
+    # Default to fzf interactive with remaining args as extra flags
+    _plot_interactive(args)
 
 
 def _plot_interactive(extra_args: list | None = None) -> None:

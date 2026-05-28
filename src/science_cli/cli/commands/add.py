@@ -259,11 +259,7 @@ def _add_metadata(args: list) -> None:
 def _add_data(args: list) -> None:
     _, flags = _parse_flags(args)
 
-    use_fzf = flags.get("fzf", False)
     use_all = flags.get("all", False)
-    if not use_fzf:
-        console.print("[yellow]Usage: add -m data --fzf [--all][/yellow]")
-        return
 
     from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()

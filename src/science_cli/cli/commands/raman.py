@@ -141,28 +141,22 @@ def raman_handler(args: list) -> None:
     if sub == "ls":
         _raman_ls(sub_args)
     elif sub == "info":
-        if not sub_args or sub_args[0] == "--fzf":
+        if not sub_args or sub_args[0].startswith("--"):
             _raman_info("--fzf")
         else:
             _raman_info(sub_args[0])
     elif sub == "plot":
-        if not sub_args or sub_args[0] == "--fzf":
-            rest = sub_args[1:] if sub_args and sub_args[0] == "--fzf" else []
-            _raman_plot("--fzf", rest)
+        if not sub_args or sub_args[0].startswith("--"):
+            _raman_plot("--fzf", sub_args)
         else:
             _raman_plot(sub_args[0], sub_args[1:])
     elif sub == "analyze":
         pos, flags = _parse_flags(sub_args)
         if not pos:
-            if flags.get("fzf"):
-                picked = _raman_fzf_pick_single("Select Raman file for analysis")
-                if not picked:
-                    return
-                _raman_analyze(picked, flags)
-            else:
-                console.print("[yellow]Usage: raman analyze <filename> [options][/yellow]")
-                console.print("[yellow]  Or: raman analyze --fzf [options][/yellow]")
-            return
+            picked = _raman_fzf_pick_single("Select Raman file for analysis")
+            if not picked:
+                return
+            _raman_analyze(picked, flags)
         _raman_analyze(pos[0], flags)
     else:
         console.print(f"[yellow]Unknown raman subcommand: {sub}[/yellow]")

@@ -840,10 +840,9 @@ def cmd_info(args: argparse.Namespace) -> None:
 def cmd_add(args: argparse.Namespace) -> None:
     pdir = _resolve_protocol_dir(args)
 
-    if args.fzf:
+    if not args.file and not args.pattern:
         cmd_add_fzf(args)
         return
-    if args.pattern:
         cmd_add_pattern(args)
         return
     if not _validate_protocol_dir(pdir):
@@ -1899,8 +1898,9 @@ def cmd_plot(args: argparse.Namespace) -> None:
         print("No IV files found in devices.yaml.")
         return
 
-    # Apply fzf filter if requested
-    if args.fzf:
+    # Default to fzf when no specific filter flags given
+    use_fzf = not material_filter and row_filter is None and col_filter is None
+    if use_fzf:
         from science_cli.core.fzf_utils import fzf_select
 
         display_map: dict[str, dict] = {}
@@ -1934,7 +1934,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
     overlay_mode = getattr(args, "overlay", False)
     all_mode = getattr(args, "plot_all", False)
 
-    if args.fzf and not overlay_mode and not all_mode and len(targets) > 1:
+    if use_fzf and not overlay_mode and not all_mode and len(targets) > 1:
         choice = input("  Overlay all (o) or individual plots (i)? [o/i] ").strip().lower()
         if choice == "i":
             all_mode = True
@@ -2161,7 +2161,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--sweep-type", default=None)
     p_add.add_argument("--temperature", type=float, default=None)
     p_add.add_argument("--step-dir", default="")
-    p_add.add_argument("--fzf", action="store_true", help="Interactive fzf (recursive)")
     p_add.add_argument(
         "--pattern", default="",
         help="Regex for batch: r(\\d+)c(\\d+) groups 1=row, 2=col",
@@ -2218,7 +2217,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_plot = sub.add_parser("plot", help="Generate IV curve SVGs from devices.yaml")
     p_plot.add_argument("--step-dir", default="")
-    p_plot.add_argument("--fzf", action="store_true", help="Interactive fzf multi-select picker")
     p_plot.add_argument("--overlay", action="store_true", help="Overlay all selected files in one plot")
     p_plot.add_argument("--all", action="store_true", dest="plot_all", help="Export each file individually")
     p_plot.add_argument("--material", default="", help="Plot files for a specific material+batch")

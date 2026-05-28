@@ -643,7 +643,7 @@ def _cmd_list_techniques() -> None:
         "[bold]How to use techniques[/bold]\n"
         "  1. [bold]create[/bold] a protocol:  add -m protocol -n my-protocol --step 1_dep,2_dope -t ec-cv,ec-ca\n"
         "  2. [bold]open[/bold] the protocol:   open -m protocol -n my-protocol\n"
-        "  3. [bold]assign[/bold] data files:   add -m data --fzf\n"
+        "  3. [bold]assign[/bold] data files:   add -m data\n"
         "     (technique is auto-detected from filenames)\n"
         "  4. [bold]plot[/bold] the data:       plot --fzf",
         title="Workflow Guide",
