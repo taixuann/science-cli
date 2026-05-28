@@ -52,22 +52,22 @@
           </select>
         </div>
 
-        <nav class="nav-links" id="step-nav" style="display:none;">
-          <div class="sidebar-form-label" style="margin-bottom:8px;margin-top:8px;">Steps</div>
-        </nav>
-
-        <div class="sidebar-form-group" style="margin-top:auto;">
+        <div class="sidebar-form-group">
           <label class="sidebar-form-label">View</label>
           <select class="sidebar-select" id="view-mode" onchange="toggleView(this.value)">
             <option value="grid">Grid</option>
             <option value="list">List</option>
           </select>
         </div>
-        <div class="connection-indicator">
+        <div class="connection-indicator" style="margin-bottom:12px;">
           <div class="status-dot"></div>
           <span>cli online</span>
         </div>
       </div>
+
+      <nav class="nav-links" id="step-nav" style="display:none;">
+        <div class="sidebar-form-label" style="margin-bottom:8px;">Steps</div>
+      </nav>
     </aside>
 
     <main class="main-content">
@@ -99,8 +99,7 @@
           </svg>
         </div>
       </div>
-      <div class="lightbox-body">
-        <img id="lightbox-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;" />
+      <div class="lightbox-body" id="lightbox-body">
       </div>
     </div>
   </div>
@@ -275,11 +274,11 @@
         const imgPath = "/files/" + f.path;
         const isPdf = f.type === "pdf";
         const media = isPdf
-          ? '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:var(--font-mono);font-size:13px;">PDF</div>'
+          ? '<embed src="' + imgPath + '" type="application/pdf" style="width:100%;height:100%;" />'
           : '<img src="' + imgPath + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />';
         const handler = isPdf
-          ? 'onclick="window.open(\'' + imgPath + '\')"'
-          : 'onclick="openLightbox(\'' + f.name.replace(/'/g, "\\'") + '\', \'' + imgPath + '\')"';
+          ? 'onclick="openLightbox(\'' + f.name.replace(/'/g, "\\'") + '\', \'' + imgPath + '\')"'
+          : 'onclick="openLightbox(\'' + f.name.replace(/'/g, "\\'") + '\', \'' + imgPath + '\', ' + isPdf + ')"';
         return '<div class="plot-card" ' + handler + '>'
           + '<div class="plot-card-media">' + media + '</div>'
           + '<div class="plot-card-content"><div class="plot-provenance" style="font-size:11px;">' + f.name + '</div></div></div>';
@@ -292,16 +291,19 @@
         + '<div class="gallery-grid" id="thumbnail-grid">' + thumbs + '</div>';
     }
 
-    function openLightbox(title, src) {
+    function openLightbox(title, src, isPdf) {
       document.getElementById("lightbox-title").textContent = title;
-      document.getElementById("lightbox-img").src = src;
+      const body = document.getElementById("lightbox-body");
+      body.innerHTML = isPdf
+        ? '<embed src="' + src + '" type="application/pdf" style="width:100%;height:100%;" />'
+        : '<img src="' + src + '" style="max-width:100%;max-height:100%;object-fit:contain;" />';
       document.getElementById("lightbox-overlay").classList.add("active");
     }
 
     function closeLightbox(e) {
       if (e && e.target !== e.currentTarget) return;
       document.getElementById("lightbox-overlay").classList.remove("active");
-      document.getElementById("lightbox-img").src = "";
+      document.getElementById("lightbox-body").innerHTML = "";
     }
 
     function toggleView(mode) {
