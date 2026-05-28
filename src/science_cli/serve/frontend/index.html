@@ -44,19 +44,19 @@
         </div>
       </div>
 
-      <nav class="nav-links">
-        <a href="/" class="nav-link active">
-          <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-            <polyline points="21 15 16 10 5 21"></polyline>
-          </svg>
-          Plot Gallery
-        </a>
-      </nav>
-
       <div class="sidebar-filters">
         <div class="sidebar-form-group">
+          <label class="sidebar-form-label">Protocol</label>
+          <select class="sidebar-select" id="sel-protocol" onchange="selectProtocol(this.value)">
+            <option value="">-- Select protocol --</option>
+          </select>
+        </div>
+
+        <nav class="nav-links" id="step-nav" style="display:none;">
+          <div class="sidebar-form-label" style="margin-bottom:8px;margin-top:8px;">Steps</div>
+        </nav>
+
+        <div class="sidebar-form-group" style="margin-top:auto;">
           <label class="sidebar-form-label">View</label>
           <select class="sidebar-select" id="view-mode" onchange="toggleView(this.value)">
             <option value="grid">Grid</option>
@@ -107,71 +107,86 @@
 
   <script src="/assets/dashboard.js"></script>
   <script>
-    let currentProtocol = null;
-    let currentStep = null;
+    let protocolNames = [];
     let filesCache = {};
+    let activeProtocol = null;
+    let activeStep = null;
 
-    async function render() {
-      if (!currentProtocol) {
-        await renderProtocols();
-      } else if (!currentStep) {
-        await renderSteps();
-      } else {
-        renderThumbnails();
-      }
-    }
-
-    async function renderProtocols() {
+    async function init() {
       const area = document.getElementById("content-area");
       area.innerHTML = '<div class="skeleton" style="height:120px;"></div>';
-
       try {
         const data = await window.SciApp.apiFetch("/api/project");
-
         const projName = data.project_name || "(no project)";
         document.getElementById("bc-project").textContent = projName;
         document.getElementById("ctx-project").textContent = projName;
         document.getElementById("ctx-protocol").textContent = "-";
         document.getElementById("ctx-step").textContent = "-";
-        document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + projName + '</span>';
 
         if (!data.protocols.length) {
-          area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--text-muted);">No protocols found in this project.</div>';
+          area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--text-muted);">No protocols found.</div>';
           return;
         }
 
-        const protoCards = data.protocols.map(p => {
-          return '<div class="protocol-card" onclick="selectProtocol(\'' + p.name.replace(/'/g, "\\'") + '\')">'
-            + '<div class="protocol-card-header">'
-            + '<div><h3 class="protocol-name">' + p.name + '</h3></div>'
-            + '<span class="protocol-badge">' + p.steps.length + ' steps</span>'
-            + '</div>'
-            + '<div class="protocol-meta-details">'
-            + '<div class="meta-col"><span class="meta-label">Files</span><span class="meta-value">' + p.total_files + '</span></div>'
-            + '<div class="meta-col"><span class="meta-label">Cells</span><span class="meta-value">' + p.measured_cells + '</span></div>'
-            + '<div class="meta-col"><span class="meta-label">Yield</span><span class="meta-value meta-value-green">' + p.switching_yield + '%</span></div>'
-            + '</div>'
-            + '</div>';
-        }).join("");
+        protocolNames = data.protocols.map(p => p.name);
+        const sel = document.getElementById("sel-protocol");
+        sel.innerHTML = '<option value="">-- Select protocol --</option>';
+        data.protocols.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = p.name;
+          sel.appendChild(opt);
+        });
 
-        area.innerHTML = '<section class="page-title-row">'
-          + '<h1 class="page-title">' + projName + '</h1>'
-          + '<p class="page-subtitle">' + data.stats.total_protocols + ' protocols &middot; ' + data.stats.total_files + ' files</p>'
-          + '</section>'
-          + '<div class="section-card">'
-          + '<div class="section-header"><h2 class="section-title">Protocols</h2></div>'
-          + '<div class="protocols-list">' + protoCards + '</div>'
-          + '</div>';
+        showProtocolList(data);
       } catch (e) {
         area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--accent-red)">Failed to load project. Is <code>sci serve</code> running?</div>';
       }
     }
 
+    function showProtocolList(data) {
+      const area = document.getElementById("content-area");
+      const cards = data.protocols.map(p =>
+        '<div class="protocol-card" onclick="selectProtocol(\'' + p.name.replace(/'/g, "\\'") + '\')">'
+        + '<div class="protocol-card-header">'
+        + '<div><h3 class="protocol-name">' + p.name + '</h3></div>'
+        + '<span class="protocol-badge">' + p.steps.length + ' steps</span>'
+        + '</div>'
+        + '<div class="protocol-meta-details">'
+        + '<div class="meta-col"><span class="meta-label">Files</span><span class="meta-value">' + p.total_files + '</span></div>'
+        + '<div class="meta-col"><span class="meta-label">Cells</span><span class="meta-value">' + p.measured_cells + '</span></div>'
+        + '<div class="meta-col"><span class="meta-label">Yield</span><span class="meta-value meta-value-green">' + p.switching_yield + '%</span></div>'
+        + '</div></div>'
+      ).join("");
+
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (data.project_name || "project") + '</span>';
+      area.innerHTML = '<section class="page-title-row">'
+        + '<h1 class="page-title">' + (data.project_name || "Project") + '</h1>'
+        + '<p class="page-subtitle">' + data.stats.total_protocols + ' protocols &middot; ' + data.stats.total_files + ' files</p>'
+        + '</section>'
+        + '<div class="section-card">'
+        + '<div class="section-header"><h2 class="section-title">Protocols</h2></div>'
+        + '<div class="protocols-list">' + cards + '</div></div>';
+    }
+
     async function selectProtocol(name) {
-      currentProtocol = name;
-      currentStep = null;
+      if (!name) {
+        activeProtocol = null;
+        activeStep = null;
+        document.getElementById("ctx-protocol").textContent = "-";
+        document.getElementById("ctx-step").textContent = "-";
+        document.getElementById("step-nav").style.display = "none";
+        document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (window.SciApp.currentProject?.project_name || "project") + '</span>';
+        const data = await window.SciApp.apiFetch("/api/project");
+        showProtocolList(data);
+        return;
+      }
+
+      activeProtocol = name;
+      activeStep = null;
       document.getElementById("ctx-protocol").textContent = name;
       document.getElementById("ctx-step").textContent = "-";
+      document.getElementById("sel-protocol").value = name;
 
       const area = document.getElementById("content-area");
       area.innerHTML = '<div class="skeleton" style="height:120px;"></div>';
@@ -179,109 +194,102 @@
       try {
         const data = await window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(name) + "/files");
         filesCache[name] = data;
-        renderSteps();
+        populateStepNav(data);
+        showStepList(data);
       } catch (e) {
         area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--accent-red)">Failed to load protocol: ' + name + '</div>';
       }
     }
 
-    function renderSteps() {
-      const data = filesCache[currentProtocol];
-      if (!data) return;
+    function populateStepNav(data) {
+      const nav = document.getElementById("step-nav");
+      nav.style.display = "block";
+      nav.innerHTML = '<div class="sidebar-form-label" style="margin-bottom:8px;">Steps</div>';
+      data.steps.forEach(s => {
+        const a = document.createElement("a");
+        a.className = "nav-link";
+        a.href = "#";
+        a.dataset.step = s.name;
+        a.innerHTML = '<span>' + s.name + '</span><span style="margin-left:auto;font-size:10px;color:var(--text-muted);">' + s.files.length + '</span>';
+        a.addEventListener("click", e => {
+          e.preventDefault();
+          selectStep(s.name);
+        });
+        if (activeStep === s.name) a.classList.add("active");
+        nav.appendChild(a);
+      });
+    }
 
-      const projName = (window.SciApp.currentProject && window.SciApp.currentProject.project_name) || "project";
-      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root breadcrumb-link" onclick="goHome()">' + projName + '</span>'
-        + '<span class="breadcrumb-separator">/</span>'
-        + '<span class="breadcrumb-current">' + currentProtocol + '</span>';
-
+    function showStepList(data) {
       const area = document.getElementById("content-area");
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (window.SciApp.currentProject?.project_name || "project") + '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-current">' + activeProtocol + '</span>';
+
       if (!data.steps.length) {
-        area.innerHTML = '<section class="page-title-row"><h1 class="page-title">' + currentProtocol + '</h1><p class="page-subtitle">No steps found</p></section>';
+        area.innerHTML = '<section class="page-title-row"><h1 class="page-title">' + activeProtocol + '</h1><p class="page-subtitle">No steps found</p></section>';
         return;
       }
 
-      const stepCards = data.steps.map(s => {
-        return '<div class="protocol-card" onclick="selectStep(\'' + s.name.replace(/'/g, "\\'") + '\')">'
-          + '<div class="protocol-card-header">'
-          + '<div><h3 class="protocol-name">' + s.name + '</h3></div>'
-          + '<span class="protocol-badge">' + s.files.length + ' files</span>'
-          + '</div>'
-          + '</div>';
-      }).join("");
+      const cards = data.steps.map(s =>
+        '<div class="protocol-card" onclick="selectStep(\'' + s.name.replace(/'/g, "\\'") + '\')">'
+        + '<div class="protocol-card-header">'
+        + '<div><h3 class="protocol-name">' + s.name + '</h3></div>'
+        + '<span class="protocol-badge">' + s.files.length + ' files</span>'
+        + '</div></div>'
+      ).join("");
 
       area.innerHTML = '<section class="page-title-row">'
-        + '<h1 class="page-title">' + currentProtocol + '</h1>'
+        + '<h1 class="page-title">' + activeProtocol + '</h1>'
         + '<p class="page-subtitle">' + data.steps.length + ' steps</p>'
         + '</section>'
         + '<div class="section-card">'
         + '<div class="section-header"><h2 class="section-title">Steps</h2></div>'
-        + '<div class="protocols-list">' + stepCards + '</div>'
-        + '</div>';
+        + '<div class="protocols-list">' + cards + '</div></div>';
     }
 
     function selectStep(name) {
-      currentStep = name;
+      activeStep = name;
       document.getElementById("ctx-step").textContent = name;
-      renderThumbnails();
-    }
 
-    function renderThumbnails() {
-      const data = filesCache[currentProtocol];
-      if (!data) return;
+      document.querySelectorAll("#step-nav .nav-link").forEach(el => {
+        el.classList.toggle("active", el.dataset.step === name);
+      });
 
-      const step = data.steps.find(s => s.name === currentStep);
-      const projName = (window.SciApp.currentProject && window.SciApp.currentProject.project_name) || "project";
-
-      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root breadcrumb-link" onclick="goHome()">' + projName + '</span>'
-        + '<span class="breadcrumb-separator">/</span>'
-        + '<span class="breadcrumb-root breadcrumb-link" onclick="goToProtocol()">' + currentProtocol + '</span>'
-        + '<span class="breadcrumb-separator">/</span>'
-        + '<span class="breadcrumb-current">' + currentStep + '</span>';
-
+      const data = filesCache[activeProtocol];
+      const step = data.steps.find(s => s.name === name);
       const area = document.getElementById("content-area");
 
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (window.SciApp.currentProject?.project_name || "project") + '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-root">' + activeProtocol + '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-current">' + name + '</span>';
+
       if (!step || !step.files.length) {
-        area.innerHTML = '<section class="page-title-row"><h1 class="page-title">' + currentStep + '</h1><p class="page-subtitle">No plots in this step</p></section>';
+        area.innerHTML = '<section class="page-title-row"><h1 class="page-title">' + name + '</h1><p class="page-subtitle">No plots in this step</p></section>';
         return;
       }
 
-      const thumbnails = step.files.map(f => {
+      const thumbs = step.files.map(f => {
         const imgPath = "/files/" + f.path;
         const isPdf = f.type === "pdf";
-        const thumbnailHtml = isPdf
+        const media = isPdf
           ? '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-family:var(--font-mono);font-size:13px;">PDF</div>'
           : '<img src="' + imgPath + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />';
-        const clickHandler = isPdf
+        const handler = isPdf
           ? 'onclick="window.open(\'' + imgPath + '\')"'
           : 'onclick="openLightbox(\'' + f.name.replace(/'/g, "\\'") + '\', \'' + imgPath + '\')"';
-
-        return '<div class="plot-card" ' + clickHandler + '>'
-          + '<div class="plot-card-media">' + thumbnailHtml + '</div>'
-          + '<div class="plot-card-content">'
-          + '<div class="plot-provenance" style="font-size:11px;">' + f.name + '</div>'
-          + '</div>'
-          + '</div>';
+        return '<div class="plot-card" ' + handler + '>'
+          + '<div class="plot-card-media">' + media + '</div>'
+          + '<div class="plot-card-content"><div class="plot-provenance" style="font-size:11px;">' + f.name + '</div></div></div>';
       }).join("");
 
       area.innerHTML = '<section class="page-title-row">'
-        + '<h1 class="page-title">' + currentStep + '</h1>'
+        + '<h1 class="page-title">' + name + '</h1>'
         + '<p class="page-subtitle">' + step.files.length + ' plot files</p>'
         + '</section>'
-        + '<div class="gallery-grid" id="thumbnail-grid">' + thumbnails + '</div>';
-    }
-
-    function goHome() {
-      currentProtocol = null;
-      currentStep = null;
-      document.getElementById("ctx-protocol").textContent = "-";
-      document.getElementById("ctx-step").textContent = "-";
-      render();
-    }
-
-    function goToProtocol() {
-      currentStep = null;
-      document.getElementById("ctx-step").textContent = "-";
-      renderSteps();
+        + '<div class="gallery-grid" id="thumbnail-grid">' + thumbs + '</div>';
     }
 
     function openLightbox(title, src) {
@@ -299,14 +307,10 @@
     function toggleView(mode) {
       const grid = document.getElementById("thumbnail-grid");
       if (!grid) return;
-      if (mode === "list") {
-        grid.classList.add("list-view");
-      } else {
-        grid.classList.remove("list-view");
-      }
+      grid.classList.toggle("list-view", mode === "list");
     }
 
-    document.addEventListener("DOMContentLoaded", render);
+    document.addEventListener("DOMContentLoaded", init);
   </script>
 </body>
 </html>
