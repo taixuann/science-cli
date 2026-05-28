@@ -74,9 +74,9 @@ Updates directory structure referenced by `280526_documentation_reorg.md` and `2
 - Verify through manual file listings that all legacy files are neatly relocated and only date-prefixed files are in the root of `documentation/artifacts/`.
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT done
-- [ ] TEST passed
-- [ ] DOCS updated
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT done
+- [x] TEST passed
+- [x] DOCS updated
+- [x] COMMIT done
