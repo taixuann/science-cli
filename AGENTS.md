@@ -113,7 +113,7 @@ When the user asks for a change, **always create a Plan artifact first**.
 | Consolidate devices.yaml into protocol YAML | version-2.1.1 | `core/protocol.py` created; SQLite schema v4; `read_devices()` reads protocol YAML first; `write_devices()` deprecated; `memristor init` writes to protocol YAML; sweep metadata sync pipeline |
 | Repo restructuring (science-cli/* → repo root) | version-2.1.1 | `git mv science-cli/* .` — repo root IS science-cli; extensions/ removed; .gitignore simplified to standard blocklist |
 | Clean up / Remove old scripts/ | 280526_repo_restructure | Completely removed `/scripts/` directory |
-| Archive MIGRATION.md to documentation | 280526_repo_restructure | Moved and renamed `MIGRATION.md` to `documentation/README-1.0.0.md` |
+| Archive MIGRATION.md to documentation | 280526_repo_restructure | Moved and renamed `MIGRATION.md` to `documentation/README-1.0.0.md`, then removed (CHANGELOG.md serves the same purpose) |
 
 ### Active Gaps (Need Execution)
 
@@ -145,7 +145,7 @@ When the user asks for a change, **always create a Plan artifact first**.
 - **Linting**: `ruff.toml` with E/F/I/N/W/UP rules
 - **CONTRIBUTING guide**: `CONTRIBUTING.md`
 - **TUI README**: `src/science_cli/tui/README.md`
-- **Migration guide**: Moved to `documentation/README-1.0.0.md` (1.x → 2.0.0)
+- **Migration guide**: Removed — `CHANGELOG.md` serves the same purpose
 
 #### AI Agent Integration Gaps
 *All gaps closed* (2026-05-28):
