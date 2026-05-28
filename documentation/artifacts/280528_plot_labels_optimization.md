@@ -9,7 +9,7 @@ config / refactor
 
 ## Status
 - **Created**: 2026-05-28
-- **Status**: draft
+- **Status**: completed
 - **Branch**: dev
 
 ## Objective
@@ -73,9 +73,9 @@ In `plot.py:22-28`: consume all subsequent non-flag tokens, join with spaces.
 - In `_plot_interactive()`: config labels already layered via `_do_plot()`
 
 ### 6. Fix uv-vis.yaml ylabel
-- Change from `"Absorbance (a.u.)"` → `"T%"`
+- Change from `"Absorbance (a.u.)"` → `"Transmission (%)"`
 
-## Files to Modify
+## Files Modified
 | File | Action | Reason |
 |------|--------|--------|
 | `src/science_cli/core/config.py` | Edit | Add `get_plot_labels()` accessor |
@@ -83,7 +83,8 @@ In `plot.py:22-28`: consume all subsequent non-flag tokens, join with spaces.
 | `src/science_cli/cli/commands/plot.py:22-28` | Edit | Multi-token flag values (no quotes) |
 | `src/science_cli/cli/commands/plot.py:489-494` | Edit | Add template+config labels to direct path |
 | `src/science_cli/cli/commands/plot.py:653-663` | Edit | Add config labels layer between column/CLI |
-| `src/science_cli/theme/plot-templates/uv-vis.yaml:9` | Edit | Fix ylabel to T% |
+| `src/science_cli/theme/plot-templates/uv-vis.yaml:9` | Edit | Fix ylabel to `Transmission (%)` |
+| `~/.config/science-cli/config.yaml` | Edit | Add `plot.labels` section with defaults for all 11 techniques |
 
 ## Dependencies
 None — all changes are self-contained.
@@ -95,12 +96,17 @@ None — all changes are self-contained.
 4. **Template fix**: `template_to_flags("uv-vis")` returns xlabel/ylabel
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT — config accessor
-- [ ] IMPLEMENT — template_to_flags fix
-- [ ] IMPLEMENT — multi-token parser
-- [ ] IMPLEMENT — config labels in plot paths
-- [ ] IMPLEMENT — uv-vis ylabel fix
-- [ ] TEST passed
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT — config accessor (`get_plot_labels()`)
+- [x] IMPLEMENT — template_to_flags fix (`labels:` → `axes:`)
+- [x] IMPLEMENT — multi-token parser (no quotes needed)
+- [x] IMPLEMENT — config labels in plot paths (interactive + direct)
+- [x] IMPLEMENT — uv-vis ylabel fix (`Transmission (%)`)
+- [x] IMPLEMENT — user config update (`plot.labels` section)
+- [x] TEST passed (97 tests, all green)
+- [x] COMMIT done (`a71eff6` on `dev`)
+
+## Summary
+All items complete. Resolution chain: `CLI --xlabel` > `Config plot.labels.<technique>` > `Column auto-detection` > `Template YAML axes:`.
+Labels like `--xlabel Voltage (V)` no longer require shell quoting.
