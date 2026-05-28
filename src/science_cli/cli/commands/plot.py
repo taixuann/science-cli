@@ -361,6 +361,8 @@ def _plot_interactive(extra_args: list | None = None) -> None:
             display_items.append(build_fzf_display(proto, step, name, show_protocol=show_proto))
         elif not active_proto:
             display_items.append(name)
+        else:
+            display_items.append(name)  # fallback: show all when protocol has no matched files
 
     prompt = f"{active_proto} | Select file(s) >" if active_proto else "Select file(s) (Tab to multi-select):"
     selected = fzf_select(
