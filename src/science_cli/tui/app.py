@@ -38,9 +38,29 @@ from science_cli.tui.theme import CSS_VARIABLES
 MAX_HISTORY = 200
 
 
-def _is_fzf_command(cmd_args: list[str]) -> bool:
-    """Check if the command args include an interactive fzf flag."""
-    return "--fzf" in cmd_args or "-fzf" in cmd_args
+def _is_fzf_command(cmd_name: str, cmd_args: list[str]) -> bool:
+    """Check if the command will enter interactive fzf mode.
+
+    Since --fzf is now the default for most commands, we check by
+    command name in addition to legacy --fzf flag detection.
+    """
+    if "--fzf" in cmd_args or "-fzf" in cmd_args:
+        return True
+    always_fzf = {"plot", "analyze", "results"}
+    if cmd_name in always_fzf:
+        return True
+    fzf_capable = {"memristor", "raman"}
+    if cmd_name in fzf_capable:
+        return True
+    if cmd_name == "add" and "-m" in cmd_args and "data" in cmd_args:
+        return True
+    if cmd_name == "add" and "-m" in cmd_args and "metadata" in cmd_args:
+        return True
+    if cmd_name == "delete" and "-m" in cmd_args and "data" in cmd_args:
+        return True
+    if cmd_name == "edit" and "-m" in cmd_args and "data" in cmd_args:
+        return True
+    return False
 
 
 def _capture_handler_output(cmd_name: str, cmd_args: list[str]) -> str:
@@ -316,7 +336,7 @@ class SCIApp(App):
             # Python process with the real terminal.  This avoids ALL
             # asyncio nesting issues (questionary calls asyncio.run()),
             # terminal-state corruption, and TTY-wrangling problems.
-            if _is_fzf_command(cmd_args):
+            if _is_fzf_command(cmd_name, cmd_args):
                 self._driver.stop_application_mode()
                 try:
                     subprocess.run(
