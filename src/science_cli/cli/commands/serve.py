@@ -35,7 +35,7 @@ def serve_handler(args: list) -> None:
         return
 
     pos, flags = _parse_flags(args)
-    port = int(flags.get("port") or os.environ.get("SCI_SERVE_PORT", 6000))
+    port = int(flags.get("port") or os.environ.get("SCI_SERVE_PORT", 8000))
     project = flags.get("project") or flags.get("p")
     dev_mode = "dev" in flags or "d" in flags
     auto_open = "open" in flags or "o" in flags
