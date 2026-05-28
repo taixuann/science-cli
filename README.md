@@ -93,8 +93,32 @@ GROUP 3: DATA ANALYSIS
 
 GROUP 4: DEVICE & TECHNIQUES
   memristor   Manage device matrices, sync/analyze, dashboard
+  raman       Raman spectroscopy: list, info, plot, analyze (with fzf)
   techniques  List available techniques and usage guide (deprecated → use config)
 ```
+
+### Raman Spectroscopy
+
+Raman spectra from Horiba LabRAM HR Evolution (USTH) — 45-line `#` header with instrument metadata:
+
+```bash
+# List Raman files with laser/grating/range columns
+sci raman ls
+
+# Show full 30-field metadata table (pick with fzf)
+sci raman info --fzf
+
+# Plot spectrum with annotation (pick with fzf)
+sci raman plot --fzf
+
+# Analyze: baseline correction + normalization + peak finding + CSV export
+sci raman analyze --fzf --baseline --norm --peaks
+
+# Custom peak parameters
+sci raman analyze --fzf --baseline --prominence 200 --distance 10
+```
+
+**Technique:** `raman` | **Device:** `horiba-usth` (tab-delimited, comma decimal, latin1, 45 header lines). Filenames match `*_raman*`, `*_sers*`, `*_raman-sers*`.
 
 ### Config Subcommands (Sprint 8)
 

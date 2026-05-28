@@ -235,7 +235,7 @@ PLAN-config-expansion
 │   │   │   ├── data_cmd.py / delete_cmd.py / edit_cmd.py
 │   │   │   ├── eis.py / fit.py / ls_cmd.py / memristor.py
 │   │   │   ├── metadata.py / open_cmd.py / parse.py
-│   │   │   ├── plot.py / protocol.py / results.py
+│   │   │   ├── plot.py / protocol.py / raman.py / results.py
 │   │   │   ├── status.py / techniques.py
 │   │   └── help.py                    ← Help text rendering
 │   ├── core/                          ← Core library — no CLI coupling
@@ -270,6 +270,19 @@ PLAN-config-expansion
 2. Define a `<name>_handler(args)` function
 3. Import it in `src/science_cli/cli/commands/__init__.py`
 4. Add it to `COMMAND_TREE` dict in `__init__.py`
+
+### Adding a New CLI Command for Spectroscopy (e.g. Raman)
+1. Create `src/science_cli/cli/commands/<name>.py`
+2. Define `<name>_handler(args)` — routes to subcommands (`ls`, `info`, `plot`, `analyze`)
+3. Import + register in `cli/commands/__init__.py` COMMAND_TREE
+4. Add to `cli/help.py` (classify into GROUP 4)
+5. Add device config:
+   - Hardcoded fallback in `core/config.py` `_DEFAULT_DEVICE[technique]`
+   - Global config in `~/.config/science-cli/config.yaml` under `devices:` and `techniques:`
+6. For header-only metadata, use `extract_raman_metadata()` pattern in `data_loader.py`
+7. For header-less CSV/TSV, add `names: [col1, col2]` to device config (see `horiba-usth`)
+8. Add filename detection patterns to `core/technique.py` `BUILTIN_TECHNIQUES`
+9. All subcommands should support `--fzf` for interactive file selection via `fzf_utils.py`
 
 ### Adding a New CLI Flag to Protocol/Metadata Commands
 The `-d`/`--device` flag pattern mirrors `-t`/`--technique` for step metadata:

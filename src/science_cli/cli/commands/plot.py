@@ -635,7 +635,14 @@ def _do_plot(filepath: str, flags: dict, technique: str = "") -> None:
     from science_cli.core.data_loader import load_data_file
 
     try:
-        df, info = load_data_file(filepath)
+        load_kwargs = {}
+        if technique:
+            from science_cli.core.config import get_default_device
+            device = get_default_device(technique)
+            if device:
+                load_kwargs["technique"] = technique
+                load_kwargs["device"] = device
+        df, info = load_data_file(filepath, **load_kwargs)
     except Exception as e:
         console.print(f"[red]Failed to load file: {e}[/red]")
         return
@@ -890,7 +897,14 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
 
     for i, fp in enumerate(files):
         try:
-            df, info = load_data_file(fp)
+            load_kwargs = {}
+            if technique:
+                from science_cli.core.config import get_default_device
+                device = get_default_device(technique)
+                if device:
+                    load_kwargs["technique"] = technique
+                    load_kwargs["device"] = device
+            df, info = load_data_file(fp, **load_kwargs)
             xi, yi, _, _ = _resolve_xy_columns(df, info, technique)
             if len(xi) == 0 or len(yi) == 0:
                 continue
