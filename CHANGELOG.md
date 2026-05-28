@@ -134,3 +134,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config merge bug: `get_global_device_config()` and `get_device_config()` returned early from hardcoded defaults, ignoring user's `config.yaml` settings (e.g. `header_lines: 21` was silently overridden by hardcoded `23`)
 - `ls_cmd.py`: handle enriched file entries (dicts with `file` key) in matrix display
 - Matrix grid rendering: inverted axes, missing column headers
+
+## [2.2.0] - 2026-05-28
+
+### Added
+- **Consolidated Library Namespace**: Added `src/science_cli/library/` package with `__init__.py` to organize technique-specific backends symmetrically.
+- **Local AI Subagent**: Localized `plotting-guy` agent profile to the repository root under `.opencode/agents/plotting-guy.md` for project-contained plotting/visualization task orchestration.
+- **New Active Workspace Plans**: Established four comprehensive date-prefixed active planning documents under `documentation/artifacts/` covering `refactor`, `ai_integration`, `dashboard`, and `themes`.
+- **Strict Checklist Enforcement Rule**: Updated developer instructions in `RULES.md` and codebase documentation in `SCHEMA.md` to mandate real-time checklist checkbox updates (`[x]`) for active plans.
+
+### Changed
+- **Symmetric Technique Reorganization**: Consolidated and relocated standalone technique modules (`memristor/`, `electrochem/`, `iv/`) from the source root to `src/science_cli/library/`.
+- **Refactored CLI Commands**: Reorganized technique imports in CLI modules (`memristor.py`, `analyze.py`, `eis.py`, `plot.py`) under `src/science_cli/cli/commands/` to map 1:1 to the consolidated library paths.
+- **Comprehensive Import Migration**: Automatically executed package-wide python glob script refactoring all internal relative and absolute module references to nested `library/` paths.
+- **Test Suite Realignment**: Updated entire unit test suite (`tests/`), including `tests/test_memristor/test_db.py` and `tests/test_guardrails.py`, to correctly reference consolidated namespaces.
+- **Artifact Reorganization & Archiving**: Moved 23 historical legacy plans and reports from `documentation/artifacts/` to `documentation/artifacts/archive/` to keep the active planning workspace clean.
+
+### Fixed
+- **CLI Command Verification Tests**: Fixed expected command list validations in `tests/test_cli.py` to accurately verify all 16 registered CLI commands.
+- **Recursive Import Resolver Error**: Resolved a `ValueError` in relative path calculation when scanning and compiling deeply nested submodules.
+
