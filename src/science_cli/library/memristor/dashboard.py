@@ -38,9 +38,9 @@ def _collect_device_data(config, results_dir: Path) -> dict:
       - switching_count: int
       - total_measured_devices: int
     """
-    from science_cli.memristor.device import extract_material_batch
-    from science_cli.memristor.plotting import read_iv_csv
-    from science_cli.memristor.switching import extract_iv_parameters
+    from science_cli.library.memristor.device import extract_material_batch
+    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.memristor.switching import extract_iv_parameters
 
     data_dir = results_dir.parent
     per_device: dict[tuple, dict] = {}
@@ -149,8 +149,8 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
     Uses v_set, v_reset, on_off_ratio from the files table.
     Falls back to CSV reading for files that don't have analysis values.
     """
-    from science_cli.memristor.device import extract_material_batch
-    from science_cli.memristor.plotting import read_iv_csv
+    from science_cli.library.memristor.device import extract_material_batch
+    from science_cli.library.memristor.plotting import read_iv_csv
 
     data_dir = results_dir.parent
     per_device: dict[tuple[int, int], dict] = {}
@@ -388,7 +388,7 @@ def generate_dashboard(
     """
     # ── Try SQLite fast-read path ──
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import close_db, open_db, query_files
+    from science_cli.library.memristor.db import close_db, open_db, query_files
 
     proj = get_current_project_path()
     sqlite_available = False
@@ -886,9 +886,9 @@ def collect_cross_protocol_data(project_dir: Path, force: bool = False) -> dict:
     Returns:
         dict with keys: protocols, aggregate, generated_at, file_mtimes.
     """
-    from science_cli.memristor.device import extract_material_batch, read_devices
-    from science_cli.memristor.plotting import read_iv_csv
-    from science_cli.memristor.switching import extract_iv_parameters
+    from science_cli.library.memristor.device import extract_material_batch, read_devices
+    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.memristor.switching import extract_iv_parameters
 
     results_dir = project_dir / "results"
     cache_path = results_dir / "analysis_data.json"
@@ -1096,7 +1096,7 @@ def read_dashboard_data_sqlite(project_root: Path) -> Optional[dict]:
 
     Returns dict with keys: files, cells, or None if DB not available.
     """
-    from science_cli.memristor.db import close_db, open_db, query_cells, query_files
+    from science_cli.library.memristor.db import close_db, open_db, query_cells, query_files
 
     db_path = project_root / f"{project_root.name}.db"
     if not db_path.exists():
@@ -3614,8 +3614,8 @@ def generate_main_dashboard(
     Returns:
         Path to main index HTML.
     """
-    from science_cli.memristor.db import close_db, open_db
-    from science_cli.memristor.device import read_devices
+    from science_cli.library.memristor.db import close_db, open_db
+    from science_cli.library.memristor.device import read_devices
 
     # Collect protocol dirs
     proto_dir = project_dir / "protocol"

@@ -477,7 +477,7 @@ def _read_from_protocol_yaml(
     points: list[MatrixPoint] = []
     try:
         from science_cli.core.project import get_current_project_path
-        from science_cli.memristor.db import close_db, open_db, query_files
+        from science_cli.library.memristor.db import close_db, open_db, query_files
 
         proj = get_current_project_path()
         if proj:
@@ -835,7 +835,7 @@ def sync_sweep_to_protocol_yaml(
     """
     import sqlite3
 
-    from science_cli.memristor.db import query_sweep_metadata
+    from science_cli.library.memristor.db import query_sweep_metadata
 
     proto_path = Path(protocol_dir)
     yaml_path = proto_path / f"{proto_path.name}.yaml"

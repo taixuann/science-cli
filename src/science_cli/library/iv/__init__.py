@@ -1,11 +1,11 @@
 """science-iv: IV curve analysis extension.
 
-Integrated into science-cli core as ``science_cli.iv``.
+Integrated into science-cli core as ``science_cli.library.iv``.
 Provides IV sweep, breakdown, and leakage analysis.
 """
 
 from science_cli.core.technique import ColumnMap
-from science_cli.iv.analyze import extract_breakdown_voltage, extract_resistance
+from .analyze import extract_breakdown_voltage, extract_resistance
 
 __all__ = [
     "extract_breakdown_voltage", "extract_resistance",

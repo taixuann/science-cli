@@ -1161,7 +1161,7 @@ def collect_iv_files(
     Returns:
         List of plot target dicts.
     """
-    from science_cli.memristor.device import extract_material_batch
+    from science_cli.library.memristor.device import extract_material_batch
 
     results: list[dict] = []
 

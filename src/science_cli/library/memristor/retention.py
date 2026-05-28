@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from science_cli.memristor.models import RetentionData
+from science_cli.library.memristor.models import RetentionData
 
 
 def analyze_retention(

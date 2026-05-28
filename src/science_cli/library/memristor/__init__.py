@@ -1,6 +1,6 @@
-"""science_cli.memristor: memristor characterization module."""
+"""science_cli.library.memristor: memristor characterization module."""
 
-from science_cli.memristor.device import (
+from .device import (
     DeviceConfig,
     DeviceGeometry,
     FileEntry,
@@ -15,9 +15,9 @@ from science_cli.memristor.device import (
     validate,
     write_devices,
 )
-from science_cli.memristor.endurance import analyze_endurance
-from science_cli.memristor.retention import analyze_retention
-from science_cli.memristor.switching import analyze_switching, extract_iv_parameters
+from .endurance import analyze_endurance
+from .retention import analyze_retention
+from .switching import analyze_switching, extract_iv_parameters
 
 __all__ = [
     "SweepSegment", "FileEntry", "TechniqueGroup", "MatrixPoint",

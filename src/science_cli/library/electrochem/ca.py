@@ -3,7 +3,7 @@
 import numpy as np
 from lmfit import Model
 
-from science_cli.electrochem.models import CAData
+from .models import CAData
 
 
 def analyze_ca(data: CAData, options: dict | None = None) -> dict:

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from science_cli.electrochem.models import EISData
+from .models import EISData
 
 # ---------------------------------------------------------------------------
 # Registered circuit model functions

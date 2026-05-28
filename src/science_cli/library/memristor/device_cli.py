@@ -37,7 +37,7 @@ from science_cli.core.session import (
     load_session,
     set_last_step,
 )
-from science_cli.memristor.device import (
+from science_cli.library.memristor.device import (
     FileEntry,
     MatrixPoint,
     TechniqueGroup,
@@ -48,7 +48,7 @@ from science_cli.memristor.device import (
     sync_devices,
     write_devices,
 )
-from science_cli.memristor.device import (
+from science_cli.library.memristor.device import (
     validate as validate_config,
 )
 
@@ -293,7 +293,7 @@ def _device_data_files_recursive(proto_dir: Path) -> list[tuple[str, str, Path]]
 
     Returns list of (rel_path, step_dir_name, Path) tuples.
     """
-    from science_cli.memristor.device import DATA_SUFFIXES, YAML_EXCLUDE
+    from science_cli.library.memristor.device import DATA_SUFFIXES, YAML_EXCLUDE
 
     results: list[tuple[str, str, Path]] = []
     for f in proto_dir.rglob("*"):
@@ -410,7 +410,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     # Optional: migrate legacy devices.yaml
     legacy_path = pdir / "devices.yaml"
     if legacy_path.exists():
-        from science_cli.memristor.device import _migrate_devices_yaml
+        from science_cli.library.memristor.device import _migrate_devices_yaml
         report = _migrate_devices_yaml(pdir)
         if report.get("migrated"):
             print(f"  Migrated {report.get('files_migrated', 0)} file(s) from legacy devices.yaml")
@@ -442,7 +442,7 @@ def cmd_ls(args: argparse.Namespace) -> None:
         proj = pdir.parent.parent
         cell_counts: dict[tuple[int, int], int] = {}
         try:
-            from science_cli.memristor.db import get_db_path
+            from science_cli.library.memristor.db import get_db_path
             db_path = get_db_path(proj)
             if db_path.exists():
                 import sqlite3
@@ -638,7 +638,7 @@ def cmd_matrix(args: argparse.Namespace) -> None:
         --status: Show summary of what's loaded in the database.
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import close_db, open_db
+    from science_cli.library.memristor.db import close_db, open_db
 
     proj = get_current_project_path()
     if not proj:
@@ -1148,7 +1148,7 @@ def _reconcile_protocol_yaml(pdir: Path) -> dict:
     with open(proto_yaml_path) as f:
         proto_data = yaml.safe_load(f) or {}
 
-    from science_cli.memristor.db import DATA_SUFFIXES
+    from science_cli.library.memristor.db import DATA_SUFFIXES
 
     total_added = 0
     total_removed = 0
@@ -1233,7 +1233,7 @@ def _sync_one_protocol(
     Returns the reconcile report (or empty dict if no reconcile).
     Side effects: prints per-protocol output.
     """
-    from science_cli.memristor.db import (
+    from science_cli.library.memristor.db import (
         DATA_SUFFIXES,
         MEMRISTOR_TECHNIQUES,
         populate_protocol_from_step_dirs,
@@ -1297,7 +1297,7 @@ def _sync_one_protocol(
             pruned_total += prune_stale_files(conn, protocol_name, step_name, disk_files)
 
     # ── Phase 5: Sync sweep metadata back to protocol YAML ──
-    from science_cli.memristor.device import sync_sweep_to_protocol_yaml
+    from science_cli.library.memristor.device import sync_sweep_to_protocol_yaml
     sweep_report = sync_sweep_to_protocol_yaml(pdir, conn)
     if sweep_report.get("files_updated", 0) > 0:
         print(f"  Sweep metadata synced: {sweep_report['files_updated']} file(s)")
@@ -1330,7 +1330,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     With ``--all`` / ``-A``: sync ALL protocols in the current project.
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import close_db, open_db, rebuild_cells
+    from science_cli.library.memristor.db import close_db, open_db, rebuild_cells
 
     proj = get_current_project_path()
     if not proj:
@@ -1401,14 +1401,14 @@ def cmd_sync(args: argparse.Namespace) -> None:
 def _sqlite_sync_from_yaml(pdir: Path) -> None:
     """Write current devices.yaml contents into the SQLite cache."""
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import (
+    from science_cli.library.memristor.db import (
         close_db,
         insert_file,
         open_db,
         rebuild_cells,
         upsert_protocol,
     )
-    from science_cli.memristor.device import extract_material_batch, read_devices
+    from science_cli.library.memristor.device import extract_material_batch, read_devices
 
     proj = get_current_project_path()
     if not proj:
@@ -1498,14 +1498,14 @@ def _sqlite_reindex(pdir: Path) -> None:
     Reads devices.yaml and repopulates the SQLite database.
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import (
+    from science_cli.library.memristor.db import (
         close_db,
         insert_file,
         open_db,
         rebuild_cells,
         upsert_protocol,
     )
-    from science_cli.memristor.device import extract_material_batch, read_devices
+    from science_cli.library.memristor.device import extract_material_batch, read_devices
 
     proj = get_current_project_path()
     if not proj:
@@ -1599,9 +1599,9 @@ def _analyze_protocol(
 
     Returns dict with: protocol, total, analyzed, skipped, errors.
     """
-    from science_cli.memristor.db import query_files, update_file_analysis
-    from science_cli.memristor.plotting import read_iv_csv
-    from science_cli.memristor.switching import extract_iv_parameters
+    from science_cli.library.memristor.db import query_files, update_file_analysis
+    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.memristor.switching import extract_iv_parameters
 
     pdir = proj / "protocol" / protocol_name
     if not pdir.exists():
@@ -1698,7 +1698,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         --step <name>: filter to a specific step within the protocol(s).
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.db import close_db, open_db
+    from science_cli.library.memristor.db import close_db, open_db
 
     proj = get_current_project_path()
     if not proj:
@@ -1863,7 +1863,7 @@ def cmd_check(args: argparse.Namespace) -> None:
 
 def cmd_plot(args: argparse.Namespace) -> None:
     """Batch-generate IV curve SVGs from devices.yaml."""
-    from science_cli.memristor.plotting import (
+    from science_cli.library.memristor.plotting import (
         build_fzf_line,
         build_plot_filename,
         build_plot_title,
@@ -2073,7 +2073,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Generate per-protocol dashboards + main index page (default)."""
     from science_cli.core.project import get_current_project_path
-    from science_cli.memristor.dashboard import generate_main_dashboard
+    from science_cli.library.memristor.dashboard import generate_main_dashboard
 
     sess = load_session()
     last_proj = sess.get("last_project", "")

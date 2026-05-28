@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from science_cli.memristor.models import EnduranceData
+from science_cli.library.memristor.models import EnduranceData
 
 
 def analyze_endurance(

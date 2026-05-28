@@ -764,7 +764,7 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
     mag = df[mag_col].values if mag_col else None
     phase = df[phase_col].values if phase_col else None
 
-    from science_cli.electrochem.models import EISData
+    from science_cli.library.electrochem.models import EISData
     from science_cli.plot.eis import plot_eis_bode, plot_eis_fit, plot_eis_nyquist
 
     apply_theme(get_active_theme())
@@ -801,7 +801,7 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
     # ── Circuit fit (--circuit) ──────────────────────────────────────
     circuit_model = flags.get("circuit")
     if circuit_model is not False and circuit_model is not None:
-        from science_cli.electrochem.eis import best_circuit_fit, circuit_fit
+        from science_cli.library.electrochem.eis import best_circuit_fit, circuit_fit
 
         eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
 
@@ -858,7 +858,7 @@ def _do_eis_plot(filepath: str, flags: dict) -> None:
 
     # ── KK test (--kk) ──────────────────────────────────────────────
     if flags.get("kk"):
-        from science_cli.electrochem.eis import kramers_kronig
+        from science_cli.library.electrochem.eis import kramers_kronig
         eis_data = EISData(frequency=freq, impedance=z_real - 1j * z_imag)
         kk = kramers_kronig(eis_data)
         status = "✓ passed" if kk.get("passes") else "✗ failed"
