@@ -63,7 +63,7 @@ sci status --json
 sci chat "plot the IV data from protocol 1_iv-test with loglog axes"
 ```
 
-AI agents discover project structure via `sci info --json`, find files, look up technique-specific flags, and construct `sci plot` commands. See [`AGENTS_SCHEMA.md`](documentation/AGENTS_SCHEMA.md) for the complete reference.
+AI agents discover project structure via `sci info --json`, find files, look up technique-specific flags, and construct `sci plot` commands. See [`AGENTS.md`](AGENTS.md) and [`SCHEMA.md`](SCHEMA.md) for the complete reference.
 
 ## Quick Start
 

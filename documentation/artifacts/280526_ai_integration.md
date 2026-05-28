@@ -55,7 +55,7 @@ AI agents (like Antigravity and OpenCode) are first-class developers and users o
 | `.opencode/agents/plotting-guy.md` | [NEW] | Localized, self-contained definition of the visualization subagent |
 | `src/science_cli/cli/commands/chat_cmd.py` | Modify | Update intent-routing prompt and session merging for Option 2 |
 | `src/science_cli/cli/commands/info.py` | Modify | Ensure raw JSON formatting is completely clean and valid for parsing |
-| `documentation/AGENTS_SCHEMA.md` | Modify | Document the local `.opencode/` folder location and dual options |
+| `documentation/AGENTS_SCHEMA.md` | [DELETE] | Redundant guide deleted in favor of AGENTS.md, RULES.md, and SCHEMA.md |
 
 ## Dependencies
 None
