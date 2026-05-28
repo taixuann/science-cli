@@ -161,9 +161,9 @@ These are **not** part of this plan — only the group naming is set up to accom
 | `src/science_cli/library/memristor/device_cli.py` | Edit | Remove `--fzf` arg from `add` and `plot` subparsers; make fzf default |
 | `src/science_cli/cli/commands/delete_cmd.py` | Edit | Remove `--fzf` requirement, default to fzf |
 | `src/science_cli/SCHEMA.md` | Edit | Update line 117: "All subcommands should support --fzf" → "All subcommands default to fzf" |
+| `src/science_cli/tui/app.py` | Edit | Update `_is_fzf_command()` to detect fzf-capable commands by name (not just `--fzf` flag) |
 
-### NOT modified (excluded):
-- `tui/app.py` — TUI excluded from this PLAN
+### NOT modified:
 - `edit_cmd.py` — already uses fzf implicitly, no change needed
 
 ---
