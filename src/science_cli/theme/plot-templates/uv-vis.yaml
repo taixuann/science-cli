@@ -6,7 +6,7 @@ figure:
   facecolor: white
 axes:
   xlabel: "Wavelength (nm)"
-  ylabel: "Absorbance (a.u.)"
+  ylabel: "Transmission (%)"
   xlim: [300, 800]
   ylim: null
   tick_direction: in
