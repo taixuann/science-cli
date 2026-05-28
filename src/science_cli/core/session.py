@@ -21,7 +21,7 @@ def _default_session():
         "protocol_state": {},      # Protocol-level metadata for auto-save/restore
         "step_state": {},          # Step-level metadata for auto-save/restore
         "history": [],
-        "theme": "publication-acs",
+        "theme": "publication-nature",
         "fzf_opts": {
             "height": "60%",
             "border": "rounded",
@@ -93,7 +93,7 @@ def set_fzf_opts(opts: dict):
 
 
 def get_active_theme() -> str:
-    return load_session().get("theme", "publication-acs")
+    return load_session().get("theme", "publication-nature")
 
 
 def set_active_theme(name: str):

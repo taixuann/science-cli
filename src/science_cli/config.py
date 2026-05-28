@@ -8,7 +8,7 @@ CONFIG_DIR = Path.home() / ".config" / "science-cli"
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
 
 _DEFAULT_CONFIG = {
-    "theme": "publication-acs",
+    "theme": "publication-nature",
     "projects_root": str(Path.home() / "projects" / "active_projects"),
     "repl_history_size": 200,
     "default_figure_format": "png",

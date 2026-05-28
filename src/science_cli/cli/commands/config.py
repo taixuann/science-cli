@@ -133,7 +133,7 @@ def _cmd_init(args: list) -> None:
         content = generate_default_config_yaml()
     except ImportError:
         # Fallback: basic config
-        content = "theme: publication-acs\nprojects_root: ~/workspace/projects/active_projects\n"
+        content = "theme: publication-nature\nprojects_root: ~/workspace/projects/active_projects\n"
 
     with open(config_path, "w") as f:
         f.write(content)

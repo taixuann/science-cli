@@ -67,7 +67,7 @@ def _build_manifest() -> dict | None:
             "last_project": sess.get("last_project", ""),
             "last_protocol": sess.get("last_protocol", ""),
             "last_step": sess.get("last_step", ""),
-            "theme": sess.get("theme", "publication-acs"),
+            "theme": sess.get("theme", "publication-nature"),
         },
         "protocols": [],
         "themes": list_themes(),
@@ -82,7 +82,7 @@ def _build_manifest() -> dict | None:
     manifest["project"] = {
         "name": proj.name,
         "path": str(proj),
-        "theme": sess.get("theme", "publication-acs"),
+        "theme": sess.get("theme", "publication-nature"),
     }
 
     raw_dir = proj / "data" / "raw"

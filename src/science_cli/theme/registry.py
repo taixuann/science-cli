@@ -115,6 +115,11 @@ def theme_to_rcparams(name: str) -> dict:
     rc["savefig.pad_inches"] = savefig.get("pad_inches", 0.1)
     rc["savefig.format"] = savefig.get("format", "pdf")
 
+    pdf = theme.get("pdf", {})
+    ft = pdf.get("fonttype")
+    if ft is not None:
+        rc["pdf.fonttype"] = ft
+
     return rc
 
 

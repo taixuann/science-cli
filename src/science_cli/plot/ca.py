@@ -20,7 +20,7 @@ def plot_ca_decay(
     flags = flags or {}
     figsize = parse_figsize(flags)
     if ax is None:
-        fig, ax = create_figure(flags.get("theme", "publication-acs"), figsize)
+        fig, ax = create_figure(flags.get("theme", "publication-nature"), figsize)
     else:
         fig = ax.figure
 

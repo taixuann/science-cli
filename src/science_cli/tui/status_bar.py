@@ -41,7 +41,7 @@ class StatusBar(Static):
     }
     """
 
-    theme_name: reactive[str] = reactive("publication-acs")
+    theme_name: reactive[str] = reactive("publication-nature")
     project: reactive[str] = reactive("")
     protocol: reactive[str] = reactive("")
     step: reactive[str] = reactive("")
@@ -67,7 +67,7 @@ class StatusBar(Static):
         self.project = sess.get("last_project", "")
         self.protocol = sess.get("last_protocol", "")
         self.step = sess.get("last_step", "")
-        self.theme_name = sess.get("theme", "publication-acs")
+        self.theme_name = sess.get("theme", "publication-nature")
 
         self._start_time = time.time()
         self._update_display()
@@ -86,7 +86,7 @@ class StatusBar(Static):
         """
         # Re-read session each tick to pick up live theme changes.
         sess = load_session()
-        theme = sess.get("theme", "publication-acs")
+        theme = sess.get("theme", "publication-nature")
 
         parts: list[str] = []
 
@@ -137,7 +137,7 @@ class StatusBar(Static):
         self.project = sess.get("last_project", "")
         self.protocol = sess.get("last_protocol", "")
         self.step = sess.get("last_step", "")
-        self.theme_name = sess.get("theme", "publication-acs")
+        self.theme_name = sess.get("theme", "publication-nature")
         self._update_display()
 
     def watch_theme_name(self, value: str) -> None:

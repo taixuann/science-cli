@@ -25,9 +25,9 @@ Available commands and their flags:
   sci status [--json]
   sci info [--json]
   sci results [--fzf]
+Theme names: publication-nature, publication-acs, poster, dark, default, tufte, acs-annotated
 
-Theme names: publication-acs, publication-nature, poster, dark, default, tufte, acs-annotated
-Default theme is publication-acs. Use --theme to override.
+Default theme is publication-nature. Use --theme to override.
 
 Example mappings:
   "plot the IV data" → sci plot protocol/<protocol>/<step>/<file>.csv
@@ -117,7 +117,7 @@ def _build_prompt(message: str, ctx: dict | None) -> str:
         prompt += f"Project: {session.get('last_project', 'none')}\n"
         prompt += f"Protocol: {session.get('last_protocol', 'none')}\n"
         prompt += f"Step: {session.get('last_step', 'none')}\n"
-        prompt += f"Theme: {session.get('theme', 'publication-acs')}\n"
+        prompt += f"Theme: {session.get('theme', 'publication-nature')}\n"
 
         if project:
             prompt += f"\nProject path: {project.get('path', '')}\n"

@@ -624,9 +624,8 @@ def generate_default_config_yaml() -> str:
 
 # Root directory for all projects
 projects_root: "{projects_root}"
-
-# Preferred theme (publication-acs, publication-nature, matcha, tufte, dark, poster)
-theme: publication-acs
+# Preferred theme (publication-nature, publication-acs, matcha, tufte, dark, poster)
+theme: publication-nature
 
 # Default figure output settings
 default_dpi: 300

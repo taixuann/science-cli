@@ -275,7 +275,7 @@ def _status_json() -> dict:
             "last_project": current_project,
             "last_protocol": current_protocol,
             "last_step": current_step,
-            "theme": sess.get("theme", "publication-acs"),
+            "theme": sess.get("theme", "publication-nature"),
         },
         "project": None,
         "protocol": None,

@@ -13,7 +13,7 @@ def setup_backend(interactive: bool = False):
         matplotlib.use("Agg")
 
 
-def create_figure(theme: str = "publication-acs", figsize: tuple | None = None) -> tuple:
+def create_figure(theme: str = "publication-nature", figsize: tuple | None = None) -> tuple:
     apply_theme(theme)
     fig, ax = plt.subplots(figsize=figsize)
     return fig, ax
@@ -78,7 +78,7 @@ def plot_line(
 ) -> tuple:
     flags = flags or {}
     if ax is None:
-        _, ax = create_figure(flags.get("theme", "publication-acs"))
+        _, ax = create_figure(flags.get("theme", "publication-nature"))
 
     color = flags.get("color")
     lw = float(flags.get("linewidth", 1.5))
