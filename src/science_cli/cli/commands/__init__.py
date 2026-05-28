@@ -14,6 +14,7 @@ from science_cli.cli.commands.info import info_handler
 from science_cli.cli.commands.plot import plot_handler
 from science_cli.cli.commands.raman import raman_handler
 from science_cli.cli.commands.results import results_handler
+from science_cli.cli.commands.serve import serve_handler
 from science_cli.cli.commands.status import status_handler
 from science_cli.cli.commands.techniques import techniques_handler
 
@@ -29,6 +30,7 @@ COMMAND_TREE = {
     "config":  {"handler": config_handler, "desc": "Configure settings — themes, techniques, devices, grammar (group 2)"},
     "status":  {"handler": status_handler, "desc": "Show current context tree (group 2)"},
     "results": {"handler": results_handler, "desc": "Browse saved figures by protocol and step (group 2)"},
+    "serve":   {"handler": serve_handler, "desc": "Start interactive dashboard server (group 3)"},
     "plot":    {"handler": plot_handler, "desc": "Plot data — fzf-based, auto-detects technique (group 3)"},
     "analyze": {"handler": analyze_handler, "desc": "Analyze data — fzf-based, technique-aware (group 3)"},
     "memristor": {"handler": memristor_handler, "desc": "Memristor IV/endurance/retention — plot, dashboard, sync (group 3)"},
