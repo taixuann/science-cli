@@ -31,7 +31,7 @@ COMMAND_TREE = {
     "results": {"handler": results_handler, "desc": "Browse saved figures by protocol and step (group 2)"},
     "plot":    {"handler": plot_handler, "desc": "Plot data — fzf-based, auto-detects technique (group 3)"},
     "analyze": {"handler": analyze_handler, "desc": "Analyze data — fzf-based, technique-aware (group 3)"},
-    "memristor": {"handler": memristor_handler, "desc": "Crossbar device management — plot, dashboard, sync, analyze (group 4)"},
-    "raman": {"handler": raman_handler, "desc": "Raman spectroscopy — list, inspect, plot, analyze (group 4)"},
+    "memristor": {"handler": memristor_handler, "desc": "Memristor IV/endurance/retention — plot, dashboard, sync (group 3)"},
+    "raman": {"handler": raman_handler, "desc": "Raman spectroscopy — list, inspect, plot, analyze (group 3)"},
     "techniques": {"handler": techniques_handler, "desc": "List techniques (deprecated: use 'config list techniques')"},
 }

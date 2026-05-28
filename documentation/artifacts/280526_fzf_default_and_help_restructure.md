@@ -10,7 +10,7 @@ config / cleanup
 
 ## Status
 - **Created**: 2026-05-28
-- **Status**: draft (refined after user feedback)
+- **Status**: completed
 - **Branch**: dev
 
 ## Objective
@@ -194,11 +194,11 @@ None. This is self-contained within `src/science_cli/`.
 6. **Check `test_guardrails.py`** still passes — structural tests.
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT — Part A: Default FZF
-- [ ] IMPLEMENT — Part B: Help Restructure
-- [ ] IMPLEMENT — Part C: TUI dispatch update
-- [ ] TEST passed
-- [ ] DOCS updated
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT — Part A: Default FZF
+- [x] IMPLEMENT — Part B: Help Restructure
+- [x] IMPLEMENT — Part C: TUI dispatch update (EXCLUDED — future PLAN)
+- [x] TEST passed
+- [x] DOCS updated (SCHEMA.md)
+- [x] COMMIT done

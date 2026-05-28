@@ -13,8 +13,7 @@ console = Console()
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
     "GROUP 2: CONTEXT & INFORMATION": ["open", "close", "config", "status", "results", "info", "chat"],
-    "GROUP 3: LIBRARY PLOTTING": ["plot", "analyze"],
-    "GROUP 4: TECHNIQUE COMMANDS": ["memristor", "raman"],
+    "GROUP 3: LIBRARY PLOTTING": ["plot", "analyze", "---", "memristor", "raman", "uv-vis", "iv", "ec"],
     "ADDITIONAL": ["help", "version", "clear", "history"],
 }
 
@@ -30,10 +29,13 @@ COMMAND_DESCRIPTIONS = {
     "results": "Browse saved figures by protocol and step (fzf)",
     "info":    "Project manifest — machine-readable JSON via --json flag",
     "chat":    "AI chat — natural language to plot commands via LLM",
-    "plot":    "Plot data — fzf-based, auto-detects technique",
-    "analyze": "Analyze data — fzf-based, technique-aware analysis",
-    "memristor": "Crossbar device management — plot, dashboard, sync, analyze",
-    "raman": "Raman spectroscopy — list, inspect, plot, analyze spectra",
+    "plot":    "Generic plot — fzf-based, auto-detects technique",
+    "analyze": "Generic analyze — fzf-based, technique-aware",
+    "memristor": "Memristor IV/endurance/retention — plot, dashboard, sync",
+    "raman":   "Raman spectroscopy — list, inspect, plot, analyze",
+    "uv-vis":  "UV-Vis spectroscopy (coming)",
+    "iv":      "IV sweep analysis (coming)",
+    "ec":      "Electrochemistry CV/CA/EIS (coming)",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -195,7 +197,7 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "memristor": {
         "usage": "memristor <subcommand> [args...]",
-        "desc": "Crossbar device manager (Group 4). Manage memristor array devices.",
+        "desc": "Crossbar device manager (Group 3). Manage memristor array devices.",
         "subcommands": {
             "memristor init":         {"desc": "Scaffold a devices.yaml for memristor array", "usage": "memristor init --matrix r6-c6 [--label 'My Device'] [--steps iv:4_iv]"},
             "memristor ls":           {"desc": "List devices or matrix map", "usage": "memristor ls [--matrix]"},
@@ -222,7 +224,7 @@ COMMAND_HELP: Dict[str, dict] = {
     },
     "raman": {
         "usage": "raman <subcommand> [args...]",
-        "desc": "Raman spectroscopy: list, inspect, plot, and analyze spectra (Group 4).",
+        "desc": "Raman spectroscopy: list, inspect, plot, and analyze spectra (Group 3).",
         "subcommands": {
             "raman ls":               {"desc": "List Raman files in current project", "usage": "raman ls [--step <name>]"},
             "raman info":             {"desc": "Show full header metadata (laser, grating, etc.)", "usage": "raman info [file]"},
@@ -375,6 +377,9 @@ def show_top_help() -> None:
     for section_name, cmd_names in HELP_SECTIONS.items():
         console.print(f"  [bold]{section_name}[/bold]")
         for name in cmd_names:
+            if name == "---":
+                console.print(f"    [dim]── technique-specific[/dim]")
+                continue
             desc = COMMAND_DESCRIPTIONS.get(name, "")
             console.print(f"    {name:<18} [dim]{desc}[/dim]")
         console.print()
