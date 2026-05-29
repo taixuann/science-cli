@@ -159,6 +159,16 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         data = get_gallery_data(proj)
         self._send_json(data)
 
+    def _api_protocol_files(self, protocol_name: str):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+        from science_cli.serve.api import get_protocol_files
+        data = get_protocol_files(proj, protocol_name)
+        if "error" in data:
+            return self._send_error(404, data["error"])
+        self._send_json(data)
+
     def _api_protocol_summary(self, protocol_name: str):
         proj = self._get_project_path()
         if not proj:
