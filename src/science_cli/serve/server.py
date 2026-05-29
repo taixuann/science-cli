@@ -37,13 +37,30 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
+        # Intercept dynamic project context override from query string or headers
+        project_param = qs.get("project", [None])[0]
+        if not project_param:
+            project_param = self.headers.get("X-Project-Override", None)
+
+        if project_param:
+            self.project_override = project_param
+
         try:
+            if path == "/api/projects":
+                self._api_projects()
+                return
+
             if path == "/api/project":
                 self._api_project()
                 return
 
             if path == "/api/gallery":
                 self._api_gallery()
+                return
+
+            m = re.match(r"^/api/protocol/([^/]+)/files$", path)
+            if m:
+                self._api_protocol_files(m.group(1))
                 return
 
             m = re.match(r"^/api/protocol/([^/]+)/summary$", path)
@@ -68,22 +85,15 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_histograms(m.group(1))
                 return
 
-            if path == "/dashboard":
-                self.path = "/dashboard.html"
-                return super().do_GET()
-
-            if path == "/gallery":
-                self.path = "/gallery.html"
-                return super().do_GET()
-
-            m = re.match(r"^/dashboard/(.+)$", path)
-            if m:
-                self.path = "/dashboard.html"
-                return super().do_GET()
-
             if path == "/":
                 self.path = "/index.html"
                 return super().do_GET()
+
+            # Serve files from project's protocol/ directory
+            m = re.match(r"^/files/(.+)$", path)
+            if m:
+                self._serve_project_file(m.group(1))
+                return
 
             super().do_GET()
 
@@ -122,6 +132,11 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
     def _get_project_path(self) -> Path | None:
         from science_cli.serve.api import _resolve_project
         return _resolve_project(self.project_override)
+
+    def _api_projects(self):
+        from science_cli.serve.api import get_projects_list
+        data = get_projects_list()
+        self._send_json(data)
 
     def _api_project(self):
         proj = self._get_project_path()

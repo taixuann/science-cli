@@ -20,6 +20,12 @@ def _resolve_project(project_override: str | None = None) -> Path | None:
         p = Path(os.path.expanduser(project_override))
         if p.exists():
             return p
+        # Try resolving relative to get_projects_root()
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
+        candidate = root / project_override
+        if candidate.exists():
+            return candidate
         return None
 
     proj = get_current_project_path()
@@ -29,11 +35,28 @@ def _resolve_project(project_override: str | None = None) -> Path | None:
     sess = load_session()
     name = sess.get("last_project", "")
     if name:
-        root = Path.home() / "workspace" / "projects" / "active_projects"
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
         candidate = root / name
         if candidate.exists():
             return candidate
     return None
+
+
+def get_projects_list() -> dict:
+    """Scan the configured projects root and list active projects."""
+    from science_cli.core.config import get_projects_root
+    root = get_projects_root()
+    projects = []
+    if root.exists() and root.is_dir():
+        for item in sorted(root.iterdir()):
+            if item.is_dir() and not item.name.startswith("."):
+                projects.append(item.name)
+    return {
+        "workspace": str(root),
+        "projects": projects
+    }
+
 
 
 def _read_analysis_cache(project_path: Path) -> dict | None:

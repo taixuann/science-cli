@@ -1,350 +1,690 @@
 <!doctype html>
-<html lang="en" data-theme="light">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>science-cli Dashboard — Project Index</title>
-    <!-- Combined stylesheet -->
-    <link rel="stylesheet" href="/assets/dashboard.css" />
-  </head>
-  <body>
-    <div class="app-container" id="index-root">
-      
-      <!-- Collapsible Mobile Header -->
-      <header class="mobile-header">
-        <div class="logo-text">Memristor Lab <span class="logo-subtitle">sci server</span></div>
-        <div class="menu-toggle">
-          <svg fill="none" stroke="currentColor" stroke-dasharray="0" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" height="24">
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sci — Plot Gallery</title>
+  <link rel="stylesheet" href="/assets/dashboard.css" />
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Mobile responsive header -->
+    <header class="mobile-header">
+      <div class="logo-text">sci <span class="logo-subtitle">gallery</span></div>
+      <div class="menu-toggle" id="mobile-menu-btn">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" height="24">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </div>
+    </header>
+
+    <!-- Side Menu Panel -->
+    <aside class="sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-icon">&mu;</div>
+        <div>
+          <span class="logo-text">science-cli</span>
+          <span class="logo-subtitle">plot gallery</span>
+        </div>
+      </div>
+
+      <!-- Live Session widget context -->
+      <div class="sidebar-context">
+        <div class="context-title">Current Session</div>
+        <div class="context-item">
+          <span class="context-label">Project: </span>
+          <span class="context-value" id="ctx-project">Loading...</span>
+        </div>
+        <div class="context-item">
+          <span class="context-label">Protocol: </span>
+          <span class="context-value" id="ctx-protocol">-</span>
+        </div>
+        <div class="context-item">
+          <span class="context-label">Step: </span>
+          <span class="context-value" id="ctx-step">-</span>
+        </div>
+      </div>
+
+      <!-- Interactive sidebar controls -->
+      <div class="sidebar-filters">
+        <div class="sidebar-form-group">
+          <label class="sidebar-form-label">Protocol Menu</label>
+          <select class="sidebar-select" id="sel-protocol" onchange="selectProtocol(this.value)">
+            <option value="">-- Select protocol --</option>
+          </select>
+        </div>
+        <div class="sidebar-form-group">
+          <label class="sidebar-form-label">Filter Filenames</label>
+          <input type="text" class="sidebar-search" id="filter-search" placeholder="Type filename query..." oninput="filterThumbnails(this.value)" />
+        </div>
+        <div class="sidebar-form-group">
+          <label class="sidebar-form-label">Gallery Grid Columns</label>
+          <div class="col-btn-group">
+            <button class="col-btn" id="col-btn-3" onclick="setCols(3)">3</button>
+            <button class="col-btn active" id="col-btn-4" onclick="setCols(4)">4</button>
+            <button class="col-btn" id="col-btn-5" onclick="setCols(5)">5</button>
+          </div>
+        </div>
+        <div class="connection-indicator">
+          <div class="status-dot"></div>
+          <span>cli online</span>
+        </div>
+      </div>
+
+      <!-- Nested Step submenu explorer -->
+      <nav class="nav-links" id="step-nav" style="display:none; margin-top:20px;">
+        <div class="sidebar-form-label" style="margin-bottom:8px;">Steps explorer</div>
+      </nav>
+    </aside>
+
+    <!-- Main Content viewport -->
+    <main class="main-content" id="main-content">
+      <header class="main-header">
+        <div class="breadcrumb" id="breadcrumb">
+          <span class="breadcrumb-root" id="bc-project">project</span>
+        </div>
+        <div class="header-actions">
+          <div class="theme-chooser">
+            <button class="theme-btn" data-theme="light">Light</button>
+            <button class="theme-btn active" data-theme="dark">Dark</button>
+            <button class="theme-btn" data-theme="black">Oled</button>
+          </div>
         </div>
       </header>
 
-      <!-- Sidebar Shell -->
-      <aside class="sidebar">
-        <div class="sidebar-brand">
-          <div class="logo-icon">μ</div>
-          <div>
-            <span class="logo-text">Memristor Lab</span>
-            <span class="logo-subtitle">science-cli serve</span>
-          </div>
+      <div id="content-area">
+        <div class="skeleton" style="height:200px; width:100%; margin-bottom:20px;"></div>
+        <div class="skeleton" style="height:120px; width:100%;"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Portable Lightbox Zoom overlay popup -->
+  <div class="lightbox" id="lightbox-overlay" onclick="closeLightbox(event)">
+    <div class="lightbox-content">
+      <div class="lightbox-header">
+        <h2 class="lightbox-title" id="lightbox-title">shaping_loop.svg</h2>
+        <div class="lightbox-close-btn" onclick="closeLightbox()">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="20" height="20">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </div>
-
-        <!-- Session Lab Context Widget -->
-        <div class="sidebar-context">
-          <div class="context-title">Lab Environment</div>
-          <div class="context-item">
-            <span class="context-label">Project: </span>
-            <span class="context-value" id="ctx-project">Loading...</span>
-          </div>
-          <div class="context-item">
-            <span class="context-label">Protocol: </span>
-            <span class="context-value" id="ctx-protocol">-</span>
-          </div>
-          <div class="context-item">
-            <span class="context-label">Step: </span>
-            <span class="context-value" id="ctx-step">-</span>
-          </div>
-        </div>
-
-        <!-- Sidebar Navigation links -->
-        <nav class="nav-links">
-          <a href="/" class="nav-link active">
-            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-            Project Index
-          </a>
-          <a href="/gallery" class="nav-link">
-            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-            Plot Gallery
-          </a>
-          <a href="/dashboard" class="nav-link">
-            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="3" y1="9" x2="21" y2="9"></line>
-              <line x1="9" y1="21" x2="9" y2="9"></line>
-            </svg>
-            Interactive Dashboard
-          </a>
-        </nav>
-
-        <!-- Sidebar Interactive Selection Filter -->
-        <div class="sidebar-filters">
-          <div class="sidebar-form-group">
-            <label class="sidebar-form-label">Material System</label>
-            <select class="sidebar-select" id="sidebar-filter-material">
-              <option value="">All Materials</option>
-              <option value="Ta-PDA-ITO">Ta-PDA-ITO</option>
-              <option value="Au-PDA-Pt">Au-PDA-Pt</option>
-            </select>
-          </div>
-          <div class="sidebar-form-group">
-            <label class="sidebar-form-label">Technique Mode</label>
-            <select class="sidebar-select" id="sidebar-filter-technique">
-              <option value="">All Techniques</option>
-              <option value="iv-sweep">I-V Cyclic Sweep</option>
-              <option value="cv">Cyclic Voltammetry</option>
-              <option value="retention">Retention Profile</option>
-            </select>
-          </div>
-          
-          <div class="connection-indicator">
-            <div class="status-dot"></div>
-            <span>cli online</span>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main Hub -->
-      <main class="main-content">
-        
-        <!-- Breadcrumbs & Actions Row -->
-        <header class="main-header">
-          <div class="breadcrumb">
-            <span class="breadcrumb-root" id="crumbs-project">project</span>
-            <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-current">index</span>
-          </div>
-          
-          <div class="header-actions">
-            <div class="theme-chooser">
-              <button class="theme-btn" data-theme="dark">Dark</button>
-              <button class="theme-btn" data-theme="light">Light</button>
-              <button class="theme-btn" data-theme="black">Oled</button>
-            </div>
-          </div>
-        </header>
-
-        <!-- Intro/Breadcrumb Head -->
-        <section class="page-title-row">
-          <h1 class="page-title" id="project-title-display">Project: Loading...</h1>
-          <p class="page-subtitle" id="project-path-display">Path: /Users/tai/workspace/...</p>
-        </section>
-
-        <!-- KPI Overlays Grid -->
-        <section class="kpi-grid">
-          <div class="kpi-card kpi-set">
-            <span class="kpi-label">Active Protocols</span>
-            <span class="kpi-value" id="kpi-total-protocols">-</span>
-            <span class="kpi-meta">Measurement cycles cataloged</span>
-          </div>
-          <div class="kpi-card kpi-reset">
-            <span class="kpi-label">Total Sync Files</span>
-            <span class="kpi-value" id="kpi-total-files">-</span>
-            <span class="kpi-meta">Parsed CSV raw waveforms</span>
-          </div>
-          <div class="kpi-card kpi-yield">
-            <span class="kpi-label">Measured Cells</span>
-            <span class="kpi-value" id="kpi-total-cells">-</span>
-            <span class="kpi-meta">Crossbar devices verified</span>
-          </div>
-          <div class="kpi-card kpi-ratio">
-            <span class="kpi-label">Overall Yield</span>
-            <span class="kpi-value" id="kpi-overall-yield">-<span class="kpi-unit">%</span></span>
-            <span class="kpi-meta">Success switching ratio</span>
-          </div>
-        </section>
-
-        <!-- Left Protocols Grid and Right Terminal Console Layout -->
-        <div class="grid-two-three">
-          
-          <!-- Protocols Section -->
-          <section class="section-card">
-            <div class="section-header">
-              <h2 class="section-title">Execution Protocols Overview</h2>
-              <span class="protocol-badge" style="background-color: var(--border)">sci sync hub</span>
-            </div>
-            
-            <div class="protocols-list" id="protocols-container">
-              <!-- Skeletons Loader on startup -->
-              <div class="skeleton" style="height: 120px; width: 100%; border-radius: 8px;"></div>
-              <div class="skeleton" style="height: 120px; width: 100%; border-radius: 8px; margin-top: 12px;"></div>
-            </div>
-          </section>
-
-          <!-- Right side Terminal Console simulator -->
-          <section class="section-card" style="display: flex; flex-direction: column;">
-            <div class="section-header">
-              <h2 class="section-title">science-cli Output Terminal</h2>
-              <span class="status-dot tooltip" style="background-color: var(--accent-cyan);" title="Real-time sync stream"></span>
-            </div>
-            
-            <div class="terminal-card" id="terminal-screen">
-              <div class="terminal-header">
-                <div class="terminal-dots">
-                  <div class="dot dot-red"></div>
-                  <div class="dot dot-yellow"></div>
-                  <div class="dot dot-green"></div>
-                </div>
-                <span>stdout | active-logs</span>
-              </div>
-              <div class="terminal-line"><span class="cmd-prompt">shell:~$</span> <span class="cmd-text">sci serve --port 3000</span></div>
-              <div class="terminal-line terminal-info">[INFO] Server started: Listening on http://0.0.0.0:3000...</div>
-              <div class="terminal-line terminal-info">[INFO] Auto-loaded environmental keys from .env.example</div>
-              <div class="terminal-line terminal-info">[SQL] Connected to local sqlite scientific database.</div>
-              <div class="terminal-line terminal-success">[OK] Found 3 local synchronization directories configured.</div>
-              <div class="terminal-line terminal-warn">[WARN] Cell R4C2 has ratio &lt; 10 (potential defects recorded).</div>
-              <div class="terminal-line"><span class="cmd-prompt">shell:~$</span> <span class="cmd-text">sci status</span></div>
-              <div class="terminal-line terminal-info">Active workspace: [my-experiment] in /Users/tai/...</div>
-              <div class="terminal-line terminal-info">Running synchronization loop background task (interval: 30s)</div>
-              <div class="terminal-line terminal-success">[SYNC] File 0505_Ta-PDA-ITO_r0c0_iv_01.csv processed successfully (102 datapoints).</div>
-            </div>
-          </section>
-
-        </div>
-
-      </main>
+      </div>
+      <div class="lightbox-body" id="lightbox-body"></div>
     </div>
+  </div>
 
-    <!-- Centralized JS -->
-    <script src="/assets/dashboard.js"></script>
-    <script>
-      // Page specific logic
-      document.addEventListener("DOMContentLoaded", () => {
-        let allProtocols = [];
+  <script src="/assets/dashboard.js"></script>
+  <script>
+    // Local scope page models mapping
+    let protocolNames = [];
+    let filesCache = {};
+    let activeProtocol = null;
+    let activeStep = null;
+    let columns = 4;
+    let searchQuery = "";
+    let plotlyLoaded = false;
+    let dashedData = {};
+    let activeCell = null;
+    let currentTab = "gallery";
 
-        // Loading function
-        async function fetchIndexData() {
-          try {
-            const data = await window.SciApp.apiFetch("/api/project");
-            
-            // Render Headers
-            document.getElementById("project-title-display").textContent = `Project: ${data.project_name}`;
-            document.getElementById("project-path-display").textContent = `Local Path: ${data.project_path}`;
-            
-            // Render KPIs
-            document.getElementById("kpi-total-protocols").textContent = data.stats.total_protocols;
-            document.getElementById("kpi-total-files").textContent = data.stats.total_files;
-            document.getElementById("kpi-total-cells").textContent = data.stats.total_cells_measured;
-            document.getElementById("kpi-overall-yield").innerHTML = `${data.stats.overall_yield}<span class="kpi-unit">%</span>`;
+    // Standard entrypoint loading call
+    async function init() {
+      const area = document.getElementById("content-area");
+      area.innerHTML = '<div class="skeleton" style="height:120px; width:100%;"></div>';
+      try {
+        const data = await window.SciApp.apiFetch("/api/project");
+        const projName = data.project_name || "(no project)";
+        
+        const bcProj = document.getElementById("bc-project");
+        if (bcProj) bcProj.textContent = projName;
+        const ctxProj = document.getElementById("ctx-project");
+        if (ctxProj) ctxProj.textContent = projName;
+        
+        document.getElementById("ctx-protocol").textContent = "-";
+        document.getElementById("ctx-step").textContent = "-";
 
-            allProtocols = data.protocols;
-            renderProtocols(allProtocols);
-            
-            // Add custom logs to simulator corresponding to real projects
-            addTerminalLine(`[INDEX] Successfully indexed project metadata for "${data.project_name}".`);
-            addTerminalLine(`[INDEX] Found ${allProtocols.length} matching protocol directions.`);
-          } catch (e) {
-            console.error("Index loading failed:", e);
-            document.getElementById("protocols-container").innerHTML = `
-              <div style="padding: 20px; text-align: center; color: var(--accent-red)">
-                No protocol database synchronized. Please execute "sci sync" in your terminal first.
-              </div>
-            `;
-          }
+        if (!data.protocols || !data.protocols.length) {
+          area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--text-muted)">No protocols found under project directories.</div>';
+          return;
         }
 
-        // Render Protocol cards grid list
-        function renderProtocols(protocols) {
-          const container = document.getElementById("protocols-container");
-          container.innerHTML = "";
+        protocolNames = data.protocols.map(p => p.name);
+        const sel = document.getElementById("sel-protocol");
+        sel.innerHTML = '<option value="">-- Select protocol --</option>';
+        data.protocols.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = p.name;
+          sel.appendChild(opt);
+        });
 
-          // Get Sidebar filter options
-          const materialFilter = document.getElementById("sidebar-filter-material").value.toLowerCase();
-          const techniqueFilter = document.getElementById("sidebar-filter-technique").value;
-
-          const filtered = protocols.filter(p => {
-            // Simulated filters mapping inside index
-            let matchMaterial = true;
-            let matchTechnique = true;
-
-            if (materialFilter) {
-              if (materialFilter.includes("ta") && !p.name.includes("iv")) matchMaterial = false;
-              if (materialFilter.includes("au") && p.name.includes("iv")) matchMaterial = false;
-            }
-
-            if (techniqueFilter) {
-              if (techniqueFilter === "iv-sweep" && !p.name.includes("iv")) matchTechnique = false;
-              if (techniqueFilter === "cv" && !p.name.includes("cv")) matchTechnique = false;
-              if (techniqueFilter === "retention" && !p.name.includes("retention")) matchTechnique = false;
-            }
-
-            return matchMaterial && matchTechnique;
-          });
-
-          if (filtered.length === 0) {
-            container.innerHTML = `
-              <div style="padding: 30px; text-align: center; color: var(--text-muted);">
-                No protocols match the active filtering layers. Try reset choices.
-              </div>
-            `;
-            return;
-          }
-
-          filtered.forEach(p => {
-            const card = document.createElement("div");
-            card.className = "protocol-card";
-            card.innerHTML = `
-              <div class="protocol-card-header">
-                <div>
-                  <h3 class="protocol-name">${p.name}</h3>
-                  <div class="protocol-sync">Last Modified: ${window.SciApp.formatDate(p.last_updated)}</div>
-                </div>
-                <span class="protocol-badge">${p.steps.length} Steps</span>
-              </div>
-              <div class="protocol-progress-bar">
-                <div class="protocol-progress-fill" style="width: ${p.switching_yield}%"></div>
-              </div>
-              <div class="protocol-meta-details">
-                <div class="meta-col">
-                  <span class="meta-label">Files Synchronized</span>
-                  <span class="meta-value">${p.total_files} parsed</span>
-                </div>
-                <div class="meta-col">
-                  <span class="meta-label">Devices Measured</span>
-                  <span class="meta-value">${p.measured_cells} cells</span>
-                </div>
-                <div class="meta-col">
-                  <span class="meta-label">Switching Yield</span>
-                  <span class="meta-value meta-value-green">${p.switching_yield}%</span>
-                </div>
-              </div>
-            `;
-
-            // Clicking navigates to Interactive Dashboard for that protocol
-            card.addEventListener("click", () => {
-              window.location.href = `/dashboard/${p.name}`;
-            });
-
-            container.appendChild(card);
+        // Toggle mobile responsive sidebar
+        const menuBtn = document.getElementById("mobile-menu-btn");
+        const sidebar = document.getElementById("app-sidebar");
+        if (menuBtn && sidebar) {
+          menuBtn.addEventListener("click", () => {
+            sidebar.classList.toggle("active");
           });
         }
 
-        // Add custom line terminal console logs
-        function addTerminalLine(text, type = "success") {
-          const term = document.getElementById("terminal-screen");
-          if (!term) return;
-          const line = document.createElement("div");
-          line.className = `terminal-line terminal-${type}`;
-          const nowStr = new Date().toLocaleTimeString();
-          line.innerHTML = `<span style="color:var(--text-muted);">[${nowStr}]</span> ${text}`;
-          term.appendChild(line);
-          // Auto scroll
-          term.scrollTop = term.scrollHeight;
-        }
+        showProtocolList(data);
+      } catch (e) {
+        area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--accent-red)">Failed to load project database. Is `sci serve` running?</div>';
+      }
+    }
 
-        // Bind sidebar active triggers on the fly
-        document.getElementById("sidebar-filter-material").addEventListener("change", () => {
-          renderProtocols(allProtocols);
-          addTerminalLine("[FILTER] Filtered workspace by Material System.");
+    function showProtocolList(data) {
+      const area = document.getElementById("content-area");
+      const cards = data.protocols.map(p =>
+        '<div class="protocol-card" onclick="selectProtocol(\'' + p.name.replace(/'/g, "\\'") + '\')">'
+        + '<div class="protocol-card-header">'
+        + '<div><h3 class="protocol-name">' + p.name + '</h3></div>'
+        + '<span class="protocol-badge">' + p.steps.length + ' steps</span>'
+        + '</div>'
+        + '<div class="protocol-meta-details">'
+        + '<div class="meta-col"><span class="meta-label">Files</span><span class="meta-value">' + p.total_files + '</span></div>'
+        + '<div class="meta-col"><span class="meta-label">Cells</span><span class="meta-value">' + p.measured_cells + '</span></div>'
+        + '<div class="meta-col"><span class="meta-label">Yield</span><span class="meta-value meta-value-green">' + p.switching_yield + '%</span></div>'
+        + '</div></div>'
+      ).join("");
+
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (data.project_name || "project") + '</span>';
+      area.innerHTML = '<section class="page-title-row">'
+        + '<h1 class="page-title">' + (data.project_name || "Project Dashboard") + '</h1>'
+        + '<p class="page-subtitle">' + data.stats.total_protocols + ' protocols &middot; ' + data.stats.total_files + ' files cataloged</p>'
+        + '</section>'
+        + '<div class="section-card">'
+        + '<div class="section-header"><h2 class="section-title">Acquired Protocols</h2></div>'
+        + '<div class="protocols-list">' + cards + '</div></div>';
+    }
+
+    async function selectProtocol(name) {
+      if (!name) {
+        activeProtocol = null;
+        activeStep = null;
+        document.getElementById("ctx-protocol").textContent = "-";
+        document.getElementById("ctx-step").textContent = "-";
+        document.getElementById("step-nav").style.display = "none";
+        document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (window.SciApp.currentProject || "project") + '</span>';
+        const data = await window.SciApp.apiFetch("/api/project");
+        showProtocolList(data);
+        return;
+      }
+
+      activeProtocol = name;
+      activeStep = null;
+      document.getElementById("ctx-protocol").textContent = name;
+      document.getElementById("ctx-step").textContent = "-";
+      document.getElementById("sel-protocol").value = name;
+      document.getElementById("filter-search").value = "";
+      searchQuery = "";
+
+      const area = document.getElementById("content-area");
+      area.innerHTML = '<div class="skeleton" style="height:120px; width:100%;"></div>';
+
+      try {
+        const [filesData, sumData, heatData, histData] = await Promise.all([
+          window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(name) + "/files"),
+          window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(name) + "/summary").catch(() => null),
+          window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(name) + "/heatmap?metric=ratio&material=").catch(() => null),
+          window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(name) + "/histograms").catch(() => null),
+        ]);
+        
+        filesCache[name] = filesData;
+        dashedData[name] = { summary: sumData, heatmap: heatData, histograms: histData };
+        
+        populateStepNav(filesData);
+        showStepList(filesData);
+      } catch (e) {
+        area.innerHTML = '<div style="padding:60px;text-align:center;color:var(--accent-red)">Failed to load protocol files: ' + name + '</div>';
+      }
+    }
+
+    function populateStepNav(data) {
+      const nav = document.getElementById("step-nav");
+      nav.style.display = "block";
+      nav.innerHTML = '<div class="sidebar-form-label" style="margin-bottom:8px;">Steps Directories</div>';
+      data.steps.forEach(s => {
+        const a = document.createElement("a");
+        a.className = "nav-link" + (activeStep === s.name ? " active" : "");
+        a.href = "#";
+        a.dataset.step = s.name;
+        a.innerHTML = '<span>' + s.name + '</span><span style="margin-left:auto;font-size:10px;opacity:0.6;">' + s.files.length + '</span>';
+        a.addEventListener("click", e => {
+          e.preventDefault();
+          selectStep(s.name);
         });
-
-        document.getElementById("sidebar-filter-technique").addEventListener("change", () => {
-          renderProtocols(allProtocols);
-          addTerminalLine("[FILTER] Re-configured operational Technique filters.");
-        });
-
-        // Trigger loading
-        fetchIndexData();
+        nav.appendChild(a);
       });
-    </script>
-  </body>
+    }
+
+    function showStepList(data) {
+      const area = document.getElementById("content-area");
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + (window.SciApp.currentProject || "project") + '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-current">' + activeProtocol + '</span>';
+
+      if (!data.steps || !data.steps.length) {
+        area.innerHTML = '<section class="page-title-row"><h1 class="page-title">' + activeProtocol + '</h1><p class="page-subtitle">No files or steps configured</p></section>';
+        return;
+      }
+
+      const cards = data.steps.map(s =>
+        '<div class="protocol-card" onclick="selectStep(\'' + s.name.replace(/'/g, "\\'") + '\')">'
+        + '<div class="protocol-card-header">'
+        + '<div><h3 class="protocol-name">' + s.name + '</h3></div>'
+        + '<span class="protocol-badge">' + s.files.length + ' files</span>'
+        + '</div></div>'
+      ).join("");
+
+      area.innerHTML = '<section class="page-title-row">'
+        + '<h1 class="page-title">' + activeProtocol + '</h1>'
+        + '<p class="page-subtitle">' + data.steps.length + ' folders mapped in this protocol</p>'
+        + '</section>'
+        + '<div class="section-card">'
+        + '<div class="section-header"><h2 class="section-title">Acquired Steps</h2></div>'
+        + '<div class="protocols-list">' + cards + '</div></div>';
+    }
+
+    function selectStep(name) {
+      const data = filesCache[activeProtocol];
+      if (!data) return;
+      const step = data.steps.find(s => s.name === name);
+      if (step) {
+        activeStep = step;
+        document.getElementById("ctx-step").textContent = name;
+        document.querySelectorAll("#step-nav .nav-link").forEach(el => {
+          el.classList.toggle("active", el.dataset.step === name);
+        });
+        showGallery();
+      }
+    }
+
+    function showGallery() {
+      currentTab = "gallery";
+      const step = activeStep;
+      const area = document.getElementById("content-area");
+
+      const projName = window.SciApp.currentProject || "project";
+      document.getElementById("breadcrumb").innerHTML = '<span class="breadcrumb-root">' + projName+ '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-root">' + activeProtocol + '</span>'
+        + '<span class="breadcrumb-separator">/</span>'
+        + '<span class="breadcrumb-current">' + step.name + '</span>';
+
+      const hasDash = !!dashedData[activeProtocol]?.heatmap;
+      const tabs = '<div class="tab-bar">'
+        + '<button class="tab active" data-tab="gallery" onclick="switchTab(\'gallery\')">Plots Gallery</button>'
+        + (hasDash ? '<button class="tab" data-tab="dashboard" onclick="switchTab(\'dashboard\')">6x6 Crossbar Heatmap / Curves</button>' : "")
+        + '</div>';
+
+      area.innerHTML = '<section class="page-title-row">'
+        + '<h1 class="page-title">' + step.name + '</h1>'
+        + '<p class="page-subtitle">' + step.files.length + ' acquired file assets</p>'
+        + '</section>'
+        + tabs
+        + '<div class="gallery-grid" id="thumbnail-grid" style="grid-template-columns:repeat(' + columns + ', 1fr);">'
+        + renderThumbnails(step)
+        + '</div>';
+    }
+
+    function renderThumbnails(step) {
+      if (!step || !step.files.length) return "";
+      const q = searchQuery.toLowerCase();
+      const filtered = q ? step.files.filter(f => f.name.toLowerCase().includes(q)) : step.files;
+      
+      if (!filtered.length) {
+        return '<div style="grid-column:1/-1; padding:40px; text-align:center; color:var(--text-muted)">No filenames match list queries "' + searchQuery + '"</div>';
+      }
+
+      return filtered.map(f => {
+        const fileUrl = "/files/" + f.path;
+        return '<div class="plot-card" onclick="openLightbox(\'' + f.name.replace(/'/g, "\\'") + '\', \'' + fileUrl + '\', \'' + f.type + '\')">'
+          + '<div class="plot-card-media">'
+          + (f.type === "svg" 
+              ? '<iframe src="' + fileUrl + '" style="border:none; pointer-events:none; width:100%; height:100%;"></iframe>' 
+              : '<img src="' + fileUrl + '" loading="lazy" />')
+          + '</div>'
+          + '<div class="plot-card-content">'
+          + '<div class="plot-provenance">acquisition asset</div>'
+          + '<h4 class="plot-card-title" title="' + f.name + '">' + f.name + '</h4>'
+          + '</div></div>';
+      }).join("");
+    }
+
+    function filterThumbnails(q) {
+      searchQuery = q;
+      const grid = document.getElementById("thumbnail-grid");
+      if (!grid) return;
+      grid.innerHTML = renderThumbnails(activeStep);
+    }
+
+    function setCols(n) {
+      columns = n;
+      document.querySelectorAll(".col-btn").forEach(b => {
+        b.classList.toggle("active", b.id === "col-btn-" + n);
+      });
+      const grid = document.getElementById("thumbnail-grid");
+      if (grid) grid.style.gridTemplateColumns = "repeat(" + n + ", 1fr)";
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach(t => {
+        t.classList.toggle("active", t.dataset.tab === tab);
+      });
+      if (tab === "dashboard") {
+        showDashboard();
+      } else {
+        const g = document.getElementById("thumbnail-grid");
+        if (g) g.style.display = "grid";
+        const d = document.getElementById("dashboard-view");
+        if (d) d.remove();
+      }
+    }
+
+    async function showDashboard() {
+      const area = document.getElementById("content-area");
+      const existing = document.getElementById("dashboard-view");
+      if (existing) { existing.remove(); }
+
+      const grid = document.getElementById("thumbnail-grid");
+      if (grid) grid.style.display = "none";
+
+      await loadPlotly();
+      const dd = dashedData[activeProtocol];
+      if (!dd || !dd.heatmap) return;
+
+      const h = dd.heatmap;
+      const hData = h.data;
+      const hMeta = h.metadata;
+
+      // Render Layout columns
+      area.insertAdjacentHTML("beforeend", `
+        <div id="dashboard-view" class="d-layout" style="margin-top:20px;">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h3 class="section-title" style="margin:0;">6x6 Crossbar Matrix</h3>
+              <div class="sidebar-form-group" style="flex-direction:row; gap:8px; align-items:center;">
+                <select class="sidebar-select" id="metric-chooser" onchange="switchMetric(this.value)" style="width:160px; padding:4px 8px;">
+                  <option value="ratio">Ratio (Ron/Roff)</option>
+                  <option value="vset">Vset Threshold</option>
+                  <option value="vreset">Vreset Threshold</option>
+                  <option value="file_count">Curves Count</option>
+                  <option value="yield">Cycling Yield (%)</option>
+                </select>
+                <select class="sidebar-select" id="mat-chooser" onchange="switchMaterial(this.value)" style="width:120px; padding:4px 8px;">
+                  <option value="">All Materials</option>
+                  <option value="HfOx">HfOx</option>
+                  <option value="AlOx">AlOx</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-crossbar" id="d-crossbar">
+              ${renderCrossbarCells(h)}
+            </div>
+            <div class="d-legend" style="margin-top:16px;">
+              <span>Low density</span>
+              <div class="d-legend-bar" id="legend-gradient"></div>
+              <span>High density</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="d-device-panel" id="d-device" style="display:none;"></div>
+            <div id="d-iv-chart" style="width:100%; height:300px; background:#040810; border:1px solid var(--border); border-radius:10px; display:flex; align-items:center; justify-content:center; color:var(--text-muted);">
+              Click a cell in the 6x6 crossbar map to render its Plotly I-V sweep curves
+            </div>
+          </div>
+        </div>
+      `);
+
+      updateLegendGradient();
+
+      document.querySelectorAll("#d-crossbar .d-cell:not(.unmeasured)").forEach(el => {
+        el.addEventListener("click", () => selectDashCell(el.dataset.cell));
+      });
+    }
+
+    async function switchMetric(val) {
+      if (!activeProtocol) return;
+      const mat = document.getElementById("mat-chooser").value;
+      const res = await window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(activeProtocol) + "/heatmap?metric=" + val + "&material=" + mat);
+      dashedData[activeProtocol].heatmap = res;
+      
+      const grid = document.getElementById("d-crossbar");
+      if (grid) grid.innerHTML = renderCrossbarCells(res);
+      
+      updateLegendGradient();
+      
+      document.querySelectorAll("#d-crossbar .d-cell:not(.unmeasured)").forEach(el => {
+        el.addEventListener("click", () => selectDashCell(el.dataset.cell));
+      });
+    }
+
+    async function switchMaterial(val) {
+      if (!activeProtocol) return;
+      const metricVal = document.getElementById("metric-chooser").value;
+      const res = await window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(activeProtocol) + "/heatmap?metric=" + metricVal + "&material=" + val);
+      dashedData[activeProtocol].heatmap = res;
+
+      const grid = document.getElementById("d-crossbar");
+      if (grid) grid.innerHTML = renderCrossbarCells(res);
+
+      document.querySelectorAll("#d-crossbar .d-cell:not(.unmeasured)").forEach(el => {
+        el.addEventListener("click", () => selectDashCell(el.dataset.cell));
+      });
+    }
+
+    function renderCrossbarCells(h) {
+      let maxVal = 0.0001;
+      h.data.forEach(row => {
+        row.forEach(v => { if (v !== null && v > maxVal) maxVal = v; });
+      });
+
+      // Get appropriate theme colors based on metric selection
+      const getHSLColor = (val) => {
+        if (val === null) return "rgba(100,116,139,0.1)";
+        const p = maxVal > 0 ? (val / maxVal) : 0;
+        const l = 85 - p * 45; // lightness range (85% down to 40% for maximum visibility)
+        
+        switch (h.metric) {
+          case "vset": return `hsl(187, 80%, ${l}%)`;
+          case "vreset": return `hsl(24, 85%, ${l}%)`;
+          case "yield": return `hsl(142, 75%, ${l}%)`;
+          case "file_count": return `hsl(217, 80%, ${l}%)`;
+          default: return `hsl(262, 75%, ${l}%)`;
+        }
+      };
+
+      let html = '<div class="d-label-cell">row\\col</div>';
+      for (let c = 1; c <= 6; c++) html += '<div class="d-label-cell">C' + c + '</div>';
+      for (let r = 0; r < 6; r++) {
+        html += '<div class="d-label-cell">R' + (r + 1) + '</div>';
+        for (let c = 0; c < 6; c++) {
+          const val = h.data[r][c];
+          const meta = h.metadata[r][c];
+          const cellId = meta.cell;
+          
+          const isMeasured = val !== null;
+          const bgStyle = isMeasured ? 'background: ' + getHSLColor(val) + ';' : '';
+          const activeClass = (selectedCell === cellId) ? " active" : "";
+          const cls = isMeasured ? "d-cell" + activeClass : "d-cell unmeasured";
+          
+          html += '<div class="' + cls + '" data-cell="' + cellId + '" style="' + bgStyle + '" title="' + cellId + ': ' + (isMeasured ? val.toFixed(1) : 'N/A') + '">'
+            + '<span class="d-cell-label">' + cellId + '</span>'
+            + (isMeasured ? '<span class="d-cell-value">' + (h.metric === "ratio" ? ("10^" + Math.round(Math.log10(val))) : val.toFixed(1)) + '</span>' : '<span class="d-cell-value">-</span>')
+            + '</div>';
+        }
+      }
+      return html;
+    }
+
+    function updateLegendGradient() {
+      const metricVal = document.getElementById("metric-chooser")?.value || "ratio";
+      const legend = document.getElementById("legend-gradient");
+      if (!legend) return;
+
+      let color = "linear-gradient(to right, hsl(262, 75%, 85%), hsl(262, 75%, 40%))"; // ratio default purple
+      if (metricVal === "vset") color = "linear-gradient(to right, hsl(187, 80%, 85%), hsl(187, 80%, 40%))";
+      else if (metricVal === "vreset") color = "linear-gradient(to right, hsl(24, 85%, 85%), hsl(24, 85%, 40%))";
+      else if (metricVal === "yield") color = "linear-gradient(to right, hsl(142, 75%, 85%), hsl(142, 75%, 40%))";
+      else if (metricVal === "file_count") color = "linear-gradient(to right, hsl(217, 80%, 85%), hsl(217, 80%, 40%))";
+
+      legend.style.background = color;
+    }
+
+    async function selectDashCell(cellId) {
+      selectedCell = cellId;
+      document.querySelectorAll("#d-crossbar .d-cell").forEach(el => {
+        el.classList.toggle("active", el.dataset.cell === cellId);
+      });
+
+      const panel = document.getElementById("d-device");
+      panel.style.display = "block";
+      panel.innerHTML = '<div class="skeleton" style="height:60px;"></div>';
+
+      try {
+        const ivData = await window.SciApp.apiFetch("/api/protocol/" + encodeURIComponent(activeProtocol) + "/device/" + cellId + "/iv");
+        const switching = ivData.switching;
+
+        panel.innerHTML = `
+          <div class="d-device-header">
+            <span class="d-device-name">${ivData.cell_id} Dynamic Specs</span>
+            <span class="d-device-status ${switching ? 'ok' : 'defect'}">${switching ? 'Active resistive switching' : 'Defect / Insulation'}</span>
+          </div>
+          <div class="d-device-grid">
+            <div><div class="d-stat-label">Material Stack</div><div class="d-stat-value">${ivData.material || "-"}</div></div>
+            <div><div class="d-stat-label">Set voltage</div><div class="d-stat-value">${switching ? ivData.v_set + ' V' : '-'}</div></div>
+            <div><div class="d-stat-label">Reset voltage</div><div class="d-stat-value">${switching ? ivData.v_reset + ' V' : '-'}</div></div>
+            <div><div class="d-stat-label">ON/OFF Ratio</div><div class="d-stat-value">${ivData.ratio > 0 ? ivData.ratio : '-'}</div></div>
+          </div>
+          <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+            <button class="plot-btn plot-btn-primary" onclick="copyIVData()" id="btn-copy">Copy IV coordinates</button>
+          </div>
+        `;
+
+        window.lastIvData = ivData; // cache for copying coordinate systems
+        renderIVChart(ivData);
+      } catch (e) {
+        panel.innerHTML = '<div style="color:var(--accent-red); font-size:11px;">Failed parsing device parameters.</div>';
+      }
+    }
+
+    function copyIVData() {
+      const data = window.lastIvData;
+      if (!data) return;
+
+      let text = "Voltage (V)\tCurrent (A)\tSweep label\n";
+      data.sweeps.forEach(swp => {
+        swp.voltage.forEach((v, i) => {
+          text += v + "\t" + swp.current[i] + "\t" + swp.label + "\n";
+        });
+      });
+
+      navigator.clipboard.writeText(text);
+      const btn = document.getElementById("btn-copy");
+      if (btn) {
+        btn.textContent = "Copied coordinate table!";
+        setTimeout(() => { btn.textContent = "Copy IV coordinates"; }, 2000);
+      }
+    }
+
+    function renderIVChart(ivData) {
+      const traces = ivData.sweeps.map((s, i) => ({
+        x: s.voltage,
+        y: s.current.map(c => Math.abs(c)),
+        name: s.label,
+        mode: "lines",
+        type: "scatter",
+        line: { width: 2.5, color: i === 0 ? "#818cf8" : i === 1 ? "#ec4899" : "#10b981" }
+      }));
+
+      // Set markers for thresh switches
+      if (ivData.switching) {
+        ivData.sweeps.forEach(s => {
+          if (s.v_set !== undefined) {
+            const idx = s.voltage.indexOf(s.v_set) >= 0 ? s.voltage.indexOf(s.v_set) : 0;
+            traces.push({
+              x: [s.v_set],
+              y: [Math.abs(s.current[idx])],
+              mode: "markers",
+              name: "v_set marker",
+              marker: { size: 10, color: "red", line: { width: 1.5, color: "white" } },
+              showlegend: false
+            });
+          }
+          if (s.v_reset !== undefined) {
+            const idx = s.voltage.indexOf(s.v_reset) >= 0 ? s.voltage.indexOf(s.v_reset) : 0;
+            traces.push({
+              x: [s.v_reset],
+              y: [Math.abs(s.current[idx])],
+              mode: "markers",
+              name: "v_reset marker",
+              marker: { size: 10, color: "orange", line: { width: 1.5, color: "white" } },
+              showlegend: false
+            });
+          }
+        });
+      }
+
+      const txtColor = window.SciApp.theme === "light" ? "#475569" : "#cbd5e1";
+
+      Plotly.newPlot("d-iv-chart", traces, {
+        margin: { t: 25, b: 40, l: 60, r: 15 },
+        paper_bgcolor: "transparent",
+        plot_bgcolor: "transparent",
+        font: { family: "'JetBrains Mono', monospace", size: 9.5, color: txtColor },
+        xaxis: { title: "Voltage (V)", gridcolor: "rgba(255,255,255,0.06)", zeroline: true, zerolinecolor: "rgba(255,255,255,0.1)" },
+        yaxis: { title: "|Current| (A)", type: "log", gridcolor: "rgba(255,255,255,0.06)", zeroline: true, zerolinecolor: "rgba(255,255,255,0.1)" },
+        showlegend: true,
+        legend: { orientation: "h", y: -0.25, font: { size: 9 } }
+      }, { responsive: true, displayModeBar: false });
+    }
+
+    async function loadPlotly() {
+      if (plotlyLoaded) return;
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.plot.ly/plotly-2.27.0.min.js";
+        s.onload = () => { plotlyLoaded = true; resolve(); };
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    // Lightbox modal operations
+    function openLightbox(title, src, type) {
+      document.getElementById("lightbox-title").textContent = title;
+      const body = document.getElementById("lightbox-body");
+      
+      const mediaElement = type === "svg" 
+        ? '<iframe src="' + src + '" style="border:none; width:90%; height:90%;"></iframe>' 
+        : '<img src="' + src + '" id="lightbox-img" />';
+        
+      body.innerHTML = mediaElement;
+      document.getElementById("lightbox-overlay").classList.add("active");
+
+      if (type !== "svg") {
+        const img = document.getElementById("lightbox-img");
+        if (img && typeof initLightboxInteraction === "function") {
+          initLightboxInteraction(img);
+        }
+      }
+    }
+
+    function closeLightbox(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById("lightbox-overlay").classList.remove("active");
+      document.getElementById("lightbox-body").innerHTML = "";
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
 </html>
