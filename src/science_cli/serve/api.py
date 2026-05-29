@@ -90,6 +90,70 @@ def _read_sqlite_data(project_path: Path) -> dict | None:
         return None
 
 
+def _get_step_files(
+    project_name: str,
+    protocol_name: str,
+    step_name: str,
+    step_path: Path,
+) -> list[dict]:
+    files = []
+
+    # Check results/ directory first
+    results_dir = step_path / "results"
+    scan_dirs = []
+    if results_dir.exists() and results_dir.is_dir():
+        scan_dirs.append((results_dir, f"protocol/{protocol_name}/{step_name}/results"))
+    # Also support files directly in step_path
+    scan_dirs.append((step_path, f"protocol/{protocol_name}/{step_name}"))
+
+    seen_names = set()
+    for directory, relative_url_prefix in scan_dirs:
+        for entry in sorted(directory.iterdir()):
+            if entry.is_file() and not entry.name.startswith("."):
+                ext = entry.suffix.lower()
+                if ext in (".png", ".pdf", ".svg"):
+                    if entry.name in seen_names:
+                        continue
+                    seen_names.add(entry.name)
+                    st = entry.stat()
+                    files.append({
+                        "name": entry.name,
+                        "path": f"{project_name}/{relative_url_prefix}/{entry.name}",
+                        "type": ext[1:],  # svg, pdf, png
+                        "size": f"{round(st.st_size / 1024, 1)} KB",
+                        "created": datetime.fromtimestamp(
+                            st.st_mtime, tz=timezone.utc
+                        ).strftime("%Y-%m-%d"),
+                        "dimensions": "1280x800 px",
+                    })
+    return files
+
+
+def get_protocol_files(project_path: Path, protocol_name: str) -> dict:
+    proto_dir = project_path / "protocol" / protocol_name
+    if not proto_dir.exists():
+        return {"error": f"protocol '{protocol_name}' not found"}
+
+    proj_name = project_path.name
+    steps_list = []
+
+    for sdir in sorted(proto_dir.iterdir()):
+        if not sdir.is_dir() or sdir.name.startswith("."):
+            continue
+
+        step_name = sdir.name
+        step_files_data = _get_step_files(proj_name, protocol_name, step_name, sdir)
+        steps_list.append({
+            "name": step_name,
+            "files": step_files_data,
+        })
+
+    return {
+        "protocol": protocol_name,
+        "steps": steps_list,
+    }
+
+
 def _scan_protocol_dirs(
     project_path: Path,
 ) -> list[dict]:
@@ -97,22 +161,29 @@ def _scan_protocol_dirs(
     if not proto_dir.exists():
         return []
 
+    proj_name = project_path.name
     protocols = []
     for sub in sorted(proto_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith("."):
             continue
 
+        protocol_name = sub.name
         steps = []
         for entry in sorted(sub.iterdir()):
             if entry.is_dir() and not entry.name.startswith("."):
-                steps.append(entry.name)
+                step_name = entry.name
+                step_files_data = _get_step_files(proj_name, protocol_name, step_name, entry)
+                steps.append({
+                    "name": step_name,
+                    "files": step_files_data,
+                })
 
         if not steps:
             continue
 
         csv_count = 0
-        for sdir in steps:
-            sd = sub / sdir
+        for step_item in steps:
+            sd = sub / step_item["name"]
             if sd.is_dir():
                 csv_count += len([
                     f for f in sd.iterdir()

@@ -129,6 +129,34 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
     def _send_error(self, status: int, message: str):
         self._send_json({"error": message}, status)
 
+    def _serve_project_file(self, relative_path: str):
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
+        try:
+            # Safely resolve path and prevent directory traversal
+            full_path = (root / relative_path).resolve()
+            if not full_path.is_relative_to(root):
+                return self._send_error(403, "Access denied")
+        except Exception:
+            return self._send_error(400, "Invalid path")
+
+        if not full_path.exists() or not full_path.is_file():
+            return self._send_error(404, "File not found")
+
+        ctype = self.guess_type(str(full_path))
+        try:
+            with open(full_path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            if self.dev_mode:
+                self._add_cors()
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            self._send_error(500, "Internal server error")
+
     def _get_project_path(self) -> Path | None:
         from science_cli.serve.api import _resolve_project
         return _resolve_project(self.project_override)
