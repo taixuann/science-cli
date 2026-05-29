@@ -50,7 +50,12 @@ def get_projects_list() -> dict:
     projects = []
     if root.exists() and root.is_dir():
         for item in sorted(root.iterdir()):
-            if item.is_dir() and not item.name.startswith("."):
+            if (
+                item.is_dir()
+                and not item.name.startswith(".")
+                and not item.name.startswith("__")
+                and item.name not in ("node_modules", "venv", "env")
+            ):
                 projects.append(item.name)
     return {
         "workspace": str(root),
