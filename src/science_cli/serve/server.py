@@ -207,6 +207,15 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         data = get_histograms(proj, protocol_name)
         self._send_json(data)
 
+    def guess_type(self, path):
+        if path.endswith(".js"):
+            return "application/javascript"
+        if path.endswith(".css"):
+            return "text/css"
+        if path.endswith(".svg"):
+            return "image/svg+xml"
+        return super().guess_type(path)
+
     def send_head(self):
         path = self.translate_path(self.path)
         if os.path.isdir(path):
