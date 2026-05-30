@@ -106,6 +106,15 @@ def _get_step_files(
     # Also support files directly in step_path
     scan_dirs.append((step_path, f"protocol/{protocol_name}/{step_name}"))
 
+    # Gather raw experimental filenames (excluding results/)
+    raw_data_stems = set()
+    try:
+        for entry in step_path.iterdir():
+            if entry.is_file() and entry.suffix.lower() in (".csv", ".txt", ".dat", ".tsv"):
+                raw_data_stems.add(entry.stem.lower())
+    except Exception:
+        pass
+
     seen_names = set()
     for directory, relative_url_prefix in scan_dirs:
         for entry in sorted(directory.iterdir()):
@@ -116,6 +125,31 @@ def _get_step_files(
                         continue
                     seen_names.add(entry.name)
                     st = entry.stat()
+
+                    # Classify category
+                    name_lower = entry.stem.lower()
+                    is_distinct = False
+                    if name_lower in raw_data_stems:
+                        is_distinct = True
+                    else:
+                        import re
+                        # Strip common technique prefixes: raman_, ec-cv_, ec-ca_, ec-eis_, iv-sweep_, sers_ etc
+                        cleaned = re.sub(
+                            r"^(ec-cv|ec-ca|ec-eis|iv-sweep|iv-dc|iv_dc|raman|sers|uv-vis|cv|ca|eis|iv|afm)[_\-]",
+                            "",
+                            name_lower,
+                        )
+                        if cleaned in raw_data_stems:
+                            is_distinct = True
+                        else:
+                            # Substring match fallback
+                            for stem in raw_data_stems:
+                                if stem in name_lower:
+                                    is_distinct = True
+                                    break
+
+                    category = "distinct" if is_distinct else "overlay"
+
                     files.append({
                         "name": entry.name,
                         "path": f"{project_name}/{relative_url_prefix}/{entry.name}",
@@ -125,6 +159,7 @@ def _get_step_files(
                             st.st_mtime, tz=timezone.utc
                         ).strftime("%Y-%m-%d"),
                         "dimensions": "1280x800 px",
+                        "category": category,
                     })
     return files
 
