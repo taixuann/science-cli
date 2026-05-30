@@ -20,8 +20,8 @@ def sanitize_name(name: str, extra_chars: str = "") -> str:
 
 
 def sanitize_protocol_name(name: str) -> str:
-    """Sanitize a protocol name — allows alphanumeric, ``-``, ``_``, ``.``, ``(``, ``)``."""
-    return sanitize_name(name, "._()")
+    """Sanitize a protocol name — allows alphanumeric, ``-``, ``_``, ``.``, ``(``, ``)``, ``,``."""
+    return sanitize_name(name, "._(),")
 
 
 def sanitize_project_name(name: str) -> str:

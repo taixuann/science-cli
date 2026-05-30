@@ -32,6 +32,23 @@ def _parse_flags(args: list) -> tuple:
     return positional, flags
 
 
+def _warn_unknown(kind: str, values: list[str]) -> None:
+    """Warn if any device/technique values are not in the global registry."""
+    known = []
+    if kind == "device":
+        from science_cli.core.config import list_global_devices
+        known = list_global_devices()
+    elif kind == "technique":
+        from science_cli.core.config import list_global_techniques
+        known = list_global_techniques()
+    if not known:
+        return
+    unknown = [v for v in values if v and v not in known]
+    if unknown:
+        console.print(f"[yellow]Warning: unknown {kind}(s): {', '.join(unknown)}[/yellow]")
+        console.print(f"  Known {kind}s: {', '.join(known)}")
+
+
 def edit_handler(args: list) -> None:
     if not args or args[0] in ("--help", "-h"):
         show_command_help("edit")
@@ -90,6 +107,7 @@ def _edit_protocol(args: list) -> None:
     steps_raw = flags.get("step")
     techs_raw = flags.get("t") or flags.get("technique")
     devs_raw = flags.get("d") or flags.get("device")
+    param_raw = flags.get("param")
 
     if new_name:
         safe_new = sanitize_protocol_name(new_name)
@@ -126,7 +144,7 @@ def _edit_protocol(args: list) -> None:
         safe_name = safe_new  # update for subsequent step operations
 
     if new_desc:
-        data["description"] = new_desc
+        data["description"] = new_desc.replace("\\n", "\n")
 
     # --rm-step <name>: remove ALL steps matching name from the YAML (handles duplicates)
     rm_step = flags.get("rm-step")
@@ -186,28 +204,54 @@ def _edit_protocol(args: list) -> None:
         step_names = [s.strip() for s in steps_raw.split(",") if s.strip()]
         techs = [t.strip() for t in techs_raw.split(",") if t.strip()] if techs_raw else []
         devs = [d.strip() for d in devs_raw.split(",") if d.strip()] if devs_raw else []
+        existing_steps = {s["name"]: s for s in data.get("steps", [])}
         for i, sn in enumerate(step_names):
-            entry = {"name": sn}
-            if i < len(techs):
-                entry["technique"] = techs[i]
-            if i < len(devs):
-                entry["device"] = devs[i]
-            data.setdefault("steps", []).append(entry)
+            if sn in existing_steps:
+                if i < len(techs):
+                    existing_steps[sn]["technique"] = techs[i]
+                if i < len(devs):
+                    existing_steps[sn]["device"] = devs[i]
+            else:
+                entry = {"name": sn}
+                if i < len(techs):
+                    entry["technique"] = techs[i]
+                if i < len(devs):
+                    entry["device"] = devs[i]
+                data.setdefault("steps", []).append(entry)
             step_dir = paths.step_dir(safe_name, sn)
             step_dir.mkdir(parents=True, exist_ok=True)
             (step_dir / "results").mkdir(parents=True, exist_ok=True)
+
+        _warn_unknown("technique", techs)
+        _warn_unknown("device", devs)
+
+    if param_raw:
+        params = {}
+        for pair in param_raw.split(","):
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[k.strip()] = v.strip()
+        if params:
+            step_names = [s.strip() for s in steps_raw.split(",") if s.strip()] if steps_raw else []
+            targets = step_names if step_names else [s["name"] for s in data.get("steps", [])]
+            for sn in targets:
+                for s in data.get("steps", []):
+                    if s["name"] == sn:
+                        s.setdefault("params", {}).update(params)
 
     if techs_raw and not steps_raw:
         techs = [t.strip() for t in techs_raw.split(",") if t.strip()]
         for i, s in enumerate(data.get("steps", [])):
             if i < len(techs):
                 s["technique"] = techs[i]
+        _warn_unknown("technique", techs)
 
     if devs_raw and not steps_raw:
         devs = [d.strip() for d in devs_raw.split(",") if d.strip()]
         for i, s in enumerate(data.get("steps", [])):
             if i < len(devs):
                 s["device"] = devs[i]
+        _warn_unknown("device", devs)
 
     if new_name:
         with open(yaml_path, "w") as f:
@@ -270,6 +314,11 @@ def _edit_metadata(args: list) -> None:
                 if s["name"] == sn:
                     if i < len(devs):
                         s["device"] = devs[i]
+
+    if techs_raw:
+        _warn_unknown("technique", [t.strip() for t in techs_raw.split(",") if t.strip()])
+    if devs_raw:
+        _warn_unknown("device", [d.strip() for d in devs_raw.split(",") if d.strip()])
 
     if files_raw:
         files = [f.strip() for f in files_raw.split(",") if f.strip()]
