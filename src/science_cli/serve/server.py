@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from science_cli import __version__
-
 import http.server
 import json
 import logging
@@ -12,6 +10,8 @@ import re
 import traceback
 import urllib.parse
 from pathlib import Path
+
+from science_cli import __version__
 
 logger = logging.getLogger(__name__)
 

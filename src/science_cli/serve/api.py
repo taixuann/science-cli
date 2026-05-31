@@ -760,7 +760,12 @@ def get_dashboard_data(
 
     if has_sqlite:
         try:
-            from science_cli.library.memristor.db import close_db, open_db, query_files, query_materials
+            from science_cli.library.memristor.db import (
+                close_db,
+                open_db,
+                query_files,
+                query_materials,
+            )
 
             conn = open_db(project_path)
 
