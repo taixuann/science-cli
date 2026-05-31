@@ -108,6 +108,7 @@ export default function App() {
       .then(r => r.json())
       .then(data => {
         const names: string[] = (data?.protocols || [])
+          .filter((p: any) => p.has_materials)
           .map((p: any) => p.name);
         setProtocolNames(names);
         if (names.length > 0) {
@@ -446,7 +447,7 @@ export default function App() {
       <div className={'flex flex-col h-screen w-screen items-center justify-center ' + t.bgRoot}>
         <Cpu className="w-12 h-12 text-slate-600 mb-4" />
         <h2 className="text-lg font-bold font-mono text-slate-400">No Memristor Protocols Found</h2>
-        <p className="text-xs text-slate-600 mt-2">No protocols with device data (devices.yaml) detected.</p>
+        <p className="text-xs text-slate-600 mt-2">No protocols with materials data found. Run memristor sync first.</p>
       </div>
     );
   }

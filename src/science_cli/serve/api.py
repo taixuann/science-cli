@@ -189,6 +189,22 @@ def get_protocol_files(project_path: Path, protocol_name: str) -> dict:
     }
 
 
+def _get_protocol_materials(project_path: Path) -> set[str]:
+    """Return set of protocol names that have entries in the materials table."""
+    import sqlite3
+    db_path = project_path / f"{project_path.name}.db"
+    if not db_path.exists():
+        return set()
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cur = conn.execute("SELECT DISTINCT protocol FROM materials")
+        result = {row[0] for row in cur.fetchall()}
+        conn.close()
+        return result
+    except (sqlite3.Error, Exception):
+        return set()
+
+
 def _scan_protocol_dirs(
     project_path: Path,
 ) -> list[dict]:
@@ -197,6 +213,7 @@ def _scan_protocol_dirs(
         return []
 
     proj_name = project_path.name
+    materials_set = _get_protocol_materials(project_path)
     protocols = []
     for sub in sorted(proto_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith("."):
@@ -232,6 +249,7 @@ def _scan_protocol_dirs(
             "measured_cells": 0,
             "switching_yield": 0.0,
             "has_devices": (sub / "devices.yaml").exists(),
+            "has_materials": sub.name in materials_set,
             "last_updated": datetime.fromtimestamp(
                 sub.stat().st_mtime, tz=timezone.utc
             ).isoformat(),
