@@ -3629,6 +3629,36 @@ def generate_main_dashboard(
     try:
         conn = open_db(project_dir)
 
+        # ── First pass: compute relative paths for protocol selector ──
+        all_protocol_links: list[dict] = []
+        for pdir in dirs:
+            if not pdir.is_dir():
+                continue
+            pname = pdir.name
+            config = read_devices(pdir)
+            if config is None:
+                continue
+            step_dir_name = ""
+            if conn:
+                try:
+                    sr = conn.execute(
+                        "SELECT DISTINCT step FROM files WHERE protocol = ? ORDER BY step LIMIT 1",
+                        (pname,),
+                    ).fetchone()
+                    if sr:
+                        step_dir_name = sr[0]
+                except Exception:
+                    pass
+            if not step_dir_name:
+                for tech_key in ("iv-sweep", "iv"):
+                    if tech_key in config.steps:
+                        step_dir_name = config.steps[tech_key]
+                        break
+            if not step_dir_name:
+                step_dir_name = "4_iv"
+            href = f"../protocol/{pname}/{step_dir_name}/results/dashboard.html"
+            all_protocol_links.append({"name": pname, "href": href})
+
         for pdir in dirs:
             if not pdir.is_dir():
                 continue
@@ -3669,6 +3699,7 @@ def generate_main_dashboard(
                     date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
                     html = _build_neurophase_html(
                         project_dir.name, proto_name, dash_data, date_str,
+                        protocol_links=all_protocol_links,
                     )
                     proto_out.write_text(html, encoding="utf-8")
                     dash_rel = "../" + str(proto_out.relative_to(project_dir))
@@ -3775,6 +3806,7 @@ def _build_neurophase_html(
     protocol_name: str,
     d: dict,
     date_str: str,
+    protocol_links: list[dict] | None = None,
 ) -> str:
     agg = d.get("aggregate", {})
     hm = d.get("heatmap") or {}
@@ -3849,6 +3881,13 @@ def _build_neurophase_html(
         mat_tags += f"""      <span class="material-tag">{m}</span>
 """
 
+    # ── Protocol selector options ──
+    proto_options = ""
+    if protocol_links:
+        for p in protocol_links:
+            selected = ' selected' if p["name"] == protocol_name else ''
+            proto_options += f'<option value="{p["href"]}"{selected}>{p["name"]}</option>\n'
+
     return f"""<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -3882,12 +3921,21 @@ def _build_neurophase_html(
   .header .meta {{ font-size:10px; color:var(--text-dim); }}
   .back-link {{ font-size:10px; color:var(--text-dim); text-decoration:none; display:inline-flex; align-items:center; gap:4px; margin-bottom:12px; }}
   .back-link:hover {{ color:#10b981; }}
+  .proto-selector {{ display:flex; align-items:center; gap:8px; margin-bottom:16px; }}
+  .proto-selector label {{ font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); }}
+  .proto-selector select {{ background:var(--bg-card); border:1px solid var(--border); color:var(--text-bright); padding:6px 10px; border-radius:8px; font-size:11px; font-family:inherit; cursor:pointer; outline:none; min-width:200px; }}
+  .proto-selector select:hover {{ border-color:rgba(16,185,129,0.4); }}
   .material-tag {{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:9px; background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2); margin:2px; }}
 </style>
 </head>
 <body>
 
-<a class="back-link" href="../../../../results/dashboard.html">&larr; Back to Protocol Index</a>
+<a class="back-link" href="../../../../results/dashboard.html">&larr; Back to Index</a>
+<div class="proto-selector">
+  <label>Protocol:</label>
+  <select onchange="window.location.href=this.value">
+{proto_options}  </select>
+</div>
 <div class="header">
   <div>
     <h1>NeuroPhase &mdash; {protocol_name}</h1>
