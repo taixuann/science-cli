@@ -183,14 +183,6 @@ export default function App() {
     return ["All", ...mats];
   }, [dashboardData]);
 
-  const filteredCellsList = useMemo(() => {
-    if (selectedMaterial === "All") return cellsList;
-    return cellsList.filter(c => {
-      const meta = dashboardData?.heatmap?.metadata?.[c.row]?.[c.col];
-      return meta && meta.material === selectedMaterial;
-    });
-  }, [cellsList, selectedMaterial, dashboardData]);
-
   const cellsList: CellData[] = useMemo(() => {
     const meta = dashboardData?.heatmap?.metadata;
     if (!meta || meta.length === 0) return [];
@@ -204,6 +196,14 @@ export default function App() {
     }
     return list;
   }, [dashboardData]);
+
+  const filteredCellsList = useMemo(() => {
+    if (selectedMaterial === "All") return cellsList;
+    return cellsList.filter(c => {
+      const meta = dashboardData?.heatmap?.metadata?.[c.row]?.[c.col];
+      return meta && meta.material === selectedMaterial;
+    });
+  }, [cellsList, selectedMaterial, dashboardData]);
 
   const activeCellData: CellData = useMemo(() => {
     const found = cellsList.find(c => c.row === selectedCell.row && c.col === selectedCell.col);
