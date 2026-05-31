@@ -1,0 +1,6 @@
+{
+  "name": "Science CLI Plot Gallery",
+  "description": "Premium full-stack scientific plot gallery and 6x6 memristor crossbar analytics dashboard for material analysis, supporting multi-project workspaces, dynamic HSL heatmaps, and high-fidelity Plotly I-V curves.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

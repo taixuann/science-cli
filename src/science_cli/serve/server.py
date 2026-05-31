@@ -1,5 +1,7 @@
 """sci serve — Python stdlib HTTP server for the AI Studio frontend."""
 
+from science_cli import __version__
+
 from __future__ import annotations
 
 import http.server
@@ -317,7 +319,7 @@ class SciServeServer:
             print(f"        Try: sci serve --port {self.port + 1}")
             raise SystemExit(1) from e
 
-        print(f"[OK] sci serve started on http://localhost:{self.port}")
+        print(f"[OK] science-cli v{__version__} serve started on http://localhost:{self.port}")
         print(f"     Frontend: {FRONTEND_DIR}")
         if self.project_override:
             print(f"     Project:  {self.project_override}")

@@ -2369,7 +2369,7 @@ def show_memristor_help() -> None:
     try:
         from science_cli import __version__
     except ImportError:
-        __version__ = "2.1.1"
+        __version__ = "3.0.0"
 
     accent_r = "green"
     try:

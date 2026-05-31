@@ -1,4 +1,4 @@
-# science-cli v2.1.1 — Scientific Data CLI for Memristor & Electrochemistry
+# science-cli v3.0.0 — Scientific Data CLI for Memristor & Electrochemistry
 
 A Python CLI for managing, plotting, and analyzing experimental data — IV curves, CV, CA, EIS, memristor switching, endurance, and retention. Built for researchers who work with measurement files in the terminal.
 
