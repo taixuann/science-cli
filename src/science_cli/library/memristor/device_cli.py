@@ -2275,10 +2275,68 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
 # ── CLI entry point ─────────────────────────────────────────
 
 
+def show_memristor_help() -> None:
+    """Show a beautifully grouped Rich-based help menu for 'sci memristor'."""
+    from rich.console import Console
+    from rich.panel import Panel
+    try:
+        from science_cli import __version__
+    except ImportError:
+        __version__ = "2.1.1"
+
+    accent_r = "green"
+    try:
+        from science_cli.theme import RICH_STYLES
+        accent_r = RICH_STYLES.get("accent", "green")
+    except ImportError:
+        pass
+
+    console = Console()
+    console.print()
+    console.print(Panel(
+        f"[bold]sci memristor[/bold] — Crossbar Device Manager for Memristor Characterization [dim]v{__version__}[/dim]\n"
+        "[dim]Manage device geometry, sync sweep metadata, and analyze IV/endurance/retention measurements.[/dim]",
+        border_style=accent_r,
+    ))
+    console.print()
+
+    groups = {
+        "GROUP 1: DEVICE GEOMETRY & ASSIGNMENT": {
+            "init": "Scaffold device geometry in protocol YAML",
+            "ls": "List devices or matrix map",
+            "info": "Show point details",
+            "add": "Add file(s) to a point",
+            "rm": "Remove file, technique, or point",
+        },
+        "GROUP 2: CACHE SYNCHRONIZATION & HEALTH": {
+            "sync": "Sync sweep metadata",
+            "validate": "Validate device config",
+            "stats": "Aggregate statistics",
+            "check": "Find unassigned files (recursive)",
+        },
+        "GROUP 3: CURVES PLOTTING, MATRIX & DASHBOARD": {
+            "plot": "Generate IV curve SVGs from devices.yaml",
+            "analyze": "Read CSVs and compute Vset/Vreset/ratio (depends on sync)",
+            "dashboard": "Generate per-protocol dashboards + main index page",
+            "matrix": "Show device matrix from SQLite (no YAML required)",
+        }
+    }
+
+    for group_name, cmds in groups.items():
+        console.print(f"  [bold]{group_name}[/bold]")
+        for cmd_name, desc in cmds.items():
+            console.print(f"    {cmd_name:<18} [dim]{desc}[/dim]")
+        console.print()
+
+    console.print("  [dim]Use `sci memristor <subcommand> --help` for more details on a specific subcommand.[/dim]")
+    console.print()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Crossbar device manager for memristor characterization"
     )
+    parser.print_help = lambda file=None: show_memristor_help()
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
