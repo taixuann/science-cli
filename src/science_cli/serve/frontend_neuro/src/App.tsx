@@ -107,7 +107,6 @@ export default function App() {
       .then(r => r.json())
       .then(data => {
         const names: string[] = (data?.protocols || [])
-          .filter((p: any) => p.has_devices !== false)
           .map((p: any) => p.name);
         setProtocolNames(names);
         if (names.length > 0) {
