@@ -206,6 +206,12 @@ export default function App() {
     });
   }, [cellsList, selectedMaterial, dashboardData]);
 
+  const cellsMap = useMemo(() => {
+    const map = new Map<string, CellData>();
+    cellsList.forEach(c => map.set(c.row + '-' + c.col, c));
+    return map;
+  }, [cellsList]);
+
   const activeCellData: CellData = useMemo(() => {
     const found = cellsList.find(c => c.row === selectedCell.row && c.col === selectedCell.col);
     if (found) return found;
@@ -566,20 +572,23 @@ export default function App() {
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Heatmap Explorer ({nCols}x{nRows})</span>
             <div className={'grid gap-1 p-1.5 rounded-xl border transition-colors ' + (theme === 'light' ? 'bg-[#f2f2f7] border-slate-205 shadow-3xs' : 'bg-black/30 border-zinc-800/85')}
               style={{ gridTemplateColumns: 'repeat(' + nCols + ', minmax(0, 1fr))' }}>
-              {filteredCellsList.map((cell) => {
-                const isSelected = selectedCell.row === cell.row && selectedCell.col === cell.col;
+              {Array.from({ length: nRows }, (_, r) => Array.from({ length: nCols }, (_, c) => {
+                const cell = cellsMap.get(r + '-' + c);
+                const isSelected = selectedCell.row === r && selectedCell.col === c;
+                const hasData = !!cell;
                 let bg = "bg-emerald-500";
-                if (cell.cellType.includes("Stuck-ON")) bg = "bg-red-500 shadow-[0_0_3.5px_#ef4444]";
-                else if (cell.cellType.includes("Stuck-OFF")) bg = "bg-slate-700 opacity-40";
-                else if (cell.cellType.includes("Volatile") || cell.cellType.includes("Threshold")) bg = "bg-amber-500 shadow-[0_0_3.5px_#f59e0b]";
+                if (cell?.cellType.includes("Stuck-ON")) bg = "bg-red-500 shadow-[0_0_3.5px_#ef4444]";
+                else if (cell?.cellType.includes("Stuck-OFF")) bg = "bg-slate-700 opacity-40";
+                else if (cell?.cellType.includes("Volatile") || cell?.cellType.includes("Threshold")) bg = "bg-amber-500 shadow-[0_0_3.5px_#f59e0b]";
+                else if (!hasData) bg = 'bg-slate-800/30';
                 return (
-                  <button key={'mini-' + cell.row + '-' + cell.col}
-                    onClick={() => setSelectedCell({ row: cell.row, col: cell.col })}
-                    className={'aspect-square w-full ' + bg + ' ' + (isSelected ? (theme === 'light' ? "ring-2 ring-indigo-500 scale-110 shadow-xs" : "ring-2 ring-indigo-400 scale-110 shadow-xs") : "") + ' transition-all duration-150 rounded-md cursor-pointer'}
-                    title={'Cell R' + cell.row + ' C' + cell.col + ': ' + cell.cellType}
+                  <button key={'mini-' + r + '-' + c}
+                    onClick={() => cell && setSelectedCell({ row: r, col: c })}
+                    className={'aspect-square w-full ' + bg + ' ' + (isSelected && hasData ? (theme === 'light' ? "ring-2 ring-indigo-500 scale-110 shadow-xs" : "ring-2 ring-indigo-400 scale-110 shadow-xs") : "") + ' transition-all duration-150 rounded-md ' + (hasData ? 'cursor-pointer' : '')}
+                    title={hasData ? ('Cell R' + (r + 1) + ' C' + (c + 1) + ': ' + cell.cellType) : 'Cell R' + (r + 1) + ' C' + (c + 1) + ': No data'}
                   />
                 );
-              })}
+              })).flat()}
             </div>
             <div className="flex flex-col space-y-1">
               <span className={'text-[9px] font-mono uppercase font-semibold ' + (theme === 'light' ? 'text-slate-400' : 'text-zinc-500')}>Snap metric:</span>
