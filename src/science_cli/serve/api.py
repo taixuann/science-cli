@@ -231,6 +231,7 @@ def _scan_protocol_dirs(
             "total_files": csv_count,
             "measured_cells": 0,
             "switching_yield": 0.0,
+            "has_devices": (sub / "devices.yaml").exists(),
             "last_updated": datetime.fromtimestamp(
                 sub.stat().st_mtime, tz=timezone.utc
             ).isoformat(),
