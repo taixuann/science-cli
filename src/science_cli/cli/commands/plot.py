@@ -970,16 +970,14 @@ def _do_eis_overlap(files: list, flags: dict) -> None:
     theme_colors = [entry["color"] for entry in cycle]
 
     out_dir = _get_results_dir(files[0])
-    _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
-    dpi = int(flags.get("dpi", _def_dpi))
 
-    # ── Nyquist overlay ─────────────────────────────────────────
+    # ── Nyquist overlay ──────────────────────────────────────────
     nyq_name = flags.get("n") or flags.get("name", "ec-eis-nyquist_overlay.pdf")
     if not Path(nyq_name).suffix:
         nyq_name += ".pdf"
     nyq_path = out_dir / nyq_name
 
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=_figsize(flags))
     has_nyq = False
     for i, fp in enumerate(files):
         try:
@@ -1000,54 +998,12 @@ def _do_eis_overlap(files: list, flags: dict) -> None:
         ax.set_xlabel("Z' (Ω)")
         ax.set_ylabel("-Z'' (Ω)")
         ax.set_aspect("equal")
-        # Legend outside plot, 2-column, smaller font
-        ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=6, ncol=2, frameon=False)
-        fig.tight_layout()
+        ax.legend()
+        _apply_figure_kw(ax, flags, "ec-eis-nyquist-overlay")
+        _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
+        dpi = int(flags.get("dpi", _def_dpi))
         fig.savefig(nyq_path, dpi=dpi, bbox_inches="tight")
         console.print(f"[bold green]✓[/bold green] Nyquist overlay saved: {nyq_path}")
-    plt.close(fig)
-
-    # ── Bode overlay (|Z| vs frequency) ──────────────────────────
-    bode_name = flags.get("name", "ec-eis-bode_overlay.pdf")
-    if not Path(bode_name).suffix:
-        bode_name += ".pdf"
-    bode_path = out_dir / bode_name
-
-    fig, ax1 = plt.subplots(figsize=(7, 4))
-    has_bode = False
-    for i, fp in enumerate(files):
-        try:
-            df, info = load_data_file(fp, technique="ec-eis")
-            freq = _col(df, ("Frequency (Hz)", "Frequency", "f/Hz", "freq", "frequency", "f"))
-            if not freq:
-                continue
-
-            # Try magnitude column first; fall back to computing from Z'/Z''
-            mag = _col(df, ("|Z| (Ω)", "Magnitude", "|Z|", "modulus", "Modulus", "Z", "Impedance"))
-            if mag:
-                mag_vals = df[mag].values
-            else:
-                zr = _col(df, ("Z' (Ω)", "Z'", "Re(Z)", "ReZ", "Zre", "z'", "z_re", "z_real"))
-                zi = _col(df, ("-Z'' (Ω)", "-Z''", "Z''", '-Z"', "Im(Z)", "ImZ", "Zim", "z''", "z_im", "z_imag"))
-                if not zr or not zi:
-                    continue
-                mag_vals = np.sqrt(df[zr].values ** 2 + df[zi].values ** 2)
-
-            color = theme_colors[i % len(theme_colors)]
-            label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax1.loglog(df[freq].values, mag_vals, label=label, color=color, linewidth=0.75)
-            has_bode = True
-        except Exception:
-            continue
-
-    if has_bode:
-        ax1.set_xlabel("Frequency (Hz)")
-        ax1.set_ylabel("|Z| (Ω)")
-        ax1.grid(True, alpha=0.3)
-        ax1.legend(loc="best", fontsize=6, frameon=False)
-        fig.tight_layout()
-        fig.savefig(bode_path, dpi=dpi, bbox_inches="tight")
-        console.print(f"[bold green]✓[/bold green] Bode overlay saved: {bode_path}")
     plt.close(fig)
 
     # ── Bode overlay ─────────────────────────────────────────────
