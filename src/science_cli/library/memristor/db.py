@@ -564,6 +564,24 @@ def update_file_sweep_metadata(
     )
 
 
+def query_materials(
+    conn: sqlite3.Connection,
+    protocol: Optional[str] = None,
+) -> list[dict]:
+    """Query the ``materials`` table with optional protocol filter.
+
+    Returns a list of dicts with keys: protocol, row, col, material, device_type, errors.
+    """
+    sql = "SELECT * FROM materials WHERE 1=1"
+    params: list = []
+    if protocol:
+        sql += " AND protocol = ?"
+        params.append(protocol)
+    sql += " ORDER BY protocol, row, col"
+    cursor = conn.execute(sql, params)
+    return [{key: row[key] for key in row.keys()} for row in cursor.fetchall()]
+
+
 def query_sweep_metadata(
     conn: sqlite3.Connection,
     protocol: str,

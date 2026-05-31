@@ -85,6 +85,13 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_histograms(m.group(1))
                 return
 
+            m = re.match(r"^/api/protocol/([^/]+)/dashboard$", path)
+            if m:
+                metric = qs.get("metric", ["ratio"])[0]
+                material = qs.get("material", [""])[0]
+                self._api_dashboard(m.group(1), metric, material)
+                return
+
             if path == "/":
                 self.path = "/index.html"
                 return super().do_GET()
@@ -233,6 +240,16 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
             return self._send_error(404, "no project open")
         from science_cli.serve.api import get_histograms
         data = get_histograms(proj, protocol_name)
+        self._send_json(data)
+
+    def _api_dashboard(self, protocol_name: str, metric: str, material: str):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+        from science_cli.serve.api import get_dashboard_data
+        data = get_dashboard_data(proj, protocol_name, metric, material)
+        if "error" in data:
+            return self._send_error(404, data["error"])
         self._send_json(data)
 
     def guess_type(self, path):

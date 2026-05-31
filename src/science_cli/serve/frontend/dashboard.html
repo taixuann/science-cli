@@ -155,6 +155,11 @@
             <span class="kpi-value" id="dash-yield">- <span class="kpi-unit">%</span></span>
             <span class="kpi-meta">Success switching ratio</span>
           </div>
+          <div class="kpi-card kpi-type" style="grid-column: span 1;">
+            <span class="kpi-label">Device Types</span>
+            <span class="kpi-value" id="dash-device-types" style="font-size:13px;">-</span>
+            <span class="kpi-meta">Volatile / Non-volatile / Short / Insulating</span>
+          </div>
         </section>
 
         <!-- Dashboard Working Area: Left matrix and Right Plotly curves -->
@@ -291,7 +296,7 @@
           }
         }
 
-        // Initialize view components
+        // Initialize view components — single dashboard endpoint
         async function initDashboard() {
           try {
             // Populate protocol selectors
@@ -310,40 +315,71 @@
             // Set up dynamic breadcrumb
             document.getElementById("crumbs-protocol").textContent = activeProtocol;
 
-            // Load all dashboards elements
-            await loadSummary();
-            await loadHeatmap();
-            await loadHistograms();
+            // Load everything from the single dashboard endpoint
+            await loadDashboard();
           } catch (e) {
             console.error("Dashboard initialize failed:", e);
           }
         }
 
-        // 1. Fetch Summary KPIs
-        async function loadSummary() {
-          const data = await window.SciApp.apiFetch(`/api/protocol/${activeProtocol}/summary`);
+        // Load all dashboard data from single endpoint
+        async function loadDashboard() {
+          const metric = document.getElementById("heatmap-metric-selector").value;
+          const materialFilter = document.getElementById("sidebar-filter-material").value;
+          const data = await window.SciApp.apiFetch(
+            `/api/protocol/${activeProtocol}/dashboard?metric=${metric}&material=${encodeURIComponent(materialFilter)}`
+          );
+
+          // ── KPIs ──
           document.getElementById("dash-median-vset").innerHTML = `${data.aggregate.median_vset}<span class="kpi-unit">V</span>`;
           document.getElementById("dash-median-vreset").innerHTML = `${data.aggregate.median_vreset}<span class="kpi-unit">V</span>`;
           document.getElementById("dash-median-ratio").textContent = data.aggregate.median_ratio;
           document.getElementById("dash-yield").innerHTML = `${data.aggregate.yield_pct}<span class="kpi-unit">%</span>`;
+
+          // ── Device types breakdown ──
+          const types = data.device_types || {};
+          const typeParts = [];
+          if (types["non-volatile"]) typeParts.push(`NV:${types["non-volatile"]}`);
+          if (types["volatile"]) typeParts.push(`V:${types["volatile"]}`);
+          if (types["short"]) typeParts.push(`S:${types["short"]}`);
+          if (types["insulating"]) typeParts.push(`I:${types["insulating"]}`);
+          if (types["resistor"]) typeParts.push(`R:${types["resistor"]}`);
+          document.getElementById("dash-device-types").textContent = typeParts.join(" ") || "—";
+
+          // ── Heatmap ──
+          if (data.heatmap) {
+            activeHeatmapMetadata = data.heatmap.metadata;
+            renderCrossbar(data.heatmap, metric);
+          }
+
+          // ── Histograms ──
+          const hists = data.histograms || {};
+          const chartW = document.getElementById("dist-vset-chart").clientWidth || 240;
+          const theme = window.SciApp.activeTheme;
+          document.getElementById("dist-vset-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.vset.counts, hists.vset.bins, theme);
+          document.getElementById("dist-vreset-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.vreset.counts, hists.vreset.bins, theme);
+          document.getElementById("dist-ratio-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.ratio.counts, hists.ratio.bins, theme);
+
+          // Update sidebar material filter
+          const matSelect = document.getElementById("sidebar-filter-material");
+          const currentVal = matSelect.value;
+          matSelect.innerHTML = '<option value="">All Materials</option>';
+          (data.materials || []).forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            if (m === currentVal) opt.selected = true;
+            matSelect.appendChild(opt);
+          });
         }
 
-        // 2. Fetch Heatmap and render the crossbar grid
-        async function loadHeatmap() {
-          const metric = document.getElementById("heatmap-metric-selector").value;
-          selectedMetric = metric;
-
-          // Shift legend gradient representation according to selected metric
+        // Refresh heatmap only via dashboard endpoint
+        async function refreshHeatmap() {
+          selectedMetric = document.getElementById("heatmap-metric-selector").value;
           const colorBar = document.getElementById("legend-color-bar");
           colorBar.className = "legend-bar";
-          colorBar.classList.add(`legend-bar-${metric}`);
-
-          const materialFilter = document.getElementById("sidebar-filter-material").value;
-          const url = `/api/protocol/${activeProtocol}/heatmap?metric=${metric}&material=${encodeURIComponent(materialFilter)}`;
-          const data = await window.SciApp.apiFetch(url);
-          
-          activeHeatmapMetadata = data.metadata;
-          renderCrossbar(data, metric);
+          colorBar.classList.add(`legend-bar-${selectedMetric}`);
+          await loadDashboard();
         }
 
         // Draw crossbar visual matrix
@@ -351,21 +387,34 @@
           const grid = document.getElementById("crossbar-matrix-grid");
           grid.innerHTML = "";
 
-          // Draw column index labels top line (7 columns: index gap + 6 actual)
+          const hrows = hdata.rows || 6;
+          const hcols = hdata.cols || 6;
+
+          // Draw column index labels top line
           const cornerLabel = document.createElement("div");
           cornerLabel.className = "grid-label-cell";
           cornerLabel.textContent = "row\\col";
           grid.appendChild(cornerLabel);
 
-          for (let c = 1; c <= 6; c++) {
+          for (let c = 1; c <= hcols; c++) {
             const colLabel = document.createElement("div");
             colLabel.className = "grid-label-cell";
             colLabel.textContent = `C${c}`;
             grid.appendChild(colLabel);
           }
 
+          // Device type color mapping
+          const TYPE_COLORS = {
+            "non-volatile": "#4ade80",
+            "volatile": "#fb923c",
+            "short": "#f87171",
+            "insulating": "#94a3b8",
+            "resistor": "#818cf8",
+            "unknown": "#64748b",
+          };
+
           // Build row by row
-          for (let r = 0; r < 6; r++) {
+          for (let r = 0; r < hrows; r++) {
             // Draw row index on the left
             const rowLabel = document.createElement("div");
             rowLabel.className = "grid-label-cell";
@@ -373,7 +422,7 @@
             grid.appendChild(rowLabel);
 
             // Draw cells
-            for (let c = 0; c < 6; c++) {
+            for (let c = 0; c < hcols; c++) {
               const val = hdata.data[r][c];
               const cellMeta = hdata.metadata[r][c];
               
@@ -387,43 +436,57 @@
                  cellNode.classList.add("active-selection");
               }
 
+              // Device type badge (tiny dot in corner)
+              const dtype = cellMeta.device_type || "unknown";
+              const typeColor = TYPE_COLORS[dtype] || TYPE_COLORS["unknown"];
+
               cellNode.innerHTML = `<span class="grid-cell-label">${cellMeta.cell}</span>`;
 
               if (val === null) {
                 cellNode.classList.add("unmeasured");
                 cellNode.innerHTML += `<span class="grid-cell-value">—</span>`;
+                // Show type indicator even on unmeasured
+                const typeBadge = document.createElement("span");
+                typeBadge.className = "grid-cell-type-dot";
+                typeBadge.style.backgroundColor = typeColor;
+                typeBadge.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:50%;background:${typeColor};position:absolute;top:2px;right:2px;`;
+                cellNode.appendChild(typeBadge);
               } else {
                 // Procedural heat styling mapping depending on selected metrics
                 let colorIntensity = 0.15;
                 let bgStyle = "";
                 
                 if (metric === "ratio") {
-                  colorIntensity = Math.min(val / 500, 1.0); // scale max 500 units ratio
-                  // Hysteresis color (orange/red heat)
+                  colorIntensity = Math.min(val / 500, 1.0);
                   bgStyle = `rgba(255, 128, 0, ${0.15 + colorIntensity * 0.85})`;
                 } else if (metric === "vset") {
-                  colorIntensity = Math.min((val - 1.0) / 2.0, 1.0); // 1.0V to 3.0V
-                  // Cyan/green heat
+                  colorIntensity = Math.min((val - 1.0) / 2.0, 1.0);
                   bgStyle = `rgba(0, 212, 255, ${0.15 + colorIntensity * 0.85})`;
                 } else if (metric === "vreset") {
-                  colorIntensity = Math.min(Math.abs(val) / 2.5, 1.0); // 0 to -2.5V
-                  // Purple/red heat
+                  colorIntensity = Math.min(Math.abs(val) / 2.5, 1.0);
                   bgStyle = `rgba(179, 136, 255, ${0.15 + colorIntensity * 0.85})`;
                 } else if (metric === "files") {
-                  colorIntensity = val / 3; // range 1 to 3 files
+                  colorIntensity = val / 3;
                   bgStyle = `rgba(74, 158, 255, ${0.15 + colorIntensity * 0.85})`;
+                } else if (metric === "yield") {
+                  colorIntensity = val / 100;
+                  bgStyle = `rgba(34, 197, 94, ${0.15 + colorIntensity * 0.85})`;
                 }
 
                 cellNode.style.backgroundColor = bgStyle;
                 
-                // Keep text high contrast
                 const textColValue = window.SciApp.activeTheme === "light" ? "#0f172a" : "#fff";
                 cellNode.innerHTML += `<span class="grid-cell-value" style="color: ${textColValue}">${val}</span>`;
 
-                // Quick tooltip hover detail helper
-                cellNode.title = `Cell: ${cellMeta.cell}\nMaterial: ${cellMeta.material}\nValue: ${val}\nStatus: ${cellMeta.status}`;
+                // Device type color dot
+                const typeBadge = document.createElement("span");
+                typeBadge.className = "grid-cell-type-dot";
+                typeBadge.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:50%;background:${typeColor};position:absolute;top:2px;right:2px;`;
+                cellNode.appendChild(typeBadge);
 
-                // Click event loading IV
+                // Rich tooltip
+                cellNode.title = `Cell: ${cellMeta.cell}\nMaterial: ${cellMeta.material}\nType: ${dtype}\nValue: ${val}\nVset: ${cellMeta.v_set}V\nVreset: ${cellMeta.v_reset}V\nRatio: ${cellMeta.ratio}\nFiles: ${cellMeta.n_files}\nStatus: ${cellMeta.status}`;
+
                 cellNode.addEventListener("click", () => {
                   selectCell(cellMeta.cell);
                 });
@@ -567,57 +630,22 @@
           document.getElementById("plot-subtitle-desc").textContent = `Substrate stack: ${cellData.material} — active overlay sweeps`;
         }
 
-        // 4. Load bottom Histograms
-        async function loadHistograms() {
-          const data = await window.SciApp.apiFetch(`/api/protocol/${activeProtocol}/histograms`);
-          
-          // Draw vset histogram
-          const vsetChart = document.getElementById("dist-vset-chart");
-          vsetChart.innerHTML = window.SciApp.drawHistogramLoopSVG(
-            vsetChart.clientWidth || 240, 
-            120, 
-            data.vset.counts, 
-            data.vset.bins,
-            window.SciApp.activeTheme
-          );
+        // ── Event listeners ──
 
-          // Draw vreset histogram
-          const vresetChart = document.getElementById("dist-vreset-chart");
-          vresetChart.innerHTML = window.SciApp.drawHistogramLoopSVG(
-             vresetChart.clientWidth || 240,
-             120,
-             data.vreset.counts,
-             data.vreset.bins,
-             window.SciApp.activeTheme
-          );
-
-          // Draw ratio histogram
-          const ratioChart = document.getElementById("dist-ratio-chart");
-          ratioChart.innerHTML = window.SciApp.drawHistogramLoopSVG(
-             ratioChart.clientWidth || 240,
-             120,
-             data.ratio.counts,
-             data.ratio.bins,
-             window.SciApp.activeTheme
-          );
-        }
-
-        // Listen for standard custom events triggers
+        // Theme change
         window.addEventListener("scithemechange", () => {
-          loadHeatmap();
-          loadHistograms();
+          loadDashboard();
           if (activeCellId) selectCell(activeCellId);
         });
 
-        // Metric switch listeners
+        // Metric switch
         document.getElementById("heatmap-metric-selector").addEventListener("change", () => {
-          loadHeatmap();
+          refreshHeatmap();
         });
 
-        // Protocol selector mappings
+        // Protocol selector
         document.getElementById("dashboard-protocol-selector").addEventListener("change", (e) => {
           activeProtocol = e.target.value;
-          // Clean selected state
           activeCellId = null;
           document.getElementById("plotly-iv-chart").innerHTML = `
             <div style="padding: 80px 20px; text-align: center; color: var(--text-secondary); font-family: var(--font-sans)">
@@ -632,29 +660,24 @@
           document.getElementById("device-selected-bar").style.display = "none";
           document.getElementById("plot-title-header").textContent = "I-V Hysteresis Loop Details";
           document.getElementById("plot-subtitle-desc").textContent = "Click a cell on the crossbar matrix map to load scientific sweeps";
-          
-          // Re-route and load summary details
           document.getElementById("crumbs-protocol").textContent = activeProtocol;
-          // Sync sidebar values
           const sideProto = document.getElementById("ctx-protocol");
           if (sideProto) sideProto.textContent = activeProtocol;
 
-          loadSummary();
-          loadHeatmap();
-          loadHistograms();
+          loadDashboard();
         });
 
-        // Trigger log changes checkbox
+        // Log axis checkbox
         document.getElementById("plot-log-checkbox").addEventListener("change", () => {
           if (activeCellId) selectCell(activeCellId);
         });
 
-        // Sidebar filters triggers
+        // Sidebar filters
         document.getElementById("sidebar-filter-material").addEventListener("change", () => {
-          loadHeatmap();
+          loadDashboard();
         });
         document.getElementById("sidebar-filter-technique").addEventListener("change", () => {
-          loadHeatmap();
+          loadDashboard();
         });
 
         // Start initialization
