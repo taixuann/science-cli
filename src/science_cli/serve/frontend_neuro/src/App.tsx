@@ -410,6 +410,7 @@ export default function App() {
     },
     yaxis: {
       title: { text: 'Row', font: { size: 11 } },
+      autorange: 'reversed',
       tickmode: 'array' as const,
       tickvals: dashboardData?.heatmap ? Array.from({ length: dashboardData.heatmap.rows }, (_, i) => i) : [],
       ticktext: dashboardData?.heatmap ? Array.from({ length: dashboardData.heatmap.rows }, (_, i) => 'R' + (i + 1)) : [],
