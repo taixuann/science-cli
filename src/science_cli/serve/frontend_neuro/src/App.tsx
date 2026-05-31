@@ -573,19 +573,15 @@ export default function App() {
             <div className={'grid gap-1 p-1.5 rounded-xl border transition-colors ' + (theme === 'light' ? 'bg-[#f2f2f7] border-slate-205 shadow-3xs' : 'bg-black/30 border-zinc-800/85')}
               style={{ gridTemplateColumns: 'repeat(' + nCols + ', minmax(0, 1fr))' }}>
               {Array.from({ length: nRows }, (_, r) => Array.from({ length: nCols }, (_, c) => {
-                const cell = cellsMap.get(r + '-' + c);
+                const meta = dashboardData?.heatmap?.metadata?.[r]?.[c];
                 const isSelected = selectedCell.row === r && selectedCell.col === c;
-                const hasData = !!cell;
-                let bg = "bg-emerald-500";
-                if (cell?.cellType.includes("Stuck-ON")) bg = "bg-red-500 shadow-[0_0_3.5px_#ef4444]";
-                else if (cell?.cellType.includes("Stuck-OFF")) bg = "bg-slate-700 opacity-40";
-                else if (cell?.cellType.includes("Volatile") || cell?.cellType.includes("Threshold")) bg = "bg-amber-500 shadow-[0_0_3.5px_#f59e0b]";
-                else if (!hasData) bg = 'bg-slate-800/30';
+                const hasData = meta && meta.status !== 'Unmeasured' && (selectedMaterial === 'All' || meta.material === selectedMaterial);
+                const bg = hasData ? 'bg-emerald-500' : 'bg-slate-800/20';
                 return (
                   <button key={'mini-' + r + '-' + c}
-                    onClick={() => cell && setSelectedCell({ row: r, col: c })}
-                    className={'aspect-square w-full ' + bg + ' ' + (isSelected && hasData ? (theme === 'light' ? "ring-2 ring-indigo-500 scale-110 shadow-xs" : "ring-2 ring-indigo-400 scale-110 shadow-xs") : "") + ' transition-all duration-150 rounded-md ' + (hasData ? 'cursor-pointer' : '')}
-                    title={hasData ? ('Cell R' + (r + 1) + ' C' + (c + 1) + ': ' + cell.cellType) : 'Cell R' + (r + 1) + ' C' + (c + 1) + ': No data'}
+                    onClick={() => hasData && setSelectedCell({ row: r, col: c })}
+                    className={'aspect-square w-full ' + bg + ' ' + (isSelected && hasData ? (theme === 'light' ? 'ring-2 ring-indigo-500 scale-110 shadow-xs' : 'ring-2 ring-indigo-400 scale-110 shadow-xs') : '') + ' transition-all duration-150 rounded-md ' + (hasData ? 'cursor-pointer' : '')}
+                    title={hasData ? ('Cell R' + (r + 1) + ' C' + (c + 1) + ': ' + (meta?.material || '') + ' | Vset=' + (meta?.v_set?.toFixed(2) ?? 'N/A')) : 'Cell R' + (r + 1) + ' C' + (c + 1) + ': No data'}
                   />
                 );
               })).flat()}
