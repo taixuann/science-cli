@@ -14,6 +14,13 @@ from science_cli.core.file_utils import is_flag
 console = Console()
 
 
+def _fmt_desc(desc: str) -> str:
+    """Flatten multiline descriptions for table cell display."""
+    if not desc:
+        return desc
+    return desc.replace("\n", " ↵ ")
+
+
 def _parse_flags(args: list) -> tuple:
     positional = []
     flags = {}
@@ -160,7 +167,7 @@ def _ls_default(proj: Path) -> None:
             data = yaml.safe_load(f) or {}
         steps = data.get("steps", [])
         n_files = sum(len(s.get("files", [])) for s in steps)
-        table.add_row(py.stem, str(len(steps)), str(n_files), data.get("description", ""))
+        table.add_row(py.stem, str(len(steps)), str(n_files), _fmt_desc(data.get("description", "")))
 
     console.print(table)
     rprint("\n[dim]Use 'ls -m protocol --all' for full view.[/dim]")
@@ -221,6 +228,7 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
             n_files = len(sfiles)
             file_badge = f"{n_files} files" if n_files else "—"
             sdesc = s.get("description", "")
+            sparams = s.get("params", {})
 
             step_dir = paths.protocol_subdir(py.stem) / sn
             cref = _device_crossref(step_dir) if step_dir.exists() else ""
@@ -233,7 +241,10 @@ def _ls_protocol(proj: Path, show_all: bool = False, show_step: bool = False, sh
                 if extra_names:
                     file_badge += f" +{len(extra_names)} in dir"
 
-            display_desc = sdesc
+            display_desc = _fmt_desc(sdesc)
+            if sparams:
+                param_str = ", ".join(f"{k}: {v}" for k, v in sparams.items())
+                display_desc = (display_desc + " | " + param_str) if display_desc else param_str
             if show_step or show_files or show_all:
                 # Include file list in description column for detailed views
                 if sfiles:

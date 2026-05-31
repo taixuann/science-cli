@@ -37,7 +37,19 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
+        # Intercept dynamic project context override from query string or headers
+        project_param = qs.get("project", [None])[0]
+        if not project_param:
+            project_param = self.headers.get("X-Project-Override", None)
+
+        if project_param:
+            self.project_override = project_param
+
         try:
+            if path == "/api/projects":
+                self._api_projects()
+                return
+
             if path == "/api/project":
                 self._api_project()
                 return
@@ -71,6 +83,13 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
             m = re.match(r"^/api/protocol/([^/]+)/histograms$", path)
             if m:
                 self._api_histograms(m.group(1))
+                return
+
+            m = re.match(r"^/api/protocol/([^/]+)/dashboard$", path)
+            if m:
+                metric = qs.get("metric", ["ratio"])[0]
+                material = qs.get("material", [""])[0]
+                self._api_dashboard(m.group(1), metric, material)
                 return
 
             if path == "/":
@@ -117,9 +136,42 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
     def _send_error(self, status: int, message: str):
         self._send_json({"error": message}, status)
 
+    def _serve_project_file(self, relative_path: str):
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
+        try:
+            # Safely resolve path and prevent directory traversal
+            full_path = (root / relative_path).resolve()
+            if not full_path.is_relative_to(root):
+                return self._send_error(403, "Access denied")
+        except Exception:
+            return self._send_error(400, "Invalid path")
+
+        if not full_path.exists() or not full_path.is_file():
+            return self._send_error(404, "File not found")
+
+        ctype = self.guess_type(str(full_path))
+        try:
+            with open(full_path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            if self.dev_mode:
+                self._add_cors()
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            self._send_error(500, "Internal server error")
+
     def _get_project_path(self) -> Path | None:
         from science_cli.serve.api import _resolve_project
         return _resolve_project(self.project_override)
+
+    def _api_projects(self):
+        from science_cli.serve.api import get_projects_list
+        data = get_projects_list()
+        self._send_json(data)
 
     def _api_project(self):
         proj = self._get_project_path()
@@ -140,6 +192,16 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
             return self._send_error(404, "no project open — use 'sci open -m project <name>' first")
         from science_cli.serve.api import get_gallery_data
         data = get_gallery_data(proj)
+        self._send_json(data)
+
+    def _api_protocol_files(self, protocol_name: str):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+        from science_cli.serve.api import get_protocol_files
+        data = get_protocol_files(proj, protocol_name)
+        if "error" in data:
+            return self._send_error(404, data["error"])
         self._send_json(data)
 
     def _api_protocol_summary(self, protocol_name: str):
@@ -180,39 +242,24 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         data = get_histograms(proj, protocol_name)
         self._send_json(data)
 
-    def _api_protocol_files(self, protocol_name: str):
+    def _api_dashboard(self, protocol_name: str, metric: str, material: str):
         proj = self._get_project_path()
         if not proj:
             return self._send_error(404, "no project open")
-        from science_cli.serve.api import get_protocol_files
-        data = get_protocol_files(proj, protocol_name)
+        from science_cli.serve.api import get_dashboard_data
+        data = get_dashboard_data(proj, protocol_name, metric, material)
         if "error" in data:
             return self._send_error(404, data["error"])
         self._send_json(data)
 
-    def _serve_project_file(self, file_path: str):
-        proj = self._get_project_path()
-        if not proj:
-            return self._send_error(404, "no project open")
-        full_path = (proj / file_path).resolve()
-        if not str(full_path).startswith(str(proj.resolve())):
-            return self._send_error(403, "path traversal denied")
-        if not full_path.exists() or not full_path.is_file():
-            return self._send_error(404, "file not found")
-        ctype = self.guess_type(str(full_path))
-        try:
-            f = open(full_path, "rb")
-        except OSError:
-            return self._send_error(404, "file not found")
-        try:
-            fs = os.fstat(f.fileno())
-            self.send_response(200)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(fs[6]))
-            self.end_headers()
-            self.copyfile(f, self.wfile)
-        finally:
-            f.close()
+    def guess_type(self, path):
+        if path.endswith(".js"):
+            return "application/javascript"
+        if path.endswith(".css"):
+            return "text/css"
+        if path.endswith(".svg"):
+            return "image/svg+xml"
+        return super().guess_type(path)
 
     def send_head(self):
         path = self.translate_path(self.path)

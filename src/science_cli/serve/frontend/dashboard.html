@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>science-cli Dashboard — Interactive Explorer</title>
+    <!-- CSS and Plotly.js dependencies -->
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  </head>
+  <body>
+    <div class="app-container" id="dashboard-root">
+      
+      <!-- Collapsible Mobile Header -->
+      <header class="mobile-header">
+        <div class="logo-text">Memristor Lab <span class="logo-subtitle">sci server</span></div>
+        <div class="menu-toggle">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" height="24">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </div>
+      </header>
+
+      <!-- Sidebar Shell -->
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <div class="logo-icon">μ</div>
+          <div>
+            <span class="logo-text">Memristor Lab</span>
+            <span class="logo-subtitle">science-cli serve</span>
+          </div>
+        </div>
+
+        <!-- Session Lab Context Widget -->
+        <div class="sidebar-context">
+          <div class="context-title">Lab Environment</div>
+          <div class="context-item">
+            <span class="context-label">Project: </span>
+            <span class="context-value" id="ctx-project">Loading...</span>
+          </div>
+          <div class="context-item">
+            <span class="context-label">Protocol: </span>
+            <span class="context-value" id="ctx-protocol">-</span>
+          </div>
+          <div class="context-item">
+            <span class="context-label">Step: </span>
+            <span class="context-value" id="ctx-step">-</span>
+          </div>
+        </div>
+
+        <!-- Sidebar Navigation links -->
+        <nav class="nav-links">
+          <a href="/" class="nav-link">
+            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            Project Index
+          </a>
+          <a href="/gallery" class="nav-link">
+            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            Plot Gallery
+          </a>
+          <a href="/dashboard" class="nav-link active">
+            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="9" y1="21" x2="9" y2="9"></line>
+            </svg>
+            Interactive Dashboard
+          </a>
+        </nav>
+
+        <!-- Sidebar Interactive Selection Filter -->
+        <div class="sidebar-filters">
+          <div class="sidebar-form-group">
+            <label class="sidebar-form-label">Material System</label>
+            <select class="sidebar-select" id="sidebar-filter-material">
+              <option value="">All Materials</option>
+              <option value="Ta-PDA-ITO">Ta-PDA-ITO</option>
+              <option value="Au-PDA-Pt">Au-PDA-Pt</option>
+            </select>
+          </div>
+          <div class="sidebar-form-group">
+            <label class="sidebar-form-label">Technique Mode</label>
+            <select class="sidebar-select" id="sidebar-filter-technique">
+              <option value="">All Techniques</option>
+              <option value="iv-sweep">I-V Cyclic Sweep</option>
+              <option value="cv">Cyclic Voltammetry</option>
+              <option value="retention">Retention Profile</option>
+            </select>
+          </div>
+          
+          <div class="connection-indicator">
+            <div class="status-dot"></div>
+            <span>cli online</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Hub -->
+      <main class="main-content">
+        
+        <!-- Breadcrumbs & Actions Row -->
+        <header class="main-header">
+          <div class="breadcrumb">
+            <span class="breadcrumb-root" id="crumbs-project">project</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current">dashboard</span>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-current" id="crumbs-protocol" style="color:var(--text-primary)">1_iv-test</span>
+          </div>
+          
+          <div class="header-actions">
+            <!-- Inline Protocol Navigator dropdown -->
+            <div class="select-wrapper">
+              <select class="sidebar-select" id="dashboard-protocol-selector" style="min-width: 150px; background-color: var(--bg-secondary);">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+
+            <div class="theme-chooser">
+              <button class="theme-btn" data-theme="dark">Dark</button>
+              <button class="theme-btn" data-theme="light">Light</button>
+              <button class="theme-btn" data-theme="black">Oled</button>
+            </div>
+          </div>
+        </header>
+
+        <!-- Dynamic Device Summary KPI Cards -->
+        <section class="kpi-grid">
+          <div class="kpi-card kpi-set">
+            <span class="kpi-label">Median Vset</span>
+            <span class="kpi-value" id="dash-median-vset">- <span class="kpi-unit">V</span></span>
+            <span class="kpi-meta">Required write potential</span>
+          </div>
+          <div class="kpi-card kpi-reset">
+            <span class="kpi-label">Median Vreset</span>
+            <span class="kpi-value" id="dash-median-vreset">- <span class="kpi-unit">V</span></span>
+            <span class="kpi-meta">Required erase potential</span>
+          </div>
+          <div class="kpi-card kpi-ratio">
+            <span class="kpi-label">Median ON/OFF Ratio</span>
+            <span class="kpi-value" id="dash-median-ratio">-</span>
+            <span class="kpi-meta">HRS / LRS resistance split</span>
+          </div>
+          <div class="kpi-card kpi-yield">
+            <span class="kpi-label">Protocol Yield</span>
+            <span class="kpi-value" id="dash-yield">- <span class="kpi-unit">%</span></span>
+            <span class="kpi-meta">Success switching ratio</span>
+          </div>
+          <div class="kpi-card kpi-type" style="grid-column: span 1;">
+            <span class="kpi-label">Device Types</span>
+            <span class="kpi-value" id="dash-device-types" style="font-size:13px;">-</span>
+            <span class="kpi-meta">Volatile / Non-volatile / Short / Insulating</span>
+          </div>
+        </section>
+
+        <!-- Dashboard Working Area: Left matrix and Right Plotly curves -->
+        <div class="dashboard-grid">
+          
+          <!-- Heatmap crossbar matrix -->
+          <div class="crossbar-container">
+            <!-- Controls panel inside container -->
+            <div class="crossbar-legend">
+              <div style="display:flex; gap:12px; align-items:center;">
+                <span class="context-title" style="margin-bottom:0">Crossbar Array visualizer</span>
+                <select id="heatmap-metric-selector" class="sidebar-select" style="padding: 4px 8px; font-size:11px; min-width:110px;">
+                  <option value="ratio">ratio (OFF/ON)</option>
+                  <option value="vset" selected>Vset (V)</option>
+                  <option value="vreset">Vreset (V)</option>
+                  <option value="files">files count</option>
+                </select>
+              </div>
+              <div class="legend-scale">
+                <span>Min</span>
+                <div class="legend-bar" id="legend-color-bar"></div>
+                <span>Max</span>
+              </div>
+            </div>
+
+            <div class="section-card crossbar-matrix-card">
+              <div class="crossbar-matrix" id="crossbar-matrix-grid">
+                <!-- Populated dynamically: 1 index col and 6 col cells -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side Interactive curves -->
+          <div class="section-card" style="display: flex; flex-direction: column;">
+            <div class="section-header" style="border-bottom: 1px solid var(--border); padding-bottom:12px; margin-bottom:12px;">
+              <div>
+                <h2 class="section-title" id="plot-title-header">I-V Hysteresis Loop Details</h2>
+                <p class="page-subtitle" id="plot-subtitle-desc">Click a cell on the crossbar matrix map to load scientific sweeps</p>
+              </div>
+              
+              <div style="display: flex; gap: 8px; align-items:center;">
+                <span style="font-size:11px; color: var(--text-secondary); font-family:var(--font-mono)">Log I-Axis:</span>
+                <input type="checkbox" id="plot-log-checkbox" checked style="width:16px; height:16px; cursor:pointer;" />
+              </div>
+            </div>
+
+            <!-- Dynamic Device Selected details row -->
+            <div class="selected-device-panel" id="device-selected-bar" style="display:none">
+              <div class="device-badge-row">
+                <span class="device-title" id="device-details-id">Cell R1C1 </span>
+                <span class="device-status" id="device-details-status">Active Switching</span>
+              </div>
+              <div class="device-details-grid">
+                <div class="device-stat-pair">
+                  <span class="device-stat-label">Material Stack</span>
+                  <span class="device-stat-value" id="device-details-material">-</span>
+                </div>
+                <div class="device-stat-pair">
+                  <span class="device-stat-label">Measured Vset</span>
+                  <span class="device-stat-value" id="device-details-vset">-</span>
+                </div>
+                <div class="device-stat-pair">
+                  <span class="device-stat-label">Measured Vreset</span>
+                  <span class="device-stat-value" id="device-details-vreset">-</span>
+                </div>
+                <div class="device-stat-pair">
+                  <span class="device-stat-label">ON/OFF Ratio</span>
+                  <span class="device-stat-value" id="device-details-ratio">-</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Plotly Target anchor -->
+            <div id="plotly-iv-chart" style="width:100%; height:320px;">
+              <div style="padding: 80px 20px; text-align: center; color: var(--text-secondary); font-family: var(--font-sans)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:48px;height:48px;margin:0 auto 12px;color:var(--border);">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Select high contrast crossbar cell (e.g. <b>R1C2</b> or <b>R2C3</b>) to draft dynamic hysteresis curve.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Metric Distributions Row at the bottom -->
+        <h2 class="section-title" style="margin-bottom:12px;">Protocol Metric Distributions</h2>
+        <section class="histograms-row">
+          
+          <div class="histogram-card">
+            <h3 class="context-title" style="margin-bottom:12px">Vset Voltage Distribution</h3>
+            <div class="histogram-chart-wrapper" id="dist-vset-chart">
+              <!-- Inline SVG placeholder or mini-Histogram -->
+            </div>
+          </div>
+
+          <div class="histogram-card">
+            <h3 class="context-title" style="margin-bottom:12px">Vreset Voltage Distribution</h3>
+            <div class="histogram-chart-wrapper" id="dist-vreset-chart">
+              <!-- Histogram -->
+            </div>
+          </div>
+
+          <div class="histogram-card">
+            <h3 class="context-title" style="margin-bottom:12px">ON/OFF Impedance Ratio Distribution</h3>
+            <div class="histogram-chart-wrapper" id="dist-ratio-chart">
+              <!-- Histogram -->
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+
+    <!-- Centralized Utilities -->
+    <script src="/assets/dashboard.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        let activeProtocol = "1_iv-test";
+        let activeCellId = null;
+        let selectedMetric = "vset"; // ratio, vset, vreset, files
+        let logAxis = true;
+        let activeHeatmapMetadata = null;
+
+        // Parse protocol from URL path if served as a nested route (/dashboard/1_iv-test)
+        const pathParts = window.location.pathname.split("/");
+        if (pathParts.length > 2 && pathParts[pathParts.length - 1]) {
+          const suffix = pathParts[pathParts.length - 1];
+          if (suffix !== "dashboard" && suffix !== "dashboard.html") {
+            activeProtocol = suffix;
+          }
+        }
+
+        // Initialize view components — single dashboard endpoint
+        async function initDashboard() {
+          try {
+            // Populate protocol selectors
+            const projData = await window.SciApp.apiFetch("/api/project");
+            const selector = document.getElementById("dashboard-protocol-selector");
+            selector.innerHTML = "";
+            
+            projData.protocols.forEach(p => {
+              const opt = document.createElement("option");
+              opt.value = p.name;
+              opt.textContent = p.name;
+              if (p.name === activeProtocol) opt.selected = true;
+              selector.appendChild(opt);
+            });
+
+            // Set up dynamic breadcrumb
+            document.getElementById("crumbs-protocol").textContent = activeProtocol;
+
+            // Load everything from the single dashboard endpoint
+            await loadDashboard();
+          } catch (e) {
+            console.error("Dashboard initialize failed:", e);
+          }
+        }
+
+        // Load all dashboard data from single endpoint
+        async function loadDashboard() {
+          const metric = document.getElementById("heatmap-metric-selector").value;
+          const materialFilter = document.getElementById("sidebar-filter-material").value;
+          const data = await window.SciApp.apiFetch(
+            `/api/protocol/${activeProtocol}/dashboard?metric=${metric}&material=${encodeURIComponent(materialFilter)}`
+          );
+
+          // ── KPIs ──
+          document.getElementById("dash-median-vset").innerHTML = `${data.aggregate.median_vset}<span class="kpi-unit">V</span>`;
+          document.getElementById("dash-median-vreset").innerHTML = `${data.aggregate.median_vreset}<span class="kpi-unit">V</span>`;
+          document.getElementById("dash-median-ratio").textContent = data.aggregate.median_ratio;
+          document.getElementById("dash-yield").innerHTML = `${data.aggregate.yield_pct}<span class="kpi-unit">%</span>`;
+
+          // ── Device types breakdown ──
+          const types = data.device_types || {};
+          const typeParts = [];
+          if (types["non-volatile"]) typeParts.push(`NV:${types["non-volatile"]}`);
+          if (types["volatile"]) typeParts.push(`V:${types["volatile"]}`);
+          if (types["short"]) typeParts.push(`S:${types["short"]}`);
+          if (types["insulating"]) typeParts.push(`I:${types["insulating"]}`);
+          if (types["resistor"]) typeParts.push(`R:${types["resistor"]}`);
+          document.getElementById("dash-device-types").textContent = typeParts.join(" ") || "—";
+
+          // ── Heatmap ──
+          if (data.heatmap) {
+            activeHeatmapMetadata = data.heatmap.metadata;
+            renderCrossbar(data.heatmap, metric);
+          }
+
+          // ── Histograms ──
+          const hists = data.histograms || {};
+          const chartW = document.getElementById("dist-vset-chart").clientWidth || 240;
+          const theme = window.SciApp.activeTheme;
+          document.getElementById("dist-vset-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.vset.counts, hists.vset.bins, theme);
+          document.getElementById("dist-vreset-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.vreset.counts, hists.vreset.bins, theme);
+          document.getElementById("dist-ratio-chart").innerHTML = window.SciApp.drawHistogramLoopSVG(chartW, 120, hists.ratio.counts, hists.ratio.bins, theme);
+
+          // Update sidebar material filter
+          const matSelect = document.getElementById("sidebar-filter-material");
+          const currentVal = matSelect.value;
+          matSelect.innerHTML = '<option value="">All Materials</option>';
+          (data.materials || []).forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            if (m === currentVal) opt.selected = true;
+            matSelect.appendChild(opt);
+          });
+        }
+
+        // Refresh heatmap only via dashboard endpoint
+        async function refreshHeatmap() {
+          selectedMetric = document.getElementById("heatmap-metric-selector").value;
+          const colorBar = document.getElementById("legend-color-bar");
+          colorBar.className = "legend-bar";
+          colorBar.classList.add(`legend-bar-${selectedMetric}`);
+          await loadDashboard();
+        }
+
+        // Draw crossbar visual matrix
+        function renderCrossbar(hdata, metric) {
+          const grid = document.getElementById("crossbar-matrix-grid");
+          grid.innerHTML = "";
+
+          const hrows = hdata.rows || 6;
+          const hcols = hdata.cols || 6;
+
+          // Draw column index labels top line
+          const cornerLabel = document.createElement("div");
+          cornerLabel.className = "grid-label-cell";
+          cornerLabel.textContent = "row\\col";
+          grid.appendChild(cornerLabel);
+
+          for (let c = 1; c <= hcols; c++) {
+            const colLabel = document.createElement("div");
+            colLabel.className = "grid-label-cell";
+            colLabel.textContent = `C${c}`;
+            grid.appendChild(colLabel);
+          }
+
+          // Device type color mapping
+          const TYPE_COLORS = {
+            "non-volatile": "#4ade80",
+            "volatile": "#fb923c",
+            "short": "#f87171",
+            "insulating": "#94a3b8",
+            "resistor": "#818cf8",
+            "unknown": "#64748b",
+          };
+
+          // Build row by row
+          for (let r = 0; r < hrows; r++) {
+            // Draw row index on the left
+            const rowLabel = document.createElement("div");
+            rowLabel.className = "grid-label-cell";
+            rowLabel.textContent = `R${r + 1}`;
+            grid.appendChild(rowLabel);
+
+            // Draw cells
+            for (let c = 0; c < hcols; c++) {
+              const val = hdata.data[r][c];
+              const cellMeta = hdata.metadata[r][c];
+              
+              const cellNode = document.createElement("div");
+              cellNode.className = "grid-cell";
+              cellNode.setAttribute("data-cell", cellMeta.cell);
+              cellNode.setAttribute("data-row", r);
+              cellNode.setAttribute("data-col", c);
+
+              if (activeCellId === cellMeta.cell) {
+                 cellNode.classList.add("active-selection");
+              }
+
+              // Device type badge (tiny dot in corner)
+              const dtype = cellMeta.device_type || "unknown";
+              const typeColor = TYPE_COLORS[dtype] || TYPE_COLORS["unknown"];
+
+              cellNode.innerHTML = `<span class="grid-cell-label">${cellMeta.cell}</span>`;
+
+              if (val === null) {
+                cellNode.classList.add("unmeasured");
+                cellNode.innerHTML += `<span class="grid-cell-value">—</span>`;
+                // Show type indicator even on unmeasured
+                const typeBadge = document.createElement("span");
+                typeBadge.className = "grid-cell-type-dot";
+                typeBadge.style.backgroundColor = typeColor;
+                typeBadge.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:50%;background:${typeColor};position:absolute;top:2px;right:2px;`;
+                cellNode.appendChild(typeBadge);
+              } else {
+                // Procedural heat styling mapping depending on selected metrics
+                let colorIntensity = 0.15;
+                let bgStyle = "";
+                
+                if (metric === "ratio") {
+                  colorIntensity = Math.min(val / 500, 1.0);
+                  bgStyle = `rgba(255, 128, 0, ${0.15 + colorIntensity * 0.85})`;
+                } else if (metric === "vset") {
+                  colorIntensity = Math.min((val - 1.0) / 2.0, 1.0);
+                  bgStyle = `rgba(0, 212, 255, ${0.15 + colorIntensity * 0.85})`;
+                } else if (metric === "vreset") {
+                  colorIntensity = Math.min(Math.abs(val) / 2.5, 1.0);
+                  bgStyle = `rgba(179, 136, 255, ${0.15 + colorIntensity * 0.85})`;
+                } else if (metric === "files") {
+                  colorIntensity = val / 3;
+                  bgStyle = `rgba(74, 158, 255, ${0.15 + colorIntensity * 0.85})`;
+                } else if (metric === "yield") {
+                  colorIntensity = val / 100;
+                  bgStyle = `rgba(34, 197, 94, ${0.15 + colorIntensity * 0.85})`;
+                }
+
+                cellNode.style.backgroundColor = bgStyle;
+                
+                const textColValue = window.SciApp.activeTheme === "light" ? "#0f172a" : "#fff";
+                cellNode.innerHTML += `<span class="grid-cell-value" style="color: ${textColValue}">${val}</span>`;
+
+                // Device type color dot
+                const typeBadge = document.createElement("span");
+                typeBadge.className = "grid-cell-type-dot";
+                typeBadge.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:50%;background:${typeColor};position:absolute;top:2px;right:2px;`;
+                cellNode.appendChild(typeBadge);
+
+                // Rich tooltip
+                cellNode.title = `Cell: ${cellMeta.cell}\nMaterial: ${cellMeta.material}\nType: ${dtype}\nValue: ${val}\nVset: ${cellMeta.v_set}V\nVreset: ${cellMeta.v_reset}V\nRatio: ${cellMeta.ratio}\nFiles: ${cellMeta.n_files}\nStatus: ${cellMeta.status}`;
+
+                cellNode.addEventListener("click", () => {
+                  selectCell(cellMeta.cell);
+                });
+              }
+
+              grid.appendChild(cellNode);
+            }
+          }
+        }
+
+        // Cell Selection mapping
+        async function selectCell(cellId) {
+          activeCellId = cellId;
+          
+          // Re-draw grid highlight
+          document.querySelectorAll(".grid-cell").forEach(node => {
+            if (node.getAttribute("data-cell") === cellId) {
+              node.classList.add("active-selection");
+            } else {
+              node.classList.remove("active-selection");
+            }
+          });
+
+          // Fetch single cell sweep IV
+          const data = await window.SciApp.apiFetch(`/api/protocol/${activeProtocol}/device/${cellId}/iv`);
+          
+          // Populate details card
+          const bar = document.getElementById("device-selected-bar");
+          bar.style.display = "block";
+          document.getElementById("device-details-id").textContent = `Device Coordinates: ${data.cell_id}`;
+          document.getElementById("device-details-material").textContent = data.material;
+          document.getElementById("device-details-vset").textContent = data.switching ? `${data.v_set} V` : "Non-Switching / Open";
+          document.getElementById("device-details-vreset").textContent = data.switching ? `${data.v_reset} V` : "Non-Switching / Short";
+          document.getElementById("device-details-ratio").textContent = data.ratio > 0 ? data.ratio : "N/A";
+
+          const statusBadge = document.getElementById("device-details-status");
+          if (data.switching) {
+            statusBadge.className = "device-status";
+            statusBadge.textContent = "Active Switching Hysteresis";
+          } else {
+            statusBadge.className = "device-status defect";
+            statusBadge.textContent = "Defect / Non-Switching";
+          }
+
+          // Build interactive Plotly chart!
+          renderPlotlyCurve(data);
+        }
+
+        // 3. Draw Plotly Scientific Graph
+        function renderPlotlyCurve(cellData) {
+          const logCheckbox = document.getElementById("plot-log-checkbox");
+          logAxis = logCheckbox.checked;
+
+          const themeLayout = window.SciApp.getPlotlyThemeLayout();
+          
+          // Construct series
+          const plotlyTraces = [];
+          
+          cellData.sweeps.forEach((sweep, idx) => {
+            // Log conversion if requested
+            let yValues = [];
+            if (logAxis) {
+              yValues = sweep.current.map(c => Math.abs(c));
+            } else {
+              // Linear: parse signed values depending on voltage polarization
+              sweep.voltage.forEach((v, vidx) => {
+                const c = sweep.current[vidx];
+                yValues.push(c);
+              });
+            }
+
+            plotlyTraces.push({
+              x: sweep.voltage,
+              y: yValues,
+              name: sweep.label,
+              mode: "lines",
+              line: {
+                width: 2.2,
+                color: idx === 0 ? "rgba(0, 212, 255, 0.95)" : (idx === 1 ? "rgba(179, 136, 255, 0.9)" : "rgba(0, 230, 118, 0.8)")
+              },
+              type: "scatter"
+            });
+
+            // If switching and logarithmic, trace threshold markers
+            if (cellData.switching && logAxis) {
+               // Add tiny markers for switching events
+               const vSetIdx = sweep.voltage.findIndex(v => v === sweep.v_set);
+               if (vSetIdx !== -1) {
+                  plotlyTraces.push({
+                    x: [sweep.v_set],
+                    y: [Math.abs(sweep.current[vSetIdx])],
+                    name: `Vset switch (${sweep.v_set}V)`,
+                    mode: "markers",
+                    marker: { size: 9, color: "red", symbol: "circle" },
+                    showlegend: false
+                  });
+               }
+               
+               const vResetIdx = sweep.voltage.findIndex(v => v === sweep.v_reset);
+               if (vResetIdx !== -1) {
+                  plotlyTraces.push({
+                    x: [sweep.v_reset],
+                    y: [Math.abs(sweep.current[vResetIdx])],
+                    name: `Vreset switch (${sweep.v_reset}V)`,
+                    mode: "markers",
+                    marker: { size: 9, color: "orange", symbol: "triangle-down" },
+                    showlegend: false
+                  });
+               }
+            }
+          });
+
+          const layout = {
+            ...themeLayout,
+            margin: { t: 30, b: 40, l: 60, r: 20 },
+            showlegend: true,
+            legend: {
+              orientation: "h",
+              y: -0.2,
+              font: { size: 10 }
+            },
+            xaxis: {
+              ...themeLayout.xaxis,
+              title: "Voltage sweeping E (V)",
+              zeroline: true,
+            },
+            yaxis: {
+              ...themeLayout.yaxis,
+              title: logAxis ? "Log Current Current |I| (A)" : "Linear Current I (A)",
+              type: logAxis ? "log" : "linear",
+              zeroline: true,
+              autorange: true
+            }
+          };
+
+          const config = { responsive: true, displayModeBar: false };
+
+          Plotly.newPlot("plotly-iv-chart", plotlyTraces, layout, config);
+          
+          document.getElementById("plot-title-header").textContent = `Resistive Switching Loop — Cell ${cellData.cell_id}`;
+          document.getElementById("plot-subtitle-desc").textContent = `Substrate stack: ${cellData.material} — active overlay sweeps`;
+        }
+
+        // ── Event listeners ──
+
+        // Theme change
+        window.addEventListener("scithemechange", () => {
+          loadDashboard();
+          if (activeCellId) selectCell(activeCellId);
+        });
+
+        // Metric switch
+        document.getElementById("heatmap-metric-selector").addEventListener("change", () => {
+          refreshHeatmap();
+        });
+
+        // Protocol selector
+        document.getElementById("dashboard-protocol-selector").addEventListener("change", (e) => {
+          activeProtocol = e.target.value;
+          activeCellId = null;
+          document.getElementById("plotly-iv-chart").innerHTML = `
+            <div style="padding: 80px 20px; text-align: center; color: var(--text-secondary); font-family: var(--font-sans)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:48px;height:48px;margin:0 auto 12px;color:var(--border);">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+              Select high contrast crossbar cell (e.g. <b>R1C2</b> or <b>R2C3</b>) to draft dynamic hysteresis curve.
+            </div>
+          `;
+          document.getElementById("device-selected-bar").style.display = "none";
+          document.getElementById("plot-title-header").textContent = "I-V Hysteresis Loop Details";
+          document.getElementById("plot-subtitle-desc").textContent = "Click a cell on the crossbar matrix map to load scientific sweeps";
+          document.getElementById("crumbs-protocol").textContent = activeProtocol;
+          const sideProto = document.getElementById("ctx-protocol");
+          if (sideProto) sideProto.textContent = activeProtocol;
+
+          loadDashboard();
+        });
+
+        // Log axis checkbox
+        document.getElementById("plot-log-checkbox").addEventListener("change", () => {
+          if (activeCellId) selectCell(activeCellId);
+        });
+
+        // Sidebar filters
+        document.getElementById("sidebar-filter-material").addEventListener("change", () => {
+          loadDashboard();
+        });
+        document.getElementById("sidebar-filter-technique").addEventListener("change", () => {
+          loadDashboard();
+        });
+
+        // Start initialization
+        initDashboard();
+      });
+    </script>
+  </body>
+</html>

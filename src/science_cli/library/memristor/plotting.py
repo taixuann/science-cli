@@ -924,6 +924,7 @@ def generate_iv_svg(
     metadata: dict,
     output_path: str | Path,
     dpi: int = 150,
+    raw_current: bool = False,
 ):
     """Generate a publication-style IV curve SVG.
 
@@ -1001,7 +1002,7 @@ def generate_iv_svg(
                 sweep = derived_sweep
             title = build_plot_title(order=order, sweep=sweep, sweep_type=sweep_type)
 
-    use_log = _should_use_log_scale(current)
+    use_log = False if raw_current else _should_use_log_scale(current)
     has_time = time_arr is not None and len(time_arr) == len(voltage)
 
     # ── ACS rcParams (local scope — does not pollute global) ──
@@ -1066,6 +1067,7 @@ def generate_iv_overlay_svg(
     traces: list[tuple[np.ndarray, np.ndarray, dict]],
     output_path: str | Path,
     dpi: int = 150,
+    raw_current: bool = False,
 ):
     """Generate an overlay SVG with multiple IV traces on one plot.
 
@@ -1093,7 +1095,7 @@ def generate_iv_overlay_svg(
     }
 
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
-    use_log = any(_should_use_log_scale(t[1]) for t in traces)
+    use_log = False if raw_current else any(_should_use_log_scale(t[1]) for t in traces)
 
     with plt.rc_context(acs_rc):
         fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
@@ -1138,7 +1140,126 @@ def generate_iv_overlay_svg(
     logger.info(f"Generated overlay plot: {output_path}")
 
 
+def generate_iv_highlighted_svg(
+    traces: list[tuple[np.ndarray, np.ndarray, dict]],
+    highlight_cycles: list[int],
+    output_path: str | Path,
+    dpi: int = 150,
+    raw_current: bool = False,
+):
+    """Generate an overlay SVG highlighting specific cycles in color, others in grey.
+
+    Args:
+        traces: List of (voltage, current, metadata) tuples.
+        highlight_cycles: List of 1-based cycle numbers (orders) to highlight.
+        output_path: Path to save the SVG.
+        dpi: Resolution for SVG rendering.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    acs_rc = {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "mathtext.fontset": "dejavusans",
+        "axes.linewidth": 1.0,
+        "xtick.major.width": 0.8,
+        "ytick.major.width": 0.8,
+        "xtick.major.size": 4,
+        "ytick.major.size": 4,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "legend.frameon": False,
+    }
+
+    # Publication Nature theme discrete colors (vibrant and high-contrast)
+    highlight_colors = ["#D55E00", "#0072B2", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000"]
+    use_log = False if raw_current else any(_should_use_log_scale(t[1]) for t in traces)
+
+    with plt.rc_context(acs_rc):
+        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
+
+        # Plot all background non-highlighted traces first so highlighted ones are layered on top!
+        bg_traces = []
+        fg_traces = []
+        
+        for i, (voltage, current, meta) in enumerate(traces):
+            order = meta.get("order", i + 1)
+            if order in highlight_cycles:
+                fg_traces.append((voltage, current, meta, order))
+            else:
+                bg_traces.append((voltage, current, meta, order))
+
+        # 1. Plot background (grey) traces
+        for voltage, current, meta, order in bg_traces:
+            plot_current = np.abs(current) if use_log else current
+            if use_log:
+                ax.semilogy(voltage, plot_current, color="#E0E0E0", alpha=0.15, linewidth=0.5, label=None)
+            else:
+                ax.plot(voltage, plot_current, color="#E0E0E0", alpha=0.15, linewidth=0.5, label=None)
+
+        # 2. Plot foreground (colored highlighted) traces
+        color_idx = 0
+        for voltage, current, meta, order in fg_traces:
+            color = highlight_colors[color_idx % len(highlight_colors)]
+            color_idx += 1
+            label = f"Cycle {order}"
+            
+            # Add Vset/Vreset info to legend label if available
+            v_set = meta.get("v_set")
+            v_reset = meta.get("v_reset")
+            v_info = []
+            if v_set is not None:
+                v_info.append(f"Vset={v_set:.2f}V")
+            if v_reset is not None:
+                v_info.append(f"Vreset={v_reset:.2f}V")
+            if v_info:
+                label += f" ({', '.join(v_info)})"
+
+            plot_current = np.abs(current) if use_log else current
+            if use_log:
+                ax.semilogy(voltage, plot_current, color=color, linewidth=1.2, label=label)
+            else:
+                ax.plot(voltage, plot_current, color=color, linewidth=1.2, label=label)
+
+        # Labels, titles, spines
+        ax.set_xlabel("Voltage (V)", fontsize=10)
+        
+        # Determine title from metadata of first trace
+        first_meta = traces[0][2] if traces else {}
+        row = first_meta.get("row", "?")
+        col = first_meta.get("col", "?")
+        mat = first_meta.get("material", "unknown")
+        title = f"IV Multi-Cycle Highlight | r{row}c{col} ({mat})"
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        
+        ax.tick_params(labelsize=8, direction="in", which="both")
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+
+        if use_log:
+            has_neg = any(np.any(t[1] < 0) for t in traces if t[1] is not None and len(t[1]) > 0)
+            ax.set_ylabel("|Current| (A)" if has_neg else "Current (A)", fontsize=10)
+            ax.set_yscale("log")
+        else:
+            ax.set_ylabel("Current (A)", fontsize=10)
+
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(handles, labels, frameon=False, fontsize=8, loc="upper left")
+
+        fig.tight_layout()
+        fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+
+    logger.info(f"Generated multi-cycle highlight plot: {output_path}")
+
+
 # ── Batch plotting helpers ──────────────────────────────────
+
 
 
 def collect_iv_files(

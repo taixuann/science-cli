@@ -5,6 +5,37 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-05-31
+
+### Added
+- **Premium React/Vite Frontend (`sci serve`)**: Full AI Studio-generated frontend with dynamic project switching, integrated Plotly dashboard, protocol/step navigation, gallery with PDF/PNG/SVG rendering, and lightbox viewer
+- **Live Dashboard View on `sci serve`**: Crossbar heatmap with per-cell KPI overlay (Vset/Vreset/ON-OFF ratio), click-to-load IV curves, device-type classification display, histograms for Vset/Vreset/Ratio distributions
+- **Multi-Cycle Highlight Plotting**: `generate_iv_highlighted_svg()` — highlight specific sweep cycles in color with grey background traces, Vset/Vreset annotations in legend, publication-Nature themed
+- **Raw Current Plotting Support**: `raw_current` flag on `generate_iv_svg()` and `generate_iv_overlay_svg()` to disable automatic log-scale detection, preserving raw linear-scale current visualization
+- **Device Classification & Materials DB**: SQLite materials table with `classify_and_populate_materials()` — automated device-type classification (volatile/short/non-volatile) based on Vset/Vreset/ratio heuristics
+- **Device CLI (`memristor device`)**: Per-cell device-type override commands (`set-device-type`, `set-device-errors`) and matrix display with device-type coloring
+- **Subcommand Grouped Help Menu**: `memristor` subcommands grouped by category with cleaner AI Studio-friendly output
+- **Numpy Import Fix**: Robust numpy import handling in classification module
+- **Manual Device Overrides**: CLI flags for overriding detected device classification per cell
+- **`ls_cmd.py` Sorting/Search**: Improved step file listing with configurable sort and search
+- **New Documentation Artifacts**: 9 planning and walkthrough documents for serve frontend, multi-cycle plot, device CLI, and raw plotting
+
+### Changed
+- **`sci serve` API Refactored**: Switched from `get_protocol_files()` to comprehensive `get_dashboard_data()` endpoint with SQLite-first, cache-fallback strategy — serves heatmap, histograms, device type breakdown, and KPI aggregates in a single call
+- **Frontend Assets**: Replaced single-page gallery frontend with premium React/Vite bundled frontend (`index-DvsT4CeK.js`, `index-rv64M7Al.css`)
+- **PDF Rendering**: PDF iframes now append `#toolbar=0` to hide native browser toolbars; PDFs/SVGs/PNGs natively scale to 100% canvas width and height
+- **Gallery Layout**: Split gallery thumbnails into "Overlays & Summaries" (warm gold) and "Individual Sweeps" (indigo) categories with distinct styling
+- **MIME Type Handling**: Custom `guess_type()` override in server guarantees correct JS/CSS MIME types for frontend assets
+- **CLI Flags Cleanup**: Consolidated and cleaned up `memristor` CLI flags for consistency
+- **`edit_cmd.py`**: Protocol edition path resolution improvements
+
+### Fixed
+- **Frontend Blank Page on React**: Resolved premium frontend blank page and file loading bugs
+- **System Directory Filtering**: `__pycache__` and system directories filtered out from projects workspace list in serve API
+- **PDF Thumbnail Magnifier Overflows**: Replaced PDF iframe thumbnails with custom SVG document icons in sidebar
+- **Duplicate `_api_protocol_files` handler**: Missing handler for protocol file listing API endpoint restored
+- **Test Suite**: Added `TestDbMaterialsAndClassification` tests for materials CRUD and device-type heuristics
+
 ## [2.0.0] - 2026-05-13
 
 ### Breaking Changes

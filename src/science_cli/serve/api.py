@@ -20,6 +20,12 @@ def _resolve_project(project_override: str | None = None) -> Path | None:
         p = Path(os.path.expanduser(project_override))
         if p.exists():
             return p
+        # Try resolving relative to get_projects_root()
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
+        candidate = root / project_override
+        if candidate.exists():
+            return candidate
         return None
 
     proj = get_current_project_path()
@@ -29,11 +35,33 @@ def _resolve_project(project_override: str | None = None) -> Path | None:
     sess = load_session()
     name = sess.get("last_project", "")
     if name:
-        root = Path.home() / "workspace" / "projects" / "active_projects"
+        from science_cli.core.config import get_projects_root
+        root = get_projects_root()
         candidate = root / name
         if candidate.exists():
             return candidate
     return None
+
+
+def get_projects_list() -> dict:
+    """Scan the configured projects root and list active projects."""
+    from science_cli.core.config import get_projects_root
+    root = get_projects_root()
+    projects = []
+    if root.exists() and root.is_dir():
+        for item in sorted(root.iterdir()):
+            if (
+                item.is_dir()
+                and not item.name.startswith(".")
+                and not item.name.startswith("__")
+                and item.name not in ("node_modules", "venv", "env")
+            ):
+                projects.append(item.name)
+    return {
+        "workspace": str(root),
+        "projects": projects
+    }
+
 
 
 def _read_analysis_cache(project_path: Path) -> dict | None:
@@ -62,6 +90,105 @@ def _read_sqlite_data(project_path: Path) -> dict | None:
         return None
 
 
+def _get_step_files(
+    project_name: str,
+    protocol_name: str,
+    step_name: str,
+    step_path: Path,
+) -> list[dict]:
+    files = []
+
+    # Check results/ directory first
+    results_dir = step_path / "results"
+    scan_dirs = []
+    if results_dir.exists() and results_dir.is_dir():
+        scan_dirs.append((results_dir, f"protocol/{protocol_name}/{step_name}/results"))
+    # Also support files directly in step_path
+    scan_dirs.append((step_path, f"protocol/{protocol_name}/{step_name}"))
+
+    # Gather raw experimental filenames (excluding results/)
+    raw_data_stems = set()
+    try:
+        for entry in step_path.iterdir():
+            if entry.is_file() and entry.suffix.lower() in (".csv", ".txt", ".dat", ".tsv"):
+                raw_data_stems.add(entry.stem.lower())
+    except Exception:
+        pass
+
+    seen_names = set()
+    for directory, relative_url_prefix in scan_dirs:
+        for entry in sorted(directory.iterdir()):
+            if entry.is_file() and not entry.name.startswith("."):
+                ext = entry.suffix.lower()
+                if ext in (".png", ".pdf", ".svg"):
+                    if entry.name in seen_names:
+                        continue
+                    seen_names.add(entry.name)
+                    st = entry.stat()
+
+                    # Classify category
+                    name_lower = entry.stem.lower()
+                    is_distinct = False
+                    if name_lower in raw_data_stems:
+                        is_distinct = True
+                    else:
+                        import re
+                        # Strip common technique prefixes: raman_, ec-cv_, ec-ca_, ec-eis_, iv-sweep_, sers_ etc
+                        cleaned = re.sub(
+                            r"^(ec-cv|ec-ca|ec-eis|iv-sweep|iv-dc|iv_dc|raman|sers|uv-vis|cv|ca|eis|iv|afm)[_\-]",
+                            "",
+                            name_lower,
+                        )
+                        if cleaned in raw_data_stems:
+                            is_distinct = True
+                        else:
+                            # Substring match fallback
+                            for stem in raw_data_stems:
+                                if stem in name_lower:
+                                    is_distinct = True
+                                    break
+
+                    category = "distinct" if is_distinct else "overlay"
+
+                    files.append({
+                        "name": entry.name,
+                        "path": f"{project_name}/{relative_url_prefix}/{entry.name}",
+                        "type": ext[1:],  # svg, pdf, png
+                        "size": f"{round(st.st_size / 1024, 1)} KB",
+                        "created": datetime.fromtimestamp(
+                            st.st_mtime, tz=timezone.utc
+                        ).strftime("%Y-%m-%d"),
+                        "dimensions": "1280x800 px",
+                        "category": category,
+                    })
+    return files
+
+
+def get_protocol_files(project_path: Path, protocol_name: str) -> dict:
+    proto_dir = project_path / "protocol" / protocol_name
+    if not proto_dir.exists():
+        return {"error": f"protocol '{protocol_name}' not found"}
+
+    proj_name = project_path.name
+    steps_list = []
+
+    for sdir in sorted(proto_dir.iterdir()):
+        if not sdir.is_dir() or sdir.name.startswith("."):
+            continue
+
+        step_name = sdir.name
+        step_files_data = _get_step_files(proj_name, protocol_name, step_name, sdir)
+        steps_list.append({
+            "name": step_name,
+            "files": step_files_data,
+        })
+
+    return {
+        "protocol": protocol_name,
+        "steps": steps_list,
+    }
+
+
 def _scan_protocol_dirs(
     project_path: Path,
 ) -> list[dict]:
@@ -69,22 +196,29 @@ def _scan_protocol_dirs(
     if not proto_dir.exists():
         return []
 
+    proj_name = project_path.name
     protocols = []
     for sub in sorted(proto_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith("."):
             continue
 
+        protocol_name = sub.name
         steps = []
         for entry in sorted(sub.iterdir()):
             if entry.is_dir() and not entry.name.startswith("."):
-                steps.append(entry.name)
+                step_name = entry.name
+                step_files_data = _get_step_files(proj_name, protocol_name, step_name, entry)
+                steps.append({
+                    "name": step_name,
+                    "files": step_files_data,
+                })
 
         if not steps:
             continue
 
         csv_count = 0
-        for sdir in steps:
-            sd = sub / sdir
+        for step_item in steps:
+            sd = sub / step_item["name"]
             if sd.is_dir():
                 csv_count += len([
                     f for f in sd.iterdir()
@@ -587,37 +721,258 @@ def _bin_1d(values: list[float], vmin: float, vmax: float, n_bins: int) -> dict:
     return {"bins": bins, "counts": counts}
 
 
-def get_protocol_files(
+def get_dashboard_data(
     project_path: Path,
     protocol_name: str,
+    metric: str = "ratio",
+    material_filter: str = "",
 ) -> dict:
-    proto_dir = project_path / "protocol" / protocol_name
-    if not proto_dir.exists():
-        return {"error": f"protocol '{protocol_name}' not found", "steps": []}
+    """Comprehensive dashboard data for one protocol — reads SQLite first, falls back to cache.
 
-    steps = []
-    for step_sub in sorted(proto_dir.iterdir()):
-        if not step_sub.is_dir() or step_sub.name.startswith("."):
-            continue
+    Returns everything the dashboard frontend needs in one call:
+    - protocol info
+    - KPI aggregates
+    - heatmap matrix with device_type per cell
+    - histograms
+    - device type breakdown
+    - materials list
+    """
+    db_path = project_path / f"{project_path.name}.db"
+    has_sqlite = db_path.exists()
 
-        results_dir = step_sub / "results"
-        files = []
-        if results_dir.exists():
-            for f in sorted(results_dir.iterdir()):
-                if f.suffix.lower() in (".png", ".pdf", ".svg"):
-                    files.append({
-                        "name": f.name,
-                        "path": f"protocol/{protocol_name}/{step_sub.name}/results/{f.name}",
-                        "type": f.suffix.lower().lstrip("."),
-                        "size": f.stat().st_size,
+    # Default response structure
+    result = {
+        "protocol": protocol_name,
+        "device": {"rows": 6, "cols": 6, "label": protocol_name},
+        "aggregate": {
+            "total_cells": 0, "measured_cells": 0,
+            "switching_count": 0, "yield_pct": 0.0,
+            "median_vset": 0.0, "median_vreset": 0.0, "median_ratio": 0.0,
+            "total_iv_files": 0,
+        },
+        "materials": [],
+        "device_types": {},
+        "heatmap": None,
+        "histograms": {"vset": {"bins": [], "counts": []}, "vreset": {"bins": [], "counts": []}, "ratio": {"bins": [], "counts": []}},
+    }
+
+    rows, cols = 6, 6
+
+    if has_sqlite:
+        try:
+            from science_cli.library.memristor.db import close_db, open_db, query_files, query_materials
+
+            conn = open_db(project_path)
+
+            files = query_files(conn, protocol=protocol_name)
+            materials_rows = query_materials(conn, protocol=protocol_name)
+
+            close_db(conn)
+
+            # Build device_type lookup: (row, col) -> type
+            type_lookup: dict[tuple[int, int], str] = {}
+            for m in materials_rows:
+                type_lookup[(m["row"], m["col"])] = m.get("device_type", "non-volatile")
+
+            # Build material lookup: (row, col) -> material
+            mat_lookup: dict[tuple[int, int], str] = {}
+            for f in files:
+                r, c = f.get("row"), f.get("col")
+                if r is not None and c is not None:
+                    mat = f.get("material", "unknown")
+                    if (r, c) not in mat_lookup:
+                        mat_lookup[(r, c)] = mat
+
+            # Build per-cell analysis from files
+            cell_data: dict[tuple[int, int], dict] = {}
+            for f in files:
+                r, c = f.get("row"), f.get("col")
+                if r is None or c is None:
+                    continue
+                key = (r, c)
+                if key not in cell_data:
+                    cell_data[key] = {
+                        "v_set": [], "v_reset": [], "ratio": [],
+                        "switching": False, "n_files": 0,
+                    }
+                cell_data[key]["n_files"] += 1
+
+                vs = f.get("v_set")
+                vr = f.get("v_reset")
+                rat = f.get("on_off_ratio")
+                conf = f.get("compliance_confidence")
+
+                if vs is not None:
+                    cell_data[key]["v_set"].append(vs)
+                if vr is not None:
+                    cell_data[key]["v_reset"].append(vr)
+                if rat is not None and rat > 0:
+                    cell_data[key]["ratio"].append(rat)
+                if conf == "high":
+                    cell_data[key]["switching"] = True
+
+            # Aggregate KPI values
+            all_vset: list[float] = []
+            all_vreset: list[float] = []
+            all_ratio: list[float] = []
+            switching_count = 0
+            measured_count = 0
+
+            # Build grid data
+            grid_data: list[list] = []
+            grid_meta: list[list] = []
+
+            for r in range(rows):
+                row_data: list = []
+                row_meta: list = []
+                for c in range(cols):
+                    cd = cell_data.get((r, c))
+                    if not cd:
+                        row_data.append(None)
+                        row_meta.append({
+                            "cell": f"R{r + 1}C{c + 1}",
+                            "material": mat_lookup.get((r, c), "unknown"),
+                            "n_files": 0,
+                            "status": "Unmeasured",
+                            "v_set": 0, "v_reset": 0, "ratio": 0,
+                            "device_type": type_lookup.get((r, c), "unknown"),
+                        })
+                        continue
+
+                    measured_count += 1
+                    switching = cd["switching"]
+
+                    # Per-cell aggregates
+                    def _median(vals):
+                        if not vals:
+                            return None
+                        sv = sorted(vals)
+                        n = len(sv)
+                        return sv[n // 2] if n % 2 else (sv[n // 2 - 1] + sv[n // 2]) / 2
+
+                    med_vset = _median(cd["v_set"])
+                    med_vreset = _median(cd["v_reset"])
+                    med_ratio = _median(cd["ratio"])
+
+                    if med_vset is not None:
+                        all_vset.append(abs(med_vset))
+                    if med_vreset is not None:
+                        all_vreset.append(abs(med_vreset))
+                    if med_ratio is not None:
+                        all_ratio.append(med_ratio)
+                    if switching:
+                        switching_count += 1
+
+                    val = None
+                    if metric == "ratio":
+                        val = round(med_ratio, 1) if med_ratio else None
+                    elif metric == "vset":
+                        val = round(med_vset, 2) if med_vset and switching else None
+                    elif metric == "vreset":
+                        val = round(med_vreset, 2) if med_vreset and switching else None
+                    elif metric == "files":
+                        val = cd["n_files"]
+                    elif metric == "yield":
+                        val = 100 if switching else 0
+                    else:
+                        val = round(med_ratio, 1) if med_ratio else None
+
+                    row_data.append(val)
+                    row_meta.append({
+                        "cell": f"R{r + 1}C{c + 1}",
+                        "material": mat_lookup.get((r, c), "unknown"),
+                        "n_files": cd["n_files"],
+                        "status": "Active Switching" if switching else "Non-Switching",
+                        "v_set": round(med_vset, 2) if med_vset else 0,
+                        "v_reset": round(med_vreset, 2) if med_vreset else 0,
+                        "ratio": round(med_ratio, 1) if med_ratio else 0,
+                        "device_type": type_lookup.get((r, c), "non-volatile"),
                     })
 
-        steps.append({
-            "name": step_sub.name,
-            "files": files,
-        })
+                grid_data.append(row_data)
+                grid_meta.append(row_meta)
 
-    return {"protocol": protocol_name, "steps": steps}
+            # Aggregate medians
+            def _med(vals):
+                if not vals:
+                    return 0.0
+                sv = sorted(vals)
+                n = len(sv)
+                if n % 2:
+                    return round(sv[n // 2], 2)
+                return round((sv[n // 2 - 1] + sv[n // 2]) / 2, 2)
+
+            # Histograms
+            h_vset = _bin_1d(sorted(all_vset), 0.5, 3.0, 8) if all_vset else {"bins": [], "counts": []}
+            h_vreset = _bin_1d(sorted(all_vreset), 0.5, 2.5, 8) if all_vreset else {"bins": [], "counts": []}
+            h_ratio = _bin_1d(sorted(all_ratio), 0, 1000, 8) if all_ratio else {"bins": [], "counts": []}
+
+            # Device type breakdown
+            type_counts: dict[str, int] = {}
+            for t in type_lookup.values():
+                type_counts[t] = type_counts.get(t, 0) + 1
+
+            # Unique materials
+            unique_materials = sorted(set(mat_lookup.values()))
+
+            result["device"] = {
+                "rows": rows, "cols": cols,
+                "label": protocol_name,
+            }
+            result["aggregate"] = {
+                "total_cells": rows * cols,
+                "measured_cells": measured_count,
+                "switching_count": switching_count,
+                "yield_pct": round(switching_count / max(1, measured_count) * 100, 1),
+                "median_vset": _med(all_vset),
+                "median_vreset": _med(all_vreset),
+                "median_ratio": _med(all_ratio),
+                "total_iv_files": sum(cd["n_files"] for cd in cell_data.values()),
+            }
+            result["materials"] = unique_materials
+            result["device_types"] = type_counts
+            result["heatmap"] = {
+                "rows": rows, "cols": cols,
+                "metric": metric,
+                "data": grid_data,
+                "metadata": grid_meta,
+            }
+            result["histograms"] = {
+                "vset": h_vset,
+                "vreset": h_vreset,
+                "ratio": h_ratio,
+            }
+
+            return result
+
+        except Exception:
+            # Fall through to cache-based approach
+            pass
+
+    # ── SQLite unavailable: fall back to analysis_data.json cache ──
+    cache = _read_analysis_cache(project_path)
+    if not cache:
+        return result
+
+    # Use existing cache-based heatmap + summary logic
+    proto = next(
+        (p for p in cache.get("protocols", []) if p["name"] == protocol_name),
+        None,
+    )
+    if not proto:
+        return result
+
+    hm = _heatmap_from_cache(project_path, protocol_name, metric, material_filter, cache)
+    summary = get_protocol_summary(project_path, protocol_name)
+    hists = get_histograms(project_path, protocol_name)
+
+    result["aggregate"] = summary.get("aggregate", result["aggregate"])
+    result["device"] = summary.get("device", result["device"])
+    result["materials"] = summary.get("materials", [])
+    result["heatmap"] = hm
+    result["histograms"] = hists
+
+    return result
 
 
 def get_gallery_data(

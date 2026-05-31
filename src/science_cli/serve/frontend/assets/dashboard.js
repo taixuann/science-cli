@@ -1,122 +1,186 @@
-window.SciApp = {
-  activeTheme: "light",
-  currentProject: null,
+/**
+ * science-cli Plot Gallery (dashboard.js)
+ * Standalone client-side event binders, API retrievers, 
+ * and dynamic Plotly.js Cartesian coordinate configurations.
+ */
 
-  init() {
-    this.setupTheme();
-    this.setupSidebarToggle();
-    this.loadGlobalContext();
-    this.bindGlobalEvents();
-  },
-
-  async apiFetch(url, options = {}) {
-    this.showGlobalLoader(true);
-    try {
-      const response = await fetch(url, options);
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+(function() {
+  // Global Application Context
+  window.SciApp = {
+    currentProject: null,
+    activeProtocol: null,
+    activeStep: null,
+    columns: 4,
+    searchQuery: "",
+    theme: "dark",
+    
+    // Core custom fetch wrapper for X-Project-Override support
+    async apiFetch(url) {
+      const headers = {
+        "Content-Type": "application/json"
+      };
+      if (this.currentProject) {
+        headers["X-Project-Override"] = this.currentProject;
       }
-      return await response.json();
-    } catch (error) {
-      console.error(`API error [${url}]:`, error);
-      this.showErrorBanner(`Server error: ${error.message}`);
-      throw error;
-    } finally {
-      this.showGlobalLoader(false);
+      
+      const response = await fetch(url + (url.includes("?") ? "&" : "?") + "project=" + encodeURIComponent(this.currentProject || ""), {
+        headers
+      });
+      
+      if (!response.ok) {
+        throw new Error("HTTP error " + response.status);
+      }
+      return response.json();
     }
-  },
+  };
 
-  setupTheme() {
-    const saved = localStorage.getItem("sci-theme") || "light";
-    this.setTheme(saved);
-    document.querySelectorAll(".theme-btn").forEach(btn => {
-      btn.addEventListener("click", e => {
-        const theme = e.target.getAttribute("data-theme");
-        if (theme) {
-          this.setTheme(theme);
-          window.dispatchEvent(new CustomEvent("scithemechange", { detail: theme }));
-        }
+  // Register Workspace selectors & UI events when window loads
+  document.addEventListener("DOMContentLoaded", function() {
+    initThemeChooser();
+    initProjectWorkspaceLoader();
+  });
+
+  // 1. Theme Configuration
+  function initThemeChooser() {
+    const savedTheme = localStorage.getItem("sci-theme") || "dark";
+    setTheme(savedTheme);
+
+    const buttons = document.querySelectorAll(".theme-btn");
+    buttons.forEach(btn => {
+      btn.addEventListener("click", function() {
+        const selected = btn.getAttribute("data-theme") || "dark";
+        setTheme(selected);
       });
     });
-  },
-
-  setTheme(theme) {
-    this.activeTheme = theme;
-    localStorage.setItem("sci-theme", theme);
-    document.documentElement.setAttribute("data-theme", theme);
-    document.querySelectorAll(".theme-btn").forEach(btn => {
-      btn.classList.toggle("active", btn.getAttribute("data-theme") === theme);
-    });
-    document.body.style.transition = "background-color 0.3s ease, color 0.3s ease";
-  },
-
-  setupSidebarToggle() {
-    const toggleBtn = document.querySelector(".menu-toggle");
-    const sidebar = document.querySelector(".sidebar");
-    if (toggleBtn && sidebar) {
-      toggleBtn.addEventListener("click", e => {
-        e.stopPropagation();
-        sidebar.classList.toggle("active");
-      });
-      document.addEventListener("click", e => {
-        if (sidebar.classList.contains("active") && !sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
-          sidebar.classList.remove("active");
-        }
-      });
-    }
-  },
-
-  async loadGlobalContext() {
-    try {
-      const data = await this.apiFetch("/api/project");
-      this.currentProject = data;
-      const el = document.getElementById("ctx-project");
-      if (el) el.textContent = data.project_name;
-    } catch (e) {
-      console.warn("Could not load project context:", e);
-    }
-  },
-
-  bindGlobalEvents() {
-    const banner = document.createElement("div");
-    banner.id = "sci-error-banner";
-    banner.style.cssText = "position:fixed;bottom:20px;right:20px;background:#ff5252;color:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-size:13px;z-index:10000;display:none;align-items:center;gap:12px;transition:all 0.3s ease;font-weight:500;";
-    banner.innerHTML = '<span class="banner-msg"></span><button style="border:none;background:none;color:white;cursor:pointer;font-weight:700;font-size:14px;" onclick="this.parentElement.style.display=\'none\'">\u2715</button>';
-    document.body.appendChild(banner);
-  },
-
-  showErrorBanner(msg) {
-    const banner = document.getElementById("sci-error-banner");
-    if (banner) {
-      banner.querySelector(".banner-msg").textContent = msg;
-      banner.style.display = "flex";
-      setTimeout(() => { banner.style.display = "none"; }, 7000);
-    }
-  },
-
-  showGlobalLoader(show) {
-    let bar = document.getElementById("sci-top-loading-bar");
-    if (!bar) {
-      bar = document.createElement("div");
-      bar.id = "sci-top-loading-bar";
-      bar.style.cssText = "position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent-cyan),var(--accent-blue));z-index:10001;transition:width 0.2s ease;width:0%;";
-      document.body.appendChild(bar);
-    }
-    if (show) {
-      bar.style.width = "40%";
-      setTimeout(() => { if (bar.style.width === "40%") bar.style.width = "80%"; }, 300);
-    } else {
-      bar.style.width = "100%";
-      setTimeout(() => { bar.style.width = "0%"; }, 200);
-    }
-  },
-
-  formatDate(dateString) {
-    if (!dateString) return "-";
-    const d = new Date(dateString);
-    return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })
-      + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
   }
-};
 
-document.addEventListener("DOMContentLoaded", () => { window.SciApp.init(); });
+  function setTheme(themeName) {
+    window.SciApp.theme = themeName;
+    document.documentElement.setAttribute("data-theme", themeName);
+    localStorage.setItem("sci-theme", themeName);
+
+    // Update active button indicators
+    const buttons = document.querySelectorAll(".theme-btn");
+    buttons.forEach(btn => {
+      const active = btn.getAttribute("data-theme") === themeName;
+      btn.classList.toggle("active", active);
+    });
+  }
+
+  // 2. Fetch projects and populate dynamic dropdown select controls
+  async function initProjectWorkspaceLoader() {
+    try {
+      const selectWrapper = document.createElement("div");
+      selectWrapper.className = "sidebar-form-group";
+      selectWrapper.id = "project-chooser-group";
+      selectWrapper.innerHTML = `
+        <label class="sidebar-form-label">Active Project</label>
+        <select class="sidebar-select" id="sel-project">
+          <option value="">-- Scanning --</option>
+        </select>
+      `;
+
+      // Insert dropdown select element on top of Protocol chooser filter in Sidebar
+      const filters = document.querySelector(".sidebar-filters");
+      if (filters) {
+        filters.insertBefore(selectWrapper, filters.firstChild);
+      }
+
+      const data = await window.SciApp.apiFetch("/api/projects");
+      const projSelect = document.getElementById("sel-project");
+      
+      if (data && data.projects && data.projects.length > 0) {
+        projSelect.innerHTML = "";
+        data.projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p;
+          opt.textContent = p;
+          projSelect.appendChild(opt);
+        });
+
+        // Event listener to trigger workspace transitions
+        projSelect.addEventListener("change", function(e) {
+          switchProjectWorkspace(e.target.value);
+        });
+
+        // Primary starting workspace
+        switchProjectWorkspace(data.projects[0]);
+      }
+    } catch (err) {
+      console.log("Failed scanning projects workspace directories", err);
+    }
+  }
+
+  async function switchProjectWorkspace(projName) {
+    if (!projName) return;
+    window.SciApp.currentProject = projName;
+    
+    // Refresh Sidebar session indicators
+    const projIndicator = document.getElementById("ctx-project");
+    if (projIndicator) projIndicator.textContent = projName;
+
+    // Reset children models
+    window.SciApp.activeProtocol = null;
+    window.SciApp.activeStep = null;
+    
+    const protoCtx = document.getElementById("ctx-protocol");
+    if (protoCtx) protoCtx.textContent = "-";
+    const stepCtx = document.getElementById("ctx-step");
+    if (stepCtx) stepCtx.textContent = "-";
+
+    const stepNav = document.getElementById("step-nav");
+    if (stepNav) stepNav.style.display = "none";
+
+    // Refresh dynamic frontend
+    if (typeof window.init === "function") {
+      window.init();
+    }
+  }
+
+  // Interactive controls zoom scale trackers
+  let currentZoom = 1.0;
+  let currentPan = { x: 0, y: 0 };
+  let isPanningMode = false;
+  let panOrigin = { x: 0, y: 0 };
+
+  // Lightbox Zoom and Pan Events
+  window.initLightboxInteraction = function(imgElement) {
+    currentZoom = 1.0;
+    currentPan = { x: 0, y: 0 };
+    updateTransformations(imgElement);
+
+    // Apply scroll scale zooms
+    imgElement.parentElement.addEventListener("wheel", function(e) {
+      e.preventDefault();
+      const scaleAmt = e.deltaY < 0 ? 0.15 : -0.15;
+      currentZoom = Math.min(Math.max(0.4, currentZoom + scaleAmt), 4.0);
+      updateTransformations(imgElement);
+    });
+
+    // Panning controls drag events
+    imgElement.addEventListener("mousedown", function(e) {
+      e.preventDefault();
+      isPanningMode = true;
+      panOrigin.x = e.clientX - currentPan.x;
+      panOrigin.y = e.clientY - currentPan.y;
+    });
+
+    window.addEventListener("mousemove", function(e) {
+      if (!isPanningMode) return;
+      currentPan.x = e.clientX - panOrigin.x;
+      currentPan.y = e.clientY - panOrigin.y;
+      updateTransformations(imgElement);
+    });
+
+    window.addEventListener("mouseup", function() {
+      isPanningMode = false;
+    });
+  };
+
+  function updateTransformations(el) {
+    if (el) {
+      el.style.transform = `translate(${currentPan.x}px, ${currentPan.y}px) scale(${currentZoom})`;
+    }
+  }
+
+})();

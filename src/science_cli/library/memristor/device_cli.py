@@ -12,10 +12,10 @@ Usage:
     mem-device add --fzf
 
     # Plot all:
-    mem-device plot --all [--overlay] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device plot --all [--overlay] [--material ...] [--row R --col C] [--dpi 150]
 
     # Interactive:
-    mem-device plot [--fzf] [--overlay | --all] [--material ...] [--row R --col C] [--overwrite] [--dpi 150]
+    mem-device plot [--fzf] [--overlay | --all] [--material ...] [--row R --col C] [--dpi 150]
     mem-device dashboard [--output path] [--open]
     
 In the sci REPL, use 'memristor' instead of 'mem-device'.
@@ -59,9 +59,33 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_protocol_dir(args) -> Path:
-    """Resolve protocol directory: --step-dir -> session -> cwd()."""
-    if getattr(args, "step_dir", None):
-        return Path(args.step_dir).resolve()
+    """Resolve protocol directory: --step -> session -> cwd().
+
+    If --step is a short name (e.g. ``4_iv``), search for a matching
+    step directory under the session protocol and resolve to its parent.
+    """
+    step_name = getattr(args, "step", None)
+    if step_name:
+        # First: try as a step name under the session protocol
+        sess = load_session()
+        last_proj = sess.get("last_project", "")
+        last_proto = sess.get("last_protocol", "")
+        if last_proj and last_proto:
+            from science_cli.core.project import get_current_project_path
+            proj = get_current_project_path()
+            if proj:
+                proto_dir = proj / "protocol" / last_proto
+                if proto_dir.exists():
+                    for pdir in sorted(proto_dir.iterdir()):
+                        if pdir.is_dir() and pdir.name == step_name:
+                            # step_name IS the proto dir name — return it
+                            return pdir.resolve()
+                    # Search all protocol dirs for a step matching this name
+                    for pdir in sorted(proto_dir.parent.iterdir()):
+                        if pdir.is_dir() and (pdir / step_name).is_dir():
+                            return pdir.resolve()
+        # Second: treat as direct path
+        return Path(step_name).resolve()
 
     sess = load_session()
     last_proj = sess.get("last_project", "")
@@ -833,6 +857,53 @@ def cmd_info(args: argparse.Namespace) -> None:
                 parts.append(f"({fe.temperature} K)")
             print("    " + " ".join(parts))
 
+    # ── Switching statistics from SQLite ──
+    import numpy as np
+
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import close_db, open_db
+
+    proj = get_current_project_path()
+    if proj:
+        conn = None
+        try:
+            conn = open_db(proj)
+            db_rows = conn.execute(
+                "SELECT filename, v_set, v_reset, i_set, i_reset, on_off_ratio, compliance_confidence "
+                "FROM files WHERE protocol = ? AND row = ? AND col = ? AND technique_id = 'iv-sweep'",
+                (pdir.name, args.row, args.col)
+            ).fetchall()
+
+            if db_rows:
+                v_sets = [r["v_set"] for r in db_rows if r["v_set"] is not None]
+                v_resets = [r["v_reset"] for r in db_rows if r["v_reset"] is not None]
+                ratios = [r["on_off_ratio"] for r in db_rows if r["on_off_ratio"] is not None]
+
+                print("\n  Switching Statistics (from SQLite):")
+                print(f"    Total cycles: {len(db_rows)}")
+
+                # Volatile memristors might have only SET or only RESET. We report yields distinctly.
+                set_yield = (len(v_sets) / len(db_rows)) * 100.0 if db_rows else 0.0
+                reset_yield = (len(v_resets) / len(db_rows)) * 100.0 if db_rows else 0.0
+
+                print(f"    SET events detected:   {len(v_sets)}/{len(db_rows)} ({set_yield:.1f}% yield)")
+                print(f"    RESET events detected: {len(v_resets)}/{len(db_rows)} ({reset_yield:.1f}% yield)")
+
+                if v_sets:
+                    print(f"    V_set   = {np.mean(v_sets):.3f} ± {np.std(v_sets):.3f} V (range: {np.min(v_sets):.2f} to {np.max(v_sets):.2f} V)")
+                if v_resets:
+                    print(f"    V_reset = {np.mean(v_resets):.3f} ± {np.std(v_resets):.3f} V (range: {np.min(v_resets):.2f} to {np.max(v_resets):.2f} V)")
+                if ratios:
+                    med_ratio = np.median(ratios)
+                    print(f"    Median ON/OFF Ratio:   {med_ratio:.2e}")
+        except Exception:
+            # Silently skip if DB query fails or table is uninitialized
+            pass
+        finally:
+            if conn:
+                close_db(conn)
+
+
 
 # ── Command: add ────────────────────────────────────────────
 
@@ -840,11 +911,63 @@ def cmd_info(args: argparse.Namespace) -> None:
 def cmd_add(args: argparse.Namespace) -> None:
     pdir = _resolve_protocol_dir(args)
 
+    device_type = getattr(args, "device_type", None)
+    error_msg = getattr(args, "error", None)
+
     if not args.file and not args.pattern:
-        cmd_add_fzf(args)
-        return
-        cmd_add_pattern(args)
-        return
+        if device_type or error_msg is not None:
+            if args.row is None or args.col is None:
+                print("Error: --row and --col are required to set cell device type.")
+                sys.exit(1)
+
+            from science_cli.core.project import get_current_project_path
+            from science_cli.library.memristor.db import close_db, open_db, upsert_material
+            proj = get_current_project_path()
+            if not proj:
+                print("No project open. Use 'open -m project <path>' first.")
+                sys.exit(1)
+
+            conn = open_db(proj)
+            try:
+                # Retrieve existing material if we can, else default
+                cursor = conn.execute(
+                    "SELECT material FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                    (pdir.name, args.row, args.col)
+                )
+                row_res = cursor.fetchone()
+                existing_material = row_res[0] if row_res else "unknown"
+
+                existing_type = "non-volatile"
+                existing_errors = ""
+                if row_res:
+                    cursor2 = conn.execute(
+                        "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                        (pdir.name, args.row, args.col)
+                    )
+                    row2 = cursor2.fetchone()
+                    if row2:
+                        existing_type, existing_errors = row2[0], row2[1]
+
+                final_type = device_type if device_type else existing_type
+                final_errors = error_msg if error_msg is not None else existing_errors
+
+                upsert_material(
+                    conn,
+                    protocol=pdir.name,
+                    row=args.row,
+                    col=args.col,
+                    material=existing_material,
+                    device_type=final_type,
+                    errors=final_errors,
+                )
+                conn.commit()
+                print(f"Manually set cell r{args.row}c{args.col} properties: type={final_type}, errors='{final_errors}'")
+            finally:
+                close_db(conn)
+            return
+        else:
+            cmd_add_fzf(args)
+            return
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
     config = read_devices(pdir)
@@ -865,12 +988,57 @@ def cmd_add(args: argparse.Namespace) -> None:
         pt.techniques[technique] = TechniqueGroup(technique=technique)
     fe = FileEntry(
         file=args.file,
-        sweep_order=args.sweep_order,
-        sweep_type=args.sweep_type,
         temperature=getattr(args, "temperature", None),
     )
     pt.techniques[technique].files.append(fe)
     _add_material_tag(pt, args.file)
+
+    if device_type or error_msg is not None:
+        from science_cli.core.project import get_current_project_path
+        from science_cli.library.memristor.db import close_db, open_db, upsert_material
+        from science_cli.library.memristor.device import extract_material_batch
+        proj = get_current_project_path()
+        if proj:
+            conn = open_db(proj)
+            try:
+                mb = extract_material_batch(args.file)
+                mat_key = f"{mb[0]}({mb[1]})" if mb and mb[1] else (mb[0] if mb else "unknown")
+
+                cursor = conn.execute(
+                    "SELECT material FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                    (pdir.name, args.row, args.col)
+                )
+                row_res = cursor.fetchone()
+                existing_material = row_res[0] if row_res else mat_key
+
+                existing_type = "non-volatile"
+                existing_errors = ""
+                if row_res:
+                    cursor2 = conn.execute(
+                        "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                        (pdir.name, args.row, args.col)
+                    )
+                    row2 = cursor2.fetchone()
+                    if row2:
+                        existing_type, existing_errors = row2[0], row2[1]
+
+                final_type = device_type if device_type else existing_type
+                final_errors = error_msg if error_msg is not None else existing_errors
+
+                upsert_material(
+                    conn,
+                    protocol=pdir.name,
+                    row=args.row,
+                    col=args.col,
+                    material=existing_material,
+                    device_type=final_type,
+                    errors=final_errors,
+                )
+                conn.commit()
+                print(f"Manually set cell r{args.row}c{args.col} properties: type={final_type}, errors='{final_errors}'")
+            finally:
+                close_db(conn)
+
     write_devices(pdir, config)
     print(f"Added {args.file} -> r{args.row}c{args.col}/{technique}")
     set_last_step(pdir.name)
@@ -890,7 +1058,6 @@ def cmd_add_pattern(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     technique = args.technique or ""
-    sweep_type = args.sweep_type or None
     assigned = set(config.file_map.keys())
     all_files = _device_data_files_recursive(pdir)
     unassigned = [(r, s, p) for r, s, p in all_files if p.name not in assigned]
@@ -943,7 +1110,7 @@ def cmd_add_pattern(args: argparse.Namespace) -> None:
             config.points.append(pt)
         if tech not in pt.techniques:
             pt.techniques[tech] = TechniqueGroup(technique=tech)
-        fe = FileEntry(file=f.name, sweep_type=sweep_type)
+        fe = FileEntry(file=f.name)
         pt.techniques[tech].files.append(fe)
         _add_material_tag(pt, f.name)
 
@@ -996,29 +1163,25 @@ def cmd_add_fzf(args: argparse.Namespace) -> None:
             tech = canonical["technique_mapped"] or _infer_technique(fpath.name) or "iv"
             row = args.row if args.row is not None else canonical["row"]
             col = args.col if args.col is not None else canonical["col"]
-            sweep_type = canonical["sweep_type"]
         else:
             meta = _parse_filename_metadata(fpath.name)
             tech = meta["technique"] or _infer_technique(fpath.name) or "iv"
             row = args.row if args.row is not None else (meta["row"] or 0)
             col = args.col if args.col is not None else (meta["col"] or 0)
-            sweep_type = meta["sweep_type"]
         assignments.append({
             "file": fpath.name,
             "row": row,
             "col": col,
             "technique": tech,
-            "sweep_type": sweep_type,
             "step_name": step_name,
             "fpath": fpath,
         })
 
     print("\nAssignments:")
-    print(f"  {'File':30s} {'Row':4s} {'Col':4s} {'Technique':12s} {'Type'}")
+    print(f"  {'File':30s} {'Row':4s} {'Col':4s} {'Technique':12s}")
     print("  " + "-" * 65)
     for a in assignments:
-        st = a["sweep_type"] or "-"
-        print(f"  {a['file']:30s} {a['row']:4d} {a['col']:4d} {a['technique']:12s} {st}")
+        print(f"  {a['file']:30s} {a['row']:4d} {a['col']:4d} {a['technique']:12s}")
 
     try:
         ok = input("\nApply these assignments? [y/N] ").strip().lower()
@@ -1035,40 +1198,12 @@ def cmd_add_fzf(args: argparse.Namespace) -> None:
             config.points.append(pt)
         if a["technique"] not in pt.techniques:
             pt.techniques[a["technique"]] = TechniqueGroup(technique=a["technique"])
-        fe = FileEntry(file=a["file"], sweep_type=a["sweep_type"])
+        fe = FileEntry(file=a["file"])
         pt.techniques[a["technique"]].files.append(fe)
         _add_material_tag(pt, a["file"])
 
     write_devices(pdir, config)
     print(f"Added {len(assignments)} file(s).")
-
-    # Auto-sync sweep metadata if --sync flag was passed
-    if getattr(args, "sync", False):
-        from science_cli.core.sweep_metadata import extract_sweep_from_file
-
-        synced_count = 0
-        for a in assignments:
-            pt = config.get_point(a["row"], a["col"])
-            if pt is None:
-                continue
-            tg = pt.techniques.get(a["technique"])
-            if tg is None:
-                continue
-            # Find the FileEntry we just added (match by filename)
-            for fe in tg.files:
-                if fe.file == a["file"]:
-                    fpath = config.resolve_file_path(
-                        pdir, a["technique"], a["file"]
-                    )
-                    segments = extract_sweep_from_file(str(fpath))
-                    if segments:
-                        fe.sweep = segments
-                        synced_count += 1
-                    break
-
-        if synced_count > 0:
-            write_devices(pdir, config)
-            print(f"Auto-synced sweep metadata for {synced_count} file(s).")
 
     set_last_step(pdir.name)
 
@@ -1676,6 +1811,12 @@ def _analyze_protocol(
         )
         analyzed += 1
 
+    try:
+        from science_cli.library.memristor.db import classify_and_populate_materials
+        classify_and_populate_materials(conn, protocol_name)
+    except Exception as exc:
+        print(f"  [WARN] Device classification failed for {protocol_name}: {exc}")
+
     return {
         "protocol": protocol_name,
         "total": len(target_files),
@@ -1857,10 +1998,34 @@ def cmd_check(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def parse_cycles_list(cycle_str: str) -> list[int]:
+    """Parse a string like '1,2,5,10-15,50' into a list of 1-based cycle indices."""
+    if not cycle_str:
+        return []
+    cycles = set()
+    for part in cycle_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            try:
+                start, end = part.split("-")
+                cycles.update(range(int(start), int(end) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                cycles.add(int(part))
+            except ValueError:
+                pass
+    return sorted(list(cycles))
+
+
 # ── Command: plot ───────────────────────────────────────────
 
 
 def cmd_plot(args: argparse.Namespace) -> None:
+
     """Batch-generate IV curve SVGs from devices.yaml."""
     from science_cli.library.memristor.plotting import (
         build_fzf_line,
@@ -1871,6 +2036,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
         generate_iv_svg,
         read_iv_csv,
     )
+
+    raw_current = getattr(args, "raw", False)
 
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
@@ -1927,8 +2094,98 @@ def cmd_plot(args: argparse.Namespace) -> None:
     results_dir = pdir / step_dir_name / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    overwrite = getattr(args, "overwrite", False)
     dpi = getattr(args, "dpi", 150)
+
+    # ── Multi-Cycle Highlight Plot Mode ──
+    highlight_str = getattr(args, "highlight", "") or ""
+    if highlight_str:
+        from science_cli.library.memristor.plotting import generate_iv_highlighted_svg
+        highlight_cycles = parse_cycles_list(highlight_str)
+        if not highlight_cycles:
+            print("Invalid highlight cycles specified.")
+            return
+
+        unique_cells = sorted(list(set((t["row"], t["col"], t["material_key"]) for t in targets)))
+        if not unique_cells:
+            print("No cells found for plotting.")
+            return
+
+        if len(unique_cells) > 1:
+            from science_cli.core.fzf_utils import fzf_select
+            cell_displays = [f"r{row}c{col} ({mat})" for row, col, mat in unique_cells]
+            selected = fzf_select(cell_displays, prompt="Select cell for multi-cycle highlighted plot >", multi=False)
+            if not selected:
+                print("No cell selected.")
+                return
+            selected_display = selected[0]
+            # Parse back
+            selected_cell = None
+            for r, c, m in unique_cells:
+                if f"r{r}c{c} ({m})" == selected_display:
+                    selected_cell = (r, c, m)
+                    break
+            if not selected_cell:
+                return
+            r_val, c_val, m_val = selected_cell
+        else:
+            r_val, c_val, m_val = unique_cells[0]
+
+        # Filter targets to the selected cell
+        cell_targets = [t for t in targets if t["row"] == r_val and t["col"] == c_val]
+        # Sort targets by cycle order
+        cell_targets.sort(key=lambda x: x["order"])
+
+        # Fetch SQLite analysis cache to populate Vset/Vreset in the legend
+        from science_cli.core.project import get_current_project_path
+        from science_cli.library.memristor.db import close_db, open_db, query_files
+        proj = get_current_project_path()
+        analysis_map = {}
+        if proj:
+            try:
+                conn = open_db(proj)
+                db_files = query_files(conn, protocol=pdir.name)
+                close_db(conn)
+                analysis_map = {f["filename"]: f for f in db_files}
+            except Exception as e:
+                print(f"Warning: could not query analysis results from database: {e}")
+
+        all_traces = []
+        for t in cell_targets:
+            fe = t["file_entry"]
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                continue
+
+            db_record = analysis_map.get(fe.file, {})
+            metadata = {
+                "row": t["row"],
+                "col": t["col"],
+                "material": t["material_key"],
+                "order": t["order"],
+                "sweep_type": fe.sweep_type or "uc",
+                "v_set": db_record.get("v_set"),
+                "v_reset": db_record.get("v_reset"),
+            }
+            all_traces.append((voltage, current, metadata))
+
+        if all_traces:
+            m_safe = m_val.replace("/", "-").replace(" ", "_")
+            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.svg" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.svg"
+            output_path = results_dir / output_filename
+            try:
+                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current)
+                print(f"\n  ✓ Multi-cycle highlight plot generated: {output_path.name}")
+                print(f"  Highlighted cycles: {highlight_cycles}")
+                print(f"  Output path: {output_path}")
+            except Exception as exc:
+                print(f"  Error generating multi-cycle highlight plot: {exc}")
+        else:
+            print("No trace data successfully read.")
+        return
+
 
     # Determine overlay vs individual mode
     overlay_mode = getattr(args, "overlay", False)
@@ -1945,7 +2202,6 @@ def cmd_plot(args: argparse.Namespace) -> None:
         all_mode = False
 
     plotted = 0
-    skipped = 0
     errors = 0
 
     if overlay_mode:
@@ -1977,11 +2233,11 @@ def cmd_plot(args: argparse.Namespace) -> None:
             all_traces.append((voltage, current, metadata))
 
         if all_traces:
-            output_path = results_dir / "overlay.svg"
+            output_path = results_dir / ("overlay_raw.svg" if raw_current else "overlay.svg")
             try:
-                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi)
+                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current)
                 plotted = len(all_traces)
-                print(f"  ✓ overlay.svg ({len(all_traces)} traces)")
+                print(f"  ✓ {output_path.name} ({len(all_traces)} traces)")
             except Exception as exc:
                 print(f"  Error generating overlay: {exc}")
                 errors += 1
@@ -1998,14 +2254,6 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         for t in targets:
             fe = t["file_entry"]
-            plot_filename = fe.extra.get("plot", "")
-
-            if plot_filename and not overwrite:
-                existing = results_dir / plot_filename
-                if existing.exists():
-                    skipped += 1
-                    continue
-
             filepath = config.resolve_file_path(pdir, "iv", fe.file)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
@@ -2021,6 +2269,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
                 sweep_type=t["sweep_type"],
                 order=t["order"],
             )
+            if raw_current:
+                plot_filename = plot_filename.replace(".svg", "_raw.svg")
             title = build_plot_title(
                 order=t["order"],
                 sweep=fe.sweep,
@@ -2040,7 +2290,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
             output_path = results_dir / plot_filename
             try:
-                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi)
+                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi, raw_current=raw_current)
             except Exception as exc:
                 print(f"  Error plotting {fe.file}: {exc}")
                 errors += 1
@@ -2059,10 +2309,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
         print(f"Results: {results_dir}/")
     elif not overlay_mode:
         if plotted > 0:
-            print(f"\nPlotted: {plotted} | Skipped (exists): {skipped} | Errors: {errors}")
+            print(f"\nPlotted: {plotted} | Errors: {errors}")
             print(f"Results: {results_dir}/")
-        else:
-            print(f"\nNo new plots generated. {skipped} already exist. Use --overwrite to regenerate.")
 
     set_last_step(pdir.name)
 
@@ -2114,10 +2362,68 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
 # ── CLI entry point ─────────────────────────────────────────
 
 
+def show_memristor_help() -> None:
+    """Show a beautifully grouped Rich-based help menu for 'sci memristor'."""
+    from rich.console import Console
+    from rich.panel import Panel
+    try:
+        from science_cli import __version__
+    except ImportError:
+        __version__ = "2.1.1"
+
+    accent_r = "green"
+    try:
+        from science_cli.theme import RICH_STYLES
+        accent_r = RICH_STYLES.get("accent", "green")
+    except ImportError:
+        pass
+
+    console = Console()
+    console.print()
+    console.print(Panel(
+        f"[bold]sci memristor[/bold] — Crossbar Device Manager for Memristor Characterization [dim]v{__version__}[/dim]\n"
+        "[dim]Manage device geometry, sync sweep metadata, and analyze IV/endurance/retention measurements.[/dim]",
+        border_style=accent_r,
+    ))
+    console.print()
+
+    groups = {
+        "GROUP 1: DEVICE GEOMETRY & ASSIGNMENT": {
+            "init": "Scaffold device geometry in protocol YAML",
+            "ls": "List devices or matrix map",
+            "info": "Show point details",
+            "add": "Add file(s) to a point",
+            "rm": "Remove file, technique, or point",
+        },
+        "GROUP 2: CACHE SYNCHRONIZATION & HEALTH": {
+            "sync": "Sync sweep metadata",
+            "validate": "Validate device config",
+            "stats": "Aggregate statistics",
+            "check": "Find unassigned files (recursive)",
+        },
+        "GROUP 3: CURVES PLOTTING, MATRIX & DASHBOARD": {
+            "plot": "Generate IV curve SVGs from devices.yaml",
+            "analyze": "Read CSVs and compute Vset/Vreset/ratio (depends on sync)",
+            "dashboard": "Generate per-protocol dashboards + main index page",
+            "matrix": "Show device matrix from SQLite (no YAML required)",
+        }
+    }
+
+    for group_name, cmds in groups.items():
+        console.print(f"  [bold]{group_name}[/bold]")
+        for cmd_name, desc in cmds.items():
+            console.print(f"    {cmd_name:<18} [dim]{desc}[/dim]")
+        console.print()
+
+    console.print("  [dim]Use `sci memristor <subcommand> --help` for more details on a specific subcommand.[/dim]")
+    console.print()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Crossbar device manager for memristor characterization"
     )
+    parser.print_help = lambda file=None: show_memristor_help()
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
@@ -2140,7 +2446,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.set_defaults(func=cmd_init)
 
     p_ls = sub.add_parser("ls", help="List devices or matrix map")
-    p_ls.add_argument("--step-dir", default="")
+    p_ls.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_ls.add_argument("--matrix", action="store_true", help="Grid view (per-material when data tagged)")
     p_ls.add_argument("--technique", default="", help="Filter by technique (e.g., iv)")
     p_ls.add_argument("--material", default="", help="Filter by material+batch (e.g., Ta-PDAc-ITO(1))")
@@ -2149,7 +2455,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_info = sub.add_parser("info", help="Show point details")
     p_info.add_argument("--row", type=int, required=True)
     p_info.add_argument("--col", type=int, required=True)
-    p_info.add_argument("--step-dir", default="")
+    p_info.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_info.set_defaults(func=cmd_info)
 
     p_add = sub.add_parser("add", help="Add file(s) to a point")
@@ -2157,17 +2463,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--col", type=int, default=None)
     p_add.add_argument("--technique", default="", help="Technique (inferred from filename)")
     p_add.add_argument("--file", default="")
-    p_add.add_argument("--sweep-order", type=int, default=None)
-    p_add.add_argument("--sweep-type", default=None)
     p_add.add_argument("--temperature", type=float, default=None)
-    p_add.add_argument("--step-dir", default="")
+    p_add.add_argument("--device-type", default=None, choices=["volatile", "non-volatile", "resistor", "short", "insulating"], help="Manually set cell device type")
+    p_add.add_argument("--error", default=None, help="Manually set cell error or remark")
+    p_add.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_add.add_argument(
         "--pattern", default="",
         help="Regex for batch: r(\\d+)c(\\d+) groups 1=row, 2=col",
     )
     p_add.add_argument("--dry-run", action="store_true", help="Preview without writing")
     p_add.add_argument("--yes", action="store_true", help="Skip confirmation")
-    p_add.add_argument("--sync", action="store_true", help="Auto-run sweep detection after assignment")
     p_add.set_defaults(func=cmd_add)
 
     p_rm = sub.add_parser("rm", help="Remove file, technique, or point")
@@ -2176,11 +2481,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_rm.add_argument("--technique", default="", help="Technique (inferred from filename)")
     p_rm.add_argument("--file", default="")
     p_rm.add_argument("--confirm", action="store_true", help="Confirm entire point removal")
-    p_rm.add_argument("--step-dir", default="")
+    p_rm.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_rm.set_defaults(func=cmd_rm)
 
     p_matrix = sub.add_parser("matrix", help="Show device matrix from SQLite (no YAML required)")
-    p_matrix.add_argument("--step-dir", default="")
+    p_matrix.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_matrix.add_argument("--all", "-A", action="store_true",
                           help="Show matrix for ALL protocols in the project")
     p_matrix.add_argument("--material", default="", help="Filter by exact material name")
@@ -2192,7 +2497,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_matrix.set_defaults(func=cmd_matrix)
 
     p_sync = sub.add_parser("sync", help="Sync sweep metadata")
-    p_sync.add_argument("--step-dir", default="")
+    p_sync.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_sync.add_argument("--all", "-A", action="store_true",
                         help="Sync ALL protocols in the current project")
     p_sync.add_argument("--reindex", action="store_true", help="Reindex SQLite from YAML only (no CSV re-read)")
@@ -2203,31 +2508,33 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.set_defaults(func=cmd_sync)
 
     p_val = sub.add_parser("validate", help="Validate device config")
-    p_val.add_argument("--step-dir", default="")
+    p_val.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_val.set_defaults(func=cmd_validate)
 
     p_stats = sub.add_parser("stats", help="Aggregate statistics")
-    p_stats.add_argument("--step-dir", default="")
+    p_stats.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_stats.set_defaults(func=cmd_stats)
 
     p_check = sub.add_parser("check", help="Find unassigned files (recursive)")
     p_check.add_argument("--list", action="store_true", help="List unassigned files")
-    p_check.add_argument("--step-dir", default="")
+    p_check.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_check.set_defaults(func=cmd_check)
 
     p_plot = sub.add_parser("plot", help="Generate IV curve SVGs from devices.yaml")
-    p_plot.add_argument("--step-dir", default="")
+    p_plot.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_plot.add_argument("--overlay", action="store_true", help="Overlay all selected files in one plot")
     p_plot.add_argument("--all", action="store_true", dest="plot_all", help="Export each file individually")
     p_plot.add_argument("--material", default="", help="Plot files for a specific material+batch")
     p_plot.add_argument("--row", type=int, default=None, help="Filter by matrix row")
     p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")
-    p_plot.add_argument("--overwrite", action="store_true", help="Re-plot even if SVG already exists")
     p_plot.add_argument("--dpi", type=int, default=150, help="SVG resolution (default: 150)")
+    p_plot.add_argument("--highlight", default="", help="Highlight specific cycles in color, others in grey (e.g. '1,5,10,50,100')")
+    p_plot.add_argument("--raw", action="store_true", help="Plot raw current on linear scale (no absolute value)")
     p_plot.set_defaults(func=cmd_plot)
 
+
     p_dash = sub.add_parser("dashboard", help="Generate per-protocol dashboards + main index page")
-    p_dash.add_argument("--step-dir", default="")
+    p_dash.add_argument("--step", default="", help="Step directory name (short name OK)")
     p_dash.add_argument("--output", default="", help="Custom output path (default: results/dashboard.html)")
     p_dash.add_argument("--open", action="store_true", help="Open in browser after generation")
     p_dash.add_argument("--pt", "--protocol", default="", dest="protocol",
@@ -2237,7 +2544,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.set_defaults(func=cmd_dashboard)
 
     p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")
-    p_analyze.add_argument("--step-dir", default="")
     p_analyze.add_argument("--all", "-A", action="store_true", help="Analyze all protocols in the database")
     p_analyze.add_argument("--pt", "--protocol", default="", dest="protocol",
                            help="Protocol name to analyze (e.g. '5_cu-c_ta-cu')")

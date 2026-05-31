@@ -185,3 +185,69 @@ class TestDbOpen:
         db_path = get_db_path(tmp_path)
         assert str(db_path).endswith(".db")
         assert tmp_path.name in str(db_path)
+
+
+class TestDbMaterialsAndClassification:
+    """Validate materials table CRUD and automated device classification heuristics."""
+
+    def test_upsert_and_query_materials(self):
+        from science_cli.library.memristor.db import upsert_material
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        
+        # Upsert material
+        upsert_material(conn, protocol="p", row=1, col=2, material="cu-c-pda", device_type="volatile", errors="relax")
+        
+        # Verify columns exist and data matches
+        cursor = conn.execute("SELECT * FROM materials WHERE protocol='p'")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["row"] == 1
+        assert row["col"] == 2
+        assert row["material"] == "cu-c-pda"
+        assert row["device_type"] == "volatile"
+        assert row["errors"] == "relax"
+        conn.close()
+
+    def test_classify_and_populate_materials_volatile(self):
+        from science_cli.library.memristor.db import classify_and_populate_materials
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        
+        # Sync a simulated volatile memristor: v_set exists, v_reset is None
+        insert_file(conn, protocol="p", step="s", filename="data.csv",
+                    technique_id="iv", material="cu-c-pda", row=0, col=0,
+                    v_set=0.35, v_reset=None, on_off_ratio=3.5)
+        
+        classify_and_populate_materials(conn, "p")
+        
+        # Check classification
+        cursor = conn.execute("SELECT device_type, errors FROM materials WHERE protocol='p' AND row=0 AND col=0")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["device_type"] == "volatile"
+        assert "relaxation" in row["errors"]
+        conn.close()
+
+    def test_classify_and_populate_materials_short(self):
+        from science_cli.library.memristor.db import classify_and_populate_materials
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        
+        # Sync a shorted device: very low ON/OFF ratio, no v_set/v_reset
+        insert_file(conn, protocol="p", step="s", filename="data.csv",
+                    technique_id="iv", material="cu-c-pda", row=0, col=0,
+                    v_set=None, v_reset=None, on_off_ratio=1.05)
+        
+        classify_and_populate_materials(conn, "p")
+        
+        # Check classification
+        cursor = conn.execute("SELECT device_type, errors FROM materials WHERE protocol='p' AND row=0 AND col=0")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["device_type"] == "short"
+        assert "shorted" in row["errors"]
+        conn.close()
