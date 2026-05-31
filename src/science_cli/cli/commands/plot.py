@@ -897,15 +897,12 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     import matplotlib as mpl
     mpl.use("Agg")
     import matplotlib.pyplot as plt
-    import numpy as np
 
     from science_cli.core.data_loader import load_data_file
 
-    if technique == "ec-eis":
-        return _do_eis_overlap(files, flags)
-
     apply_theme(get_active_theme())
     fig, ax = plt.subplots(figsize=_figsize(flags))
+    # Use theme color cycle instead of hardcoded viridis
     cycle = mpl.rcParams["axes.prop_cycle"]
     theme_colors = [entry["color"] for entry in cycle]
     colors = [theme_colors[i % len(theme_colors)] for i in range(len(files))]
@@ -937,6 +934,7 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
 
     out_dir = _get_results_dir(files[0])
     out_name = flags.get("n") or flags.get("name", f"{technique}_overlay.pdf" if technique else "overlay.pdf")
+    # Ensure .pdf extension if none specified
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
@@ -945,99 +943,6 @@ def _do_overlap(files: list, flags: dict, technique: str = "") -> None:
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] Overlay saved: {save_path}")
-
-
-def _do_eis_overlap(files: list, flags: dict) -> None:
-    import matplotlib as mpl
-    mpl.use("Agg")
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    from science_cli.core.data_loader import load_data_file
-    from science_cli.plot.eis import _ensure_neg_imag
-
-    apply_theme(get_active_theme())
-
-    def _col(df, candidates):
-        for c in candidates:
-            if c in df.columns:
-                return c
-        return None
-
-    custom_labels = flags.get("label-name") or flags.get("labels", "")
-    label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
-    cycle = mpl.rcParams["axes.prop_cycle"]
-    theme_colors = [entry["color"] for entry in cycle]
-
-    out_dir = _get_results_dir(files[0])
-
-    # ── Nyquist overlay ──────────────────────────────────────────
-    nyq_name = flags.get("n") or flags.get("name", "ec-eis-nyquist_overlay.pdf")
-    if not Path(nyq_name).suffix:
-        nyq_name += ".pdf"
-    nyq_path = out_dir / nyq_name
-
-    fig, ax = plt.subplots(figsize=_figsize(flags))
-    has_nyq = False
-    for i, fp in enumerate(files):
-        try:
-            df, info = load_data_file(fp, technique="ec-eis")
-            zr = _col(df, ("Z' (Ω)", "Z'", "Re(Z)", "ReZ", "Zre", "z'", "z_re", "z_real"))
-            zi = _col(df, ("-Z'' (Ω)", "-Z''", "Z''", '-Z"', "Im(Z)", "ImZ", "Zim", "z''", "z_im", "z_imag"))
-            if not zr or not zi:
-                continue
-            y = _ensure_neg_imag(df[zi].values)
-            color = theme_colors[i % len(theme_colors)]
-            label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax.plot(df[zr].values, y, label=label, color=color, linewidth=0.75)
-            has_nyq = True
-        except Exception:
-            continue
-
-    if has_nyq:
-        ax.set_xlabel("Z' (Ω)")
-        ax.set_ylabel("-Z'' (Ω)")
-        ax.set_aspect("equal")
-        ax.legend()
-        _apply_figure_kw(ax, flags, "ec-eis-nyquist-overlay")
-        _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
-        dpi = int(flags.get("dpi", _def_dpi))
-        fig.savefig(nyq_path, dpi=dpi, bbox_inches="tight")
-        console.print(f"[bold green]✓[/bold green] Nyquist overlay saved: {nyq_path}")
-    plt.close(fig)
-
-    # ── Bode overlay ─────────────────────────────────────────────
-    bode_name = flags.get("name", "ec-eis-bode_overlay.pdf")
-    if not Path(bode_name).suffix:
-        bode_name += ".pdf"
-    bode_path = out_dir / bode_name
-
-    fig, ax1 = plt.subplots(figsize=_figsize(flags))
-    has_bode = False
-    for i, fp in enumerate(files):
-        try:
-            df, info = load_data_file(fp, technique="ec-eis")
-            freq = _col(df, ("Frequency (Hz)", "Frequency", "f/Hz", "freq", "frequency", "f"))
-            mag = _col(df, ("|Z| (Ω)", "Magnitude", "|Z|", "modulus", "Modulus", "Z", "Impedance"))
-            if not freq or not mag:
-                continue
-            color = theme_colors[i % len(theme_colors)]
-            label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax1.loglog(df[freq].values, df[mag].values, label=label, color=color, linewidth=0.75)
-            has_bode = True
-        except Exception:
-            continue
-
-    if has_bode:
-        ax1.set_xlabel("Frequency (Hz)")
-        ax1.set_ylabel("|Z| (Ω)")
-        ax1.grid(True, alpha=0.3)
-        ax1.legend()
-        _def_dpi = int(mpl.rcParams.get("savefig.dpi", 600))
-        dpi = int(flags.get("dpi", _def_dpi))
-        fig.savefig(bode_path, dpi=dpi, bbox_inches="tight")
-        console.print(f"[bold green]✓[/bold green] Bode overlay saved: {bode_path}")
-    plt.close(fig)
 
 
 def _apply_zoom(ax, zoom_str: str) -> None:
