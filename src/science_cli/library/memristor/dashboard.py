@@ -3893,10 +3893,14 @@ def _build_neurophase_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroPhase - {protocol_name}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" async></script>
 <style>
   *,*::before,*::after {{ box-sizing:border-box; margin:0; padding:0; }}
   .dark {{ --bg:#0A0A0B; --bg-card:rgba(0,0,0,0.4); --border:rgba(255,255,255,0.08); --text:#cbd5e1; --text-dim:#64748b; --text-bright:#f1f5f9; }}
+  .fallback {{ display:none; text-align:center; padding:60px 20px; }}
+  .fallback h2 {{ font-size:16px; color:var(--text-bright); margin-bottom:8px; }}
+  .fallback p {{ font-size:11px; color:var(--text-dim); }}
+  .fallback a {{ color:#10b981; }}
   body {{ font-family:'SF Mono','Fira Code','Cascadia Code',ui-monospace,monospace; background:var(--bg); color:var(--text); padding:24px; }}
   .kpi-row {{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }}
   .kpi {{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 20px; min-width:130px; flex:1; }}
@@ -3966,6 +3970,7 @@ def _build_neurophase_html(
   </div>
 </div>
 
+<div id="charts-area">
 <div class="layout">
   <div class="main-panel">
     <div class="chart-box">
@@ -3998,9 +4003,23 @@ def _build_neurophase_html(
     </div>
   </div>
 </div>
+</div>
+
+<div id="fallback-area" class="fallback">
+  <h2>Charts Not Available</h2>
+  <p>Plotly library could not be loaded. This can happen when opening from <code>file://</code> with restricted permissions.</p>
+  <p style="margin-top:12px">Use <code>sci serve</code> and visit <a href="http://localhost:8000/neurophase">http://localhost:8000/neurophase</a> for the interactive dashboard.</p>
+</div>
 
 <script>
 (function() {{
+  function showFallback() {{
+    document.getElementById('charts-area').style.display = 'none';
+    document.getElementById('fallback-area').style.display = 'block';
+  }}
+  function initCharts() {{
+    if (typeof Plotly === 'undefined') {{ showFallback(); return; }}
+    try {{
   var heatmapData = {heatmap_json};
   var hoverData = {hover_json};
   var nRows = {rows};
@@ -4078,6 +4097,10 @@ def _build_neurophase_html(
     yaxis: {{ title: {{ text: 'Count', font: {{ size: 11 }} }}, gridcolor: 'rgba(255,255,255,0.03)' }},
     legend: {{ font: {{ size: 9 }}, bgcolor: 'transparent' }},
   }}, {{ responsive: true }});
+    }} catch(e) {{ showFallback(); }}
+  }}
+  if (document.readyState === 'complete') {{ initCharts(); }}
+  else {{ window.addEventListener('load', initCharts); }}
 }})();
 </script>
 </body>
