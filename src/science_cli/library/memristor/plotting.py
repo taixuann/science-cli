@@ -924,6 +924,7 @@ def generate_iv_svg(
     metadata: dict,
     output_path: str | Path,
     dpi: int = 150,
+    raw_current: bool = False,
 ):
     """Generate a publication-style IV curve SVG.
 
@@ -1001,7 +1002,7 @@ def generate_iv_svg(
                 sweep = derived_sweep
             title = build_plot_title(order=order, sweep=sweep, sweep_type=sweep_type)
 
-    use_log = _should_use_log_scale(current)
+    use_log = False if raw_current else _should_use_log_scale(current)
     has_time = time_arr is not None and len(time_arr) == len(voltage)
 
     # ── ACS rcParams (local scope — does not pollute global) ──
@@ -1066,6 +1067,7 @@ def generate_iv_overlay_svg(
     traces: list[tuple[np.ndarray, np.ndarray, dict]],
     output_path: str | Path,
     dpi: int = 150,
+    raw_current: bool = False,
 ):
     """Generate an overlay SVG with multiple IV traces on one plot.
 
@@ -1093,7 +1095,7 @@ def generate_iv_overlay_svg(
     }
 
     colors = ["#1f77b4", "#d62728", "#2ca02c", "#ff7f0e", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
-    use_log = any(_should_use_log_scale(t[1]) for t in traces)
+    use_log = False if raw_current else any(_should_use_log_scale(t[1]) for t in traces)
 
     with plt.rc_context(acs_rc):
         fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
@@ -1143,6 +1145,7 @@ def generate_iv_highlighted_svg(
     highlight_cycles: list[int],
     output_path: str | Path,
     dpi: int = 150,
+    raw_current: bool = False,
 ):
     """Generate an overlay SVG highlighting specific cycles in color, others in grey.
 
@@ -1172,7 +1175,7 @@ def generate_iv_highlighted_svg(
 
     # Publication Nature theme discrete colors (vibrant and high-contrast)
     highlight_colors = ["#D55E00", "#0072B2", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000"]
-    use_log = any(_should_use_log_scale(t[1]) for t in traces)
+    use_log = False if raw_current else any(_should_use_log_scale(t[1]) for t in traces)
 
     with plt.rc_context(acs_rc):
         fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)

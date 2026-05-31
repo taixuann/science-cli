@@ -10,11 +10,12 @@ WAL mode enabled. Schema migration via _meta table (version tracking).
 """
 
 import sqlite3
+import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Data file suffixes (same as device.py DATA_SUFFIXES)
 DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
@@ -54,7 +55,7 @@ CREATE TABLE IF NOT EXISTS files (
     sweep_order INTEGER,
     sweep_type TEXT,
     sweep_segments TEXT,
-    temperature REAL,
+    temperature REAL DEFAULT 298.0,
     -- Metadata
     file_size INTEGER,
     mtime TEXT,
@@ -85,7 +86,21 @@ CREATE TABLE IF NOT EXISTS protocols (
     rows INTEGER,
     cols INTEGER,
     materials TEXT,
+    has_memristors INTEGER DEFAULT 1,
     last_sync TEXT
+)
+"""
+
+CREATE_MATERIALS = """
+CREATE TABLE IF NOT EXISTS materials (
+    id INTEGER PRIMARY KEY,
+    protocol TEXT NOT NULL,
+    row INTEGER NOT NULL,
+    col INTEGER NOT NULL,
+    material TEXT NOT NULL,
+    device_type TEXT DEFAULT 'non-volatile', -- 'non-volatile', 'volatile', 'resistor', 'short', 'insulating'
+    errors TEXT DEFAULT '',
+    UNIQUE(protocol, row, col)
 )
 """
 
@@ -138,6 +153,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.execute(CREATE_FILES)
     conn.execute(CREATE_CELLS)
     conn.execute(CREATE_PROTOCOLS)
+    conn.execute(CREATE_MATERIALS)
     conn.execute(CREATE_META)
     for idx_sql in CREATE_INDEXES:
         conn.execute(idx_sql)
@@ -187,6 +203,14 @@ def _run_migrations(conn: sqlite3.Connection, from_version: int, to_version: int
                 conn.execute(f"ALTER TABLE files ADD COLUMN {col} {col_type}")
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+    if from_version < 5 <= to_version:
+        # v4 → v5: add has_memristors to protocols and create materials table
+        try:
+            conn.execute("ALTER TABLE protocols ADD COLUMN has_memristors INTEGER DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        conn.execute(CREATE_MATERIALS)
 
 
 # ── CRUD helpers ───────────────────────────────────────────────────────
@@ -282,6 +306,129 @@ def upsert_protocol(
            VALUES (?, ?, ?, ?, ?, ?)""",
         (name, label, rows, cols, materials, last_sync),
     )
+
+
+def upsert_material(
+    conn: sqlite3.Connection,
+    protocol: str,
+    row: int,
+    col: int,
+    material: str,
+    device_type: str = "non-volatile",
+    errors: str = "",
+) -> None:
+    """Upsert a row into the ``materials`` table."""
+    conn.execute(
+        """INSERT OR REPLACE INTO materials (protocol, row, col, material, device_type, errors)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (protocol, row, col, material, device_type, errors),
+    )
+
+
+def classify_and_populate_materials(conn: sqlite3.Connection, protocol_name: str) -> None:
+    """Classify device types and populate the materials table based on material naming, measured parameters, and slopes."""
+    # 1. Fetch all unique rows, cols, and materials for the protocol
+    cursor = conn.execute(
+        """SELECT DISTINCT row, col, material 
+           FROM files 
+           WHERE protocol = ? AND row IS NOT NULL AND col IS NOT NULL""",
+        (protocol_name,),
+    )
+    points = cursor.fetchall()
+    
+    for r, c, mat in points:
+        # Fetch all sweep measurements for this coordinate
+        cursor_params = conn.execute(
+            """SELECT v_set, v_reset, on_off_ratio, compliance_confidence
+               FROM files
+               WHERE protocol = ? AND row = ? AND col = ?""",
+            (protocol_name, r, c),
+        )
+        sweeps = cursor_params.fetchall()
+        
+        n_sweeps = len(sweeps)
+        if n_sweeps == 0:
+            continue
+            
+        n_v_set = sum(1 for sw in sweeps if sw[0] is not None)
+        n_v_reset = sum(1 for sw in sweeps if sw[1] is not None)
+        
+        # Calculate median ratios
+        ratios = [sw[2] for sw in sweeps if sw[2] is not None]
+        median_ratio = np.median(ratios) if ratios else 1.0
+        
+        # Calculate median v_set
+        v_sets = [sw[0] for sw in sweeps if sw[0] is not None]
+        median_v_set = np.median(v_sets) if v_sets else None
+        
+        # Calculate median v_reset
+        v_resets = [sw[1] for sw in sweeps if sw[1] is not None]
+        median_v_reset = np.median(v_resets) if v_resets else None
+        
+        mat_lower = mat.lower()
+        
+        # Base classification from material name patterns first (e.g. cu-c-pda is inherently volatile)
+        if "cu-c-pda" in mat_lower:
+            device_type = "volatile"
+            reasons = ["volatile material naming pattern"]
+        elif "ta-pda" in mat_lower:
+            device_type = "non-volatile"
+            reasons = ["stable Ta-PDA filament barrier"]
+        else:
+            device_type = "non-volatile"
+            reasons = []
+            
+        errors = ""
+        
+        # Shorted heuristic (extremely low ON/OFF ratio, high leakage, no SET detected)
+        if median_ratio < 1.2 and n_v_set == 0:
+            device_type = "short"
+            errors = "device shorted / stuck ON (high leakage)"
+        # Insulating heuristic (no switching events and near-unit ratio or extremely low currents)
+        elif n_v_set == 0 and n_v_reset == 0:
+            device_type = "insulating"
+            errors = "no switching detected (stuck OFF/open)"
+        else:
+            # Check for volatile behavior indicators
+            is_volatile = "cu-c-pda" in mat_lower
+            
+            if n_v_set > 0 and n_v_reset == 0:
+                is_volatile = True
+                reasons.append("spontaneous relaxation (no reset sweep required)")
+            if n_v_set > 0 and median_v_reset is not None and abs(median_v_reset) < 0.15:
+                is_volatile = True
+                reasons.append(f"extremely low relaxation reset voltage ({abs(median_v_reset):.3f} V)")
+                
+            if is_volatile:
+                device_type = "volatile"
+                errors = f"relaxation profile via {', '.join(reasons)}"
+            else:
+                device_type = "non-volatile"
+                errors = ""
+                
+        # Preserve user manual overrides if already present in the database!
+        # Manual overrides have priority over automated heuristics
+        check_cur = conn.execute(
+            "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+            (protocol_name, r, c)
+        )
+        existing = check_cur.fetchone()
+        if existing:
+            # If the cell already has a manual error remark or non-default type, keep it!
+            db_type, db_errors = existing[0], existing[1]
+            if db_type in ("resistor", "volatile", "non-volatile", "short", "insulating") and db_errors != "":
+                device_type = db_type
+                errors = db_errors
+            
+        upsert_material(
+            conn,
+            protocol=protocol_name,
+            row=r,
+            col=c,
+            material=mat,
+            device_type=device_type,
+            errors=errors,
+        )
 
 
 def query_files(
@@ -719,6 +866,31 @@ def populate_from_grammar(
             mtime=mtime,
         )
         files_inserted += 1
+
+        if row is not None and col is not None:
+            # Deduce a material-name default: cu-c-pda is volatile, ta-pda is non-volatile
+            mat_lower = material.lower()
+            default_type = "volatile" if "cu-c-pda" in mat_lower else "non-volatile"
+            
+            # Check if this cell already exists to preserve manual overrides!
+            cursor_check = conn.execute(
+                "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                (protocol, row, col)
+            )
+            existing = cursor_check.fetchone()
+            if existing:
+                db_type, db_errors = existing[0], existing[1]
+                if db_type in ("resistor", "volatile", "non-volatile", "short", "insulating") and db_errors != "":
+                    default_type = db_type
+            
+            upsert_material(
+                conn,
+                protocol=protocol,
+                row=row,
+                col=col,
+                material=material,
+                device_type=default_type,
+            )
 
     return {
         "files_found": files_found,

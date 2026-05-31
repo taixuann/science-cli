@@ -886,11 +886,63 @@ def cmd_info(args: argparse.Namespace) -> None:
 def cmd_add(args: argparse.Namespace) -> None:
     pdir = _resolve_protocol_dir(args)
 
+    device_type = getattr(args, "device_type", None)
+    error_msg = getattr(args, "error", None)
+
     if not args.file and not args.pattern:
-        cmd_add_fzf(args)
-        return
-        cmd_add_pattern(args)
-        return
+        if device_type or error_msg is not None:
+            if args.row is None or args.col is None:
+                print("Error: --row and --col are required to set cell device type.")
+                sys.exit(1)
+            
+            from science_cli.core.project import get_current_project_path
+            from science_cli.library.memristor.db import open_db, close_db, upsert_material
+            proj = get_current_project_path()
+            if not proj:
+                print("No project open. Use 'open -m project <path>' first.")
+                sys.exit(1)
+                
+            conn = open_db(proj)
+            try:
+                # Retrieve existing material if we can, else default
+                cursor = conn.execute(
+                    "SELECT material FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                    (pdir.name, args.row, args.col)
+                )
+                row_res = cursor.fetchone()
+                existing_material = row_res[0] if row_res else "unknown"
+                
+                existing_type = "non-volatile"
+                existing_errors = ""
+                if row_res:
+                    cursor2 = conn.execute(
+                        "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                        (pdir.name, args.row, args.col)
+                    )
+                    row2 = cursor2.fetchone()
+                    if row2:
+                        existing_type, existing_errors = row2[0], row2[1]
+                
+                final_type = device_type if device_type else existing_type
+                final_errors = error_msg if error_msg is not None else existing_errors
+                
+                upsert_material(
+                    conn,
+                    protocol=pdir.name,
+                    row=args.row,
+                    col=args.col,
+                    material=existing_material,
+                    device_type=final_type,
+                    errors=final_errors,
+                )
+                conn.commit()
+                print(f"Manually set cell r{args.row}c{args.col} properties: type={final_type}, errors='{final_errors}'")
+            finally:
+                close_db(conn)
+            return
+        else:
+            cmd_add_fzf(args)
+            return
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
     config = read_devices(pdir)
@@ -917,6 +969,53 @@ def cmd_add(args: argparse.Namespace) -> None:
     )
     pt.techniques[technique].files.append(fe)
     _add_material_tag(pt, args.file)
+
+    if device_type or error_msg is not None:
+        from science_cli.core.project import get_current_project_path
+        from science_cli.library.memristor.db import open_db, close_db, upsert_material
+        from science_cli.library.memristor.device import extract_material_batch
+        proj = get_current_project_path()
+        if proj:
+            conn = open_db(proj)
+            try:
+                mb = extract_material_batch(args.file)
+                mat_key = f"{mb[0]}({mb[1]})" if mb and mb[1] else (mb[0] if mb else "unknown")
+                
+                cursor = conn.execute(
+                    "SELECT material FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                    (pdir.name, args.row, args.col)
+                )
+                row_res = cursor.fetchone()
+                existing_material = row_res[0] if row_res else mat_key
+                
+                existing_type = "non-volatile"
+                existing_errors = ""
+                if row_res:
+                    cursor2 = conn.execute(
+                        "SELECT device_type, errors FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                        (pdir.name, args.row, args.col)
+                    )
+                    row2 = cursor2.fetchone()
+                    if row2:
+                        existing_type, existing_errors = row2[0], row2[1]
+                        
+                final_type = device_type if device_type else existing_type
+                final_errors = error_msg if error_msg is not None else existing_errors
+                
+                upsert_material(
+                    conn,
+                    protocol=pdir.name,
+                    row=args.row,
+                    col=args.col,
+                    material=existing_material,
+                    device_type=final_type,
+                    errors=final_errors,
+                )
+                conn.commit()
+                print(f"Manually set cell r{args.row}c{args.col} properties: type={final_type}, errors='{final_errors}'")
+            finally:
+                close_db(conn)
+
     write_devices(pdir, config)
     print(f"Added {args.file} -> r{args.row}c{args.col}/{technique}")
     set_last_step(pdir.name)
@@ -1722,6 +1821,12 @@ def _analyze_protocol(
         )
         analyzed += 1
 
+    try:
+        from science_cli.library.memristor.db import classify_and_populate_materials
+        classify_and_populate_materials(conn, protocol_name)
+    except Exception as exc:
+        print(f"  [WARN] Device classification failed for {protocol_name}: {exc}")
+
     return {
         "protocol": protocol_name,
         "total": len(target_files),
@@ -1942,6 +2047,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
         read_iv_csv,
     )
 
+    raw_current = getattr(args, "raw", False)
+
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
         sys.exit(1)
@@ -2077,10 +2184,10 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         if all_traces:
             m_safe = m_val.replace("/", "-").replace(" ", "_")
-            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.svg"
+            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.svg" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.svg"
             output_path = results_dir / output_filename
             try:
-                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi)
+                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current)
                 print(f"\n  ✓ Multi-cycle highlight plot generated: {output_path.name}")
                 print(f"  Highlighted cycles: {highlight_cycles}")
                 print(f"  Output path: {output_path}")
@@ -2138,11 +2245,11 @@ def cmd_plot(args: argparse.Namespace) -> None:
             all_traces.append((voltage, current, metadata))
 
         if all_traces:
-            output_path = results_dir / "overlay.svg"
+            output_path = results_dir / ("overlay_raw.svg" if raw_current else "overlay.svg")
             try:
-                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi)
+                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current)
                 plotted = len(all_traces)
-                print(f"  ✓ overlay.svg ({len(all_traces)} traces)")
+                print(f"  ✓ {output_path.name} ({len(all_traces)} traces)")
             except Exception as exc:
                 print(f"  Error generating overlay: {exc}")
                 errors += 1
@@ -2182,6 +2289,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
                 sweep_type=t["sweep_type"],
                 order=t["order"],
             )
+            if raw_current:
+                plot_filename = plot_filename.replace(".svg", "_raw.svg")
             title = build_plot_title(
                 order=t["order"],
                 sweep=fe.sweep,
@@ -2201,7 +2310,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
             output_path = results_dir / plot_filename
             try:
-                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi)
+                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi, raw_current=raw_current)
             except Exception as exc:
                 print(f"  Error plotting {fe.file}: {exc}")
                 errors += 1
@@ -2379,6 +2488,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--sweep-order", type=int, default=None)
     p_add.add_argument("--sweep-type", default=None)
     p_add.add_argument("--temperature", type=float, default=None)
+    p_add.add_argument("--device-type", default=None, choices=["volatile", "non-volatile", "resistor", "short", "insulating"], help="Manually set cell device type")
+    p_add.add_argument("--error", default=None, help="Manually set cell error or remark")
     p_add.add_argument("--step-dir", default="")
     p_add.add_argument(
         "--pattern", default="",
@@ -2444,6 +2555,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_plot.add_argument("--overwrite", action="store_true", help="Re-plot even if SVG already exists")
     p_plot.add_argument("--dpi", type=int, default=150, help="SVG resolution (default: 150)")
     p_plot.add_argument("--highlight", default="", help="Highlight specific cycles in color, others in grey (e.g. '1,5,10,50,100')")
+    p_plot.add_argument("--raw", action="store_true", help="Plot raw current on linear scale (no absolute value)")
     p_plot.set_defaults(func=cmd_plot)
 
 
