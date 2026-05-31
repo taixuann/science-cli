@@ -103,6 +103,20 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self.path = "/dashboard.html"
                 return super().do_GET()
 
+            # Serve NeuroPhase memristor diagnostics at /neurophase
+            if path == "/neurophase" or path.startswith("/neurophase/"):
+                neuro_dir = FRONTEND_DIR.parent / "neurophase"
+                if path == "/neurophase":
+                    self.path = "/index.html"
+                else:
+                    self.path = path[len("/neurophase"):]
+                old_dir = self.directory
+                self.directory = str(neuro_dir)
+                try:
+                    return super().do_GET()
+                finally:
+                    self.directory = old_dir
+
             # Serve files from project's protocol/ directory
             m = re.match(r"^/files/(.+)$", path)
             if m:
