@@ -94,8 +94,13 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_dashboard(m.group(1), metric, material)
                 return
 
-            if path == "/":
+            if path == "/" or path == "":
                 self.path = "/index.html"
+                return super().do_GET()
+
+            # Serve dashboard at /dashboard and /dashboard/{protocol}
+            if path == "/dashboard" or path.startswith("/dashboard/"):
+                self.path = "/dashboard.html"
                 return super().do_GET()
 
             # Serve files from project's protocol/ directory
