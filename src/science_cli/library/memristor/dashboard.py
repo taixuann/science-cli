@@ -3664,7 +3664,13 @@ def generate_main_dashboard(
                 proto_out = results_dir / "dashboard.html"
 
                 try:
-                    generate_dashboard(config, results_dir, proto_out)
+                    from science_cli.serve.api import get_dashboard_data
+                    dash_data = get_dashboard_data(project_dir, proto_name, metric="ratio")
+                    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    html = _build_neurophase_html(
+                        project_dir.name, proto_name, dash_data, date_str,
+                    )
+                    proto_out.write_text(html, encoding="utf-8")
                     dash_rel = "../" + str(proto_out.relative_to(project_dir))
                 except (ValueError, Exception) as exc:
                     logger.warning(f"Dashboard skip {proto_name}: {exc}")
@@ -3762,3 +3768,267 @@ def generate_main_dashboard(
     out.write_text(html, encoding="utf-8")
     logger.info(f"Main dashboard index written to {out}")
     return out
+
+
+def _build_neurophase_html(
+    project_name: str,
+    protocol_name: str,
+    d: dict,
+    date_str: str,
+) -> str:
+    agg = d.get("aggregate", {})
+    hm = d.get("heatmap") or {}
+    hists = d.get("histograms") or {}
+    dtypes = d.get("device_types") or {}
+    materials = d.get("materials") or []
+
+    rows = hm.get("rows", 6)
+    cols = hm.get("cols", 6)
+    n_measured = agg.get("measured_cells", 0)
+    n_total = agg.get("total_cells", rows * cols)
+    pct = agg.get("yield_pct", 0.0)
+    med_vset = agg.get("median_vset", 0.0)
+    med_vreset = agg.get("median_vreset", 0.0)
+    med_ratio = agg.get("median_ratio", 0.0)
+    n_iv = agg.get("total_iv_files", 0)
+
+    hist_vset = hists.get("vset", {})
+    hist_vreset = hists.get("vreset", {})
+
+    type_map = {
+        "non-volatile": {"label": "Stable Bipolar RRAM", "color": "#10b981", "short": "NV"},
+        "volatile": {"label": "Volatile Memristor", "color": "#f59e0b", "short": "V"},
+        "short": {"label": "Stuck-ON (Ohmic)", "color": "#ef4444", "short": "S"},
+        "insulating": {"label": "Stuck-OFF (Open)", "color": "#64748b", "short": "I"},
+        "resistor": {"label": "Ohmic Resistor", "color": "#a855f7", "short": "R"},
+    }
+
+    heatmap_data = hm.get("data", [])
+    meta = hm.get("metadata", [])
+    heatmap_json = str(heatmap_data).replace("None", "null").replace("'", '"')
+
+    hover_lines = []
+    for ri, row in enumerate(meta):
+        hrow = []
+        for ci, cell in enumerate(row):
+            if cell.get("status") == "Unmeasured":
+                hrow.append("No data")
+            else:
+                dt = cell.get("device_type", "non-volatile")
+                c = type_map.get(dt, {}).get("color", "#10b981")
+                hrow.append(
+                    f"<b>{cell['cell']}</b><br>"
+                    f"Material: {cell.get('material', '?')}<br>"
+                    f'Type: <span style="color:{c}">{dt}</span><br>'
+                    f"Vset: {cell.get('v_set', 0):.2f} V<br>"
+                    f"Vreset: {cell.get('v_reset', 0):.2f} V<br>"
+                    f"Ratio: {cell.get('ratio', 0):.1f}<br>"
+                    f"Files: {cell.get('n_files', 0)}"
+                )
+            hrow.append("")
+        hover_lines.append(hrow)
+    hover_json = str(hover_lines).replace("'", '"')
+
+    vset_bins = str(hist_vset.get("bins", []))
+    vset_counts = str(hist_vset.get("counts", []))
+    vreset_bins = str(hist_vreset.get("bins", []))
+    vreset_counts = str(hist_vreset.get("counts", []))
+
+    yield_color = "#10b981" if pct > 60 else ("#f59e0b" if pct > 30 else "#ef4444")
+
+    dtype_rows = ""
+    for dt_key, count in sorted(dtypes.items()):
+        info = type_map.get(dt_key, {})
+        color = info.get("color", "#64748b")
+        label = info.get("label", dt_key)
+        dtype_rows += f"""      <div class="type-row"><span><span class="type-dot" style="background:{color}"></span>{label}</span><span style="font-weight:700;color:var(--text-bright)">{count}</span></div>
+"""
+
+    mat_tags = ""
+    for m in materials:
+        mat_tags += f"""      <span class="material-tag">{m}</span>
+"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroPhase - {protocol_name}</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  *,*::before,*::after {{ box-sizing:border-box; margin:0; padding:0; }}
+  .dark {{ --bg:#0A0A0B; --bg-card:rgba(0,0,0,0.4); --border:rgba(255,255,255,0.08); --text:#cbd5e1; --text-dim:#64748b; --text-bright:#f1f5f9; }}
+  body {{ font-family:'SF Mono','Fira Code','Cascadia Code',ui-monospace,monospace; background:var(--bg); color:var(--text); padding:24px; }}
+  .kpi-row {{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }}
+  .kpi {{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 20px; min-width:130px; flex:1; }}
+  .kpi-label {{ font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-bottom:4px; }}
+  .kpi-value {{ font-size:22px; font-weight:700; }}
+  .kpi-value.green {{ color:#10b981; }} .kpi-value.amber {{ color:#f59e0b; }} .kpi-value.red {{ color:#ef4444; }}
+  .kpi-value.emerald {{ color:#10b981; }} .kpi-value.indigo {{ color:#6366f1; }}
+  .layout {{ display:flex; gap:20px; }}
+  .main-panel {{ flex:1; min-width:0; }}
+  .side-panel {{ width:280px; flex-shrink:0; }}
+  .card {{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }}
+  .card-title {{ font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim); margin-bottom:12px; font-weight:700; }}
+  .type-row {{ display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:11px; border-bottom:1px solid rgba(255,255,255,0.04); }}
+  .type-dot {{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:8px; }}
+  .stat-row {{ display:flex; justify-content:space-between; padding:6px 0; font-size:11px; border-bottom:1px solid rgba(255,255,255,0.04); }}
+  .stat-label {{ color:var(--text-dim); }} .stat-value {{ font-weight:600; color:var(--text-bright); }}
+  .chart-box {{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:16px; }}
+  .chart-box h3 {{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); margin-bottom:8px; }}
+  .header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }}
+  .header h1 {{ font-size:16px; font-weight:700; color:var(--text-bright); }}
+  .header .meta {{ font-size:10px; color:var(--text-dim); }}
+  .material-tag {{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:9px; background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2); margin:2px; }}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>NeuroPhase &mdash; {protocol_name}</h1>
+    <div class="meta">{project_name} &middot; {rows}x{cols} array &middot; {date_str}</div>
+  </div>
+  <div class="meta">{n_measured} measured / {n_total} cells &middot; {n_iv} IV files</div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Yield</div>
+    <div class="kpi-value" style="color:{yield_color}">{pct}<span style="font-size:12px;color:var(--text-dim)">%</span></div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Median Vset</div>
+    <div class="kpi-value indigo">{med_vset:.2f}<span style="font-size:12px;color:var(--text-dim)"> V</span></div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Median Vreset</div>
+    <div class="kpi-value emerald">{med_vreset:.2f}<span style="font-size:12px;color:var(--text-dim)"> V</span></div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">ON/OFF Ratio</div>
+    <div class="kpi-value emerald">{med_ratio}<span style="font-size:12px;color:var(--text-dim)">x</span></div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Total IV Files</div>
+    <div class="kpi-value" style="color:var(--text-bright)">{n_iv}</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="main-panel">
+    <div class="chart-box">
+      <h3>Crossbar Array &mdash; ON/OFF Ratio</h3>
+      <div id="heatmap"></div>
+    </div>
+    <div class="chart-box">
+      <h3>Threshold Distributions</h3>
+      <div id="histograms"></div>
+    </div>
+  </div>
+
+  <div class="side-panel">
+    <div class="card">
+      <div class="card-title">Device Type Breakdown</div>
+{dtype_rows}    </div>
+
+    <div class="card">
+      <div class="card-title">Materials</div>
+{mat_tags}    </div>
+
+    <div class="card">
+      <div class="card-title">Global Statistics</div>
+      <div class="stat-row"><span class="stat-label">Measured Cells</span><span class="stat-value">{n_measured}</span></div>
+      <div class="stat-row"><span class="stat-label">Yield</span><span class="stat-value" style="color:{yield_color}">{pct}%</span></div>
+      <div class="stat-row"><span class="stat-label">Median Vset</span><span class="stat-value">{med_vset:.2f} V</span></div>
+      <div class="stat-row"><span class="stat-label">Median Vreset</span><span class="stat-value">{med_vreset:.2f} V</span></div>
+      <div class="stat-row"><span class="stat-label">ON/OFF Ratio</span><span class="stat-value">{med_ratio}</span></div>
+      <div class="stat-row"><span class="stat-label">IV Files</span><span class="stat-value">{n_iv}</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  var heatmapData = {heatmap_json};
+  var hoverData = {hover_json};
+  var nRows = {rows};
+  var nCols = {cols};
+
+  var heatmapZ = [];
+  var heatmapText = [];
+  for (var r = 0; r < nRows; r++) {{
+    var zrow = [];
+    var trow = [];
+    for (var c = 0; c < nCols; c++) {{
+      zrow.push(heatmapData[r] && heatmapData[r][c] !== null ? heatmapData[r][c] : null);
+      trow.push(hoverData[r] && hoverData[r][c] || 'No data');
+    }}
+    heatmapZ.push(zrow);
+    heatmapText.push(trow);
+  }}
+
+  Plotly.newPlot('heatmap', [{{
+    z: heatmapZ,
+    type: 'heatmap',
+    hovertext: heatmapText,
+    hoverinfo: 'text',
+    hoverlabel: {{ bgcolor: '#1c1c1e', font: {{ size: 10, color: '#e2e8f0' }}, bordercolor: '#334155' }},
+    colorscale: [[0,'#0f172a'],[0.25,'#1e3a5f'],[0.5,'#0d9488'],[0.75,'#10b981'],[1,'#f59e0b']],
+    zsmooth: 'best',
+    showscale: true,
+    colorbar: {{ title: {{ text: 'ON/OFF Ratio', font: {{ size: 9 }} }}, tickfont: {{ size: 8 }} }},
+  }}], {{
+    autosize: true, margin: {{ l: 45, r: 25, t: 10, b: 55 }},
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: {{ color: '#64748b', family: 'ui-monospace, monospace' }},
+    xaxis: {{
+      title: {{ text: 'Column', font: {{ size: 11 }} }},
+      tickmode: 'array',
+      tickvals: Array.from({{length: nCols}}, (_, i) => i),
+      ticktext: Array.from({{length: nCols}}, (_, i) => 'C' + (i + 1)),
+      gridcolor: 'rgba(255,255,255,0.03)',
+    }},
+    yaxis: {{
+      title: {{ text: 'Row', font: {{ size: 11 }} }},
+      autorange: 'reversed',
+      tickmode: 'array',
+      tickvals: Array.from({{length: nRows}}, (_, i) => i),
+      ticktext: Array.from({{length: nRows}}, (_, i) => 'R' + (i + 1)),
+      gridcolor: 'rgba(255,255,255,0.03)',
+    }},
+    dragmode: 'select',
+  }}, {{ responsive: true }});
+
+  var vsetBins = {vset_bins};
+  var vsetCounts = {vset_counts};
+  var vresetBins = {vreset_bins};
+  var vresetCounts = {vreset_counts};
+
+  function makeHistogram(bins, counts) {{
+    if (!bins.length) return [];
+    var width = bins[1] - bins[0];
+    return bins.map(function(b, i) {{
+      return {{ x: b + width/2, y: counts[i] || 0 }};
+    }});
+  }}
+
+  var h1 = makeHistogram(vsetBins, vsetCounts);
+  var h2 = makeHistogram(vresetBins, vresetCounts);
+
+  Plotly.newPlot('histograms', [
+    {{ x: h1.map(function(p) {{ return p.x; }}), y: h1.map(function(p) {{ return p.y; }}), type: 'bar', name: 'Vset', marker: {{ color: '#10b981', opacity: 0.7 }} }},
+    {{ x: h2.map(function(p) {{ return p.x; }}), y: h2.map(function(p) {{ return p.y; }}), type: 'bar', name: 'Vreset', marker: {{ color: '#6366f1', opacity: 0.7 }} }},
+  ], {{
+    barmode: 'overlay', autosize: true, margin: {{ l: 50, r: 20, t: 10, b: 50 }},
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: {{ color: '#64748b', family: 'ui-monospace, monospace' }},
+    xaxis: {{ title: {{ text: 'Threshold Voltage (V)', font: {{ size: 11 }} }}, gridcolor: 'rgba(255,255,255,0.03)' }},
+    yaxis: {{ title: {{ text: 'Count', font: {{ size: 11 }} }}, gridcolor: 'rgba(255,255,255,0.03)' }},
+    legend: {{ font: {{ size: 9 }}, bgcolor: 'transparent' }},
+  }}, {{ responsive: true }});
+}})();
+</script>
+</body>
+</html>"""
