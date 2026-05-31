@@ -108,16 +108,36 @@ class MatrixPoint:
     def position(self) -> tuple[int, int]:
         return (self.row, self.col)
 
+    def _resolve_tech_key(self, tech: str) -> str:
+        """Map standard short tech names to database/protocol technique names."""
+        if tech == "iv" and "iv" not in self.techniques and "iv-sweep" in self.techniques:
+            return "iv-sweep"
+        if tech == "endurance" and "endurance" not in self.techniques and "mem-endurance" in self.techniques:
+            return "mem-endurance"
+        if tech == "retention" and "retention" not in self.techniques and "mem-retention" in self.techniques:
+            return "mem-retention"
+        if tech == "iv-sweep" and "iv-sweep" not in self.techniques and "iv" in self.techniques:
+            return "iv"
+        if tech == "mem-endurance" and "mem-endurance" not in self.techniques and "endurance" in self.techniques:
+            return "endurance"
+        if tech == "mem-retention" and "mem-retention" not in self.techniques and "retention" in self.techniques:
+            return "retention"
+        return tech
+
     def has_technique(self, tech: str) -> bool:
-        return tech in self.techniques and len(self.techniques[tech].files) > 0
+        resolved = self._resolve_tech_key(tech)
+        return resolved in self.techniques and len(self.techniques[resolved].files) > 0
 
     def get_files(self, tech: str) -> list[FileEntry]:
-        tg = self.techniques.get(tech)
+        resolved = self._resolve_tech_key(tech)
+        tg = self.techniques.get(resolved)
         return tg.files if tg else []
 
     def get_primary_file(self, tech: str) -> Optional[FileEntry]:
-        tg = self.techniques.get(tech)
+        resolved = self._resolve_tech_key(tech)
+        tg = self.techniques.get(resolved)
         return tg.primary_file if tg else None
+
 
     @property
     def technique_names(self) -> list[str]:
@@ -175,10 +195,19 @@ class DeviceConfig:
 
     def resolve_file_path(self, protocol_dir: Path, technique: str, filename: str) -> Path:
         """Resolve a data file to its physical path via the steps mapping."""
-        step = self.steps.get(technique)
+        tech_resolved = technique
+        if technique == "iv" and "iv" not in self.steps and "iv-sweep" in self.steps:
+            tech_resolved = "iv-sweep"
+        elif technique == "endurance" and "endurance" not in self.steps and "mem-endurance" in self.steps:
+            tech_resolved = "mem-endurance"
+        elif technique == "retention" and "retention" not in self.steps and "mem-retention" in self.steps:
+            tech_resolved = "mem-retention"
+
+        step = self.steps.get(tech_resolved)
         if step:
             return protocol_dir / step / filename
         return protocol_dir / filename
+
 
     def get_point(self, row: int, col: int) -> Optional[MatrixPoint]:
         for p in self.points:

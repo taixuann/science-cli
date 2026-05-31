@@ -833,6 +833,52 @@ def cmd_info(args: argparse.Namespace) -> None:
                 parts.append(f"({fe.temperature} K)")
             print("    " + " ".join(parts))
 
+    # ── Switching statistics from SQLite ──
+    from science_cli.core.project import get_current_project_path
+    from science_cli.library.memristor.db import close_db, open_db
+    import numpy as np
+
+    proj = get_current_project_path()
+    if proj:
+        conn = None
+        try:
+            conn = open_db(proj)
+            db_rows = conn.execute(
+                "SELECT filename, v_set, v_reset, i_set, i_reset, on_off_ratio, compliance_confidence "
+                "FROM files WHERE protocol = ? AND row = ? AND col = ? AND technique_id = 'iv-sweep'",
+                (pdir.name, args.row, args.col)
+            ).fetchall()
+            
+            if db_rows:
+                v_sets = [r["v_set"] for r in db_rows if r["v_set"] is not None]
+                v_resets = [r["v_reset"] for r in db_rows if r["v_reset"] is not None]
+                ratios = [r["on_off_ratio"] for r in db_rows if r["on_off_ratio"] is not None]
+                
+                print("\n  Switching Statistics (from SQLite):")
+                print(f"    Total cycles: {len(db_rows)}")
+                
+                # Volatile memristors might have only SET or only RESET. We report yields distinctly.
+                set_yield = (len(v_sets) / len(db_rows)) * 100.0 if db_rows else 0.0
+                reset_yield = (len(v_resets) / len(db_rows)) * 100.0 if db_rows else 0.0
+                
+                print(f"    SET events detected:   {len(v_sets)}/{len(db_rows)} ({set_yield:.1f}% yield)")
+                print(f"    RESET events detected: {len(v_resets)}/{len(db_rows)} ({reset_yield:.1f}% yield)")
+                
+                if v_sets:
+                    print(f"    V_set   = {np.mean(v_sets):.3f} ± {np.std(v_sets):.3f} V (range: {np.min(v_sets):.2f} to {np.max(v_sets):.2f} V)")
+                if v_resets:
+                    print(f"    V_reset = {np.mean(v_resets):.3f} ± {np.std(v_resets):.3f} V (range: {np.min(v_resets):.2f} to {np.max(v_resets):.2f} V)")
+                if ratios:
+                    med_ratio = np.median(ratios)
+                    print(f"    Median ON/OFF Ratio:   {med_ratio:.2e}")
+        except Exception as e:
+            # Silently skip if DB query fails or table is uninitialized
+            pass
+        finally:
+            if conn:
+                close_db(conn)
+
+
 
 # ── Command: add ────────────────────────────────────────────
 
@@ -1857,10 +1903,34 @@ def cmd_check(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def parse_cycles_list(cycle_str: str) -> list[int]:
+    """Parse a string like '1,2,5,10-15,50' into a list of 1-based cycle indices."""
+    if not cycle_str:
+        return []
+    cycles = set()
+    for part in cycle_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            try:
+                start, end = part.split("-")
+                cycles.update(range(int(start), int(end) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                cycles.add(int(part))
+            except ValueError:
+                pass
+    return sorted(list(cycles))
+
+
 # ── Command: plot ───────────────────────────────────────────
 
 
 def cmd_plot(args: argparse.Namespace) -> None:
+
     """Batch-generate IV curve SVGs from devices.yaml."""
     from science_cli.library.memristor.plotting import (
         build_fzf_line,
@@ -1929,6 +1999,97 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
     overwrite = getattr(args, "overwrite", False)
     dpi = getattr(args, "dpi", 150)
+
+    # ── Multi-Cycle Highlight Plot Mode ──
+    highlight_str = getattr(args, "highlight", "") or ""
+    if highlight_str:
+        from science_cli.library.memristor.plotting import generate_iv_highlighted_svg
+        highlight_cycles = parse_cycles_list(highlight_str)
+        if not highlight_cycles:
+            print("Invalid highlight cycles specified.")
+            return
+
+        unique_cells = sorted(list(set((t["row"], t["col"], t["material_key"]) for t in targets)))
+        if not unique_cells:
+            print("No cells found for plotting.")
+            return
+
+        if len(unique_cells) > 1:
+            from science_cli.core.fzf_utils import fzf_select
+            cell_displays = [f"r{row}c{col} ({mat})" for row, col, mat in unique_cells]
+            selected = fzf_select(cell_displays, prompt="Select cell for multi-cycle highlighted plot >", multi=False)
+            if not selected:
+                print("No cell selected.")
+                return
+            selected_display = selected[0]
+            # Parse back
+            selected_cell = None
+            for r, c, m in unique_cells:
+                if f"r{r}c{c} ({m})" == selected_display:
+                    selected_cell = (r, c, m)
+                    break
+            if not selected_cell:
+                return
+            r_val, c_val, m_val = selected_cell
+        else:
+            r_val, c_val, m_val = unique_cells[0]
+
+        # Filter targets to the selected cell
+        cell_targets = [t for t in targets if t["row"] == r_val and t["col"] == c_val]
+        # Sort targets by cycle order
+        cell_targets.sort(key=lambda x: x["order"])
+
+        # Fetch SQLite analysis cache to populate Vset/Vreset in the legend
+        from science_cli.core.project import get_current_project_path
+        from science_cli.library.memristor.db import open_db, query_files, close_db
+        proj = get_current_project_path()
+        analysis_map = {}
+        if proj:
+            try:
+                conn = open_db(proj)
+                db_files = query_files(conn, protocol=pdir.name)
+                close_db(conn)
+                analysis_map = {f["filename"]: f for f in db_files}
+            except Exception as e:
+                print(f"Warning: could not query analysis results from database: {e}")
+
+        all_traces = []
+        for t in cell_targets:
+            fe = t["file_entry"]
+            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            try:
+                voltage, current, info = read_iv_csv(str(filepath))
+            except Exception as exc:
+                print(f"  Error reading {fe.file}: {exc}")
+                continue
+
+            db_record = analysis_map.get(fe.file, {})
+            metadata = {
+                "row": t["row"],
+                "col": t["col"],
+                "material": t["material_key"],
+                "order": t["order"],
+                "sweep_type": fe.sweep_type or "uc",
+                "v_set": db_record.get("v_set"),
+                "v_reset": db_record.get("v_reset"),
+            }
+            all_traces.append((voltage, current, metadata))
+
+        if all_traces:
+            m_safe = m_val.replace("/", "-").replace(" ", "_")
+            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.svg"
+            output_path = results_dir / output_filename
+            try:
+                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi)
+                print(f"\n  ✓ Multi-cycle highlight plot generated: {output_path.name}")
+                print(f"  Highlighted cycles: {highlight_cycles}")
+                print(f"  Output path: {output_path}")
+            except Exception as exc:
+                print(f"  Error generating multi-cycle highlight plot: {exc}")
+        else:
+            print("No trace data successfully read.")
+        return
+
 
     # Determine overlay vs individual mode
     overlay_mode = getattr(args, "overlay", False)
@@ -2224,7 +2385,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")
     p_plot.add_argument("--overwrite", action="store_true", help="Re-plot even if SVG already exists")
     p_plot.add_argument("--dpi", type=int, default=150, help="SVG resolution (default: 150)")
+    p_plot.add_argument("--highlight", default="", help="Highlight specific cycles in color, others in grey (e.g. '1,5,10,50,100')")
     p_plot.set_defaults(func=cmd_plot)
+
 
     p_dash = sub.add_parser("dashboard", help="Generate per-protocol dashboards + main index page")
     p_dash.add_argument("--step-dir", default="")
