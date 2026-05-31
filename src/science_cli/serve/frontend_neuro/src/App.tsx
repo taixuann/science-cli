@@ -543,6 +543,34 @@ export default function App() {
                 <option value="onOff">ON/OFF state ratio</option>
               </select>
             </div>
+
+            <div className="space-y-3 pt-4 border-t border-slate-200/80 dark:border-white/5 mt-auto">
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Device Listing ({cellsList.length})</span>
+              <div className={'max-h-[180px] overflow-y-auto space-y-1 p-1 rounded-xl border transition-colors custom-scrollbar ' + (theme === 'light' ? 'bg-[#f2f2f7] border-slate-200' : 'bg-black/30 border-zinc-800/85')}>
+                {cellsList.map((cell) => {
+                  const isActive = selectedCell.row === cell.row && selectedCell.col === cell.col;
+                  const dotColor = cell.classificationColor === "emerald" ? "bg-emerald-400" : cell.classificationColor === "amber" ? "bg-amber-400" : cell.classificationColor === "red" ? "bg-red-500" : cell.classificationColor === "purple" ? "bg-purple-400" : "bg-slate-400";
+                  return (
+                    <button key={'dev-' + cell.row + '-' + cell.col}
+                      onClick={() => setSelectedCell({ row: cell.row, col: cell.col })}
+                      className={'w-full flex items-center justify-between text-left p-1.5 rounded-lg transition-all cursor-pointer text-[9px] font-mono ' + (isActive
+                        ? (theme === 'light' ? 'bg-indigo-100/80 ring-1 ring-indigo-300 text-slate-800' : 'bg-indigo-500/15 ring-1 ring-indigo-500/30 text-white')
+                        : (theme === 'light' ? 'hover:bg-slate-200/60 text-slate-600' : 'hover:bg-white/5 text-slate-400'))}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={'w-1.5 h-1.5 rounded-full shrink-0 ' + dotColor}></span>
+                        <span className="font-semibold">R{cell.row + 1}C{cell.col + 1}</span>
+                        <span className={'truncate max-w-[50px] ' + (theme === 'light' ? 'text-slate-400' : 'text-slate-500')}>{cell.cellType.includes("Stable") ? "NV" : cell.cellType.includes("Volatile") ? "V" : cell.cellType.includes("Ohmic") ? "R" : cell.cellType.includes("Stuck-ON") ? "S" : cell.cellType.includes("Stuck-OFF") ? "I" : "?"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[8px]">{cell.vSet.toFixed(2)}V</span>
+                        <span className={'text-[8px] ' + (cell.hScore > 60 ? 'text-emerald-400' : cell.hScore > 30 ? 'text-amber-400' : 'text-red-400')}>{cell.hScore.toFixed(0)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </aside>
 
