@@ -3880,11 +3880,14 @@ def _build_neurophase_html(
   .header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }}
   .header h1 {{ font-size:16px; font-weight:700; color:var(--text-bright); }}
   .header .meta {{ font-size:10px; color:var(--text-dim); }}
+  .back-link {{ font-size:10px; color:var(--text-dim); text-decoration:none; display:inline-flex; align-items:center; gap:4px; margin-bottom:12px; }}
+  .back-link:hover {{ color:#10b981; }}
   .material-tag {{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:9px; background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2); margin:2px; }}
 </style>
 </head>
 <body>
 
+<a class="back-link" href="../../../../results/dashboard.html">&larr; Back to Protocol Index</a>
 <div class="header">
   <div>
     <h1>NeuroPhase &mdash; {protocol_name}</h1>
