@@ -798,14 +798,12 @@ def get_dashboard_data(
             for m in materials_rows:
                 type_lookup[(m["row"], m["col"])] = m.get("device_type", "non-volatile")
 
-            # Build material lookup: (row, col) -> material
+            # Build material lookup: (row, col) -> material (from materials table, not files)
             mat_lookup: dict[tuple[int, int], str] = {}
-            for f in files:
-                r, c = f.get("row"), f.get("col")
+            for m in materials_rows:
+                r, c = m.get("row"), m.get("col")
                 if r is not None and c is not None:
-                    mat = f.get("material", "unknown")
-                    if (r, c) not in mat_lookup:
-                        mat_lookup[(r, c)] = mat
+                    mat_lookup[(r, c)] = m.get("material", "unknown")
 
             # Build per-cell analysis from files
             cell_data: dict[tuple[int, int], dict] = {}
