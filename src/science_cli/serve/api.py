@@ -759,10 +759,12 @@ def get_dashboard_data(
     db_path = project_path / f"{project_path.name}.db"
     has_sqlite = db_path.exists()
 
+    rows, cols = 6, 6
+
     # Default response structure
     result = {
         "protocol": protocol_name,
-        "device": {"rows": 6, "cols": 6, "label": protocol_name},
+        "device": {"rows": rows, "cols": cols, "label": protocol_name},
         "aggregate": {
             "total_cells": 0, "measured_cells": 0,
             "switching_count": 0, "yield_pct": 0.0,
@@ -774,8 +776,6 @@ def get_dashboard_data(
         "heatmap": None,
         "histograms": {"vset": {"bins": [], "counts": []}, "vreset": {"bins": [], "counts": []}, "ratio": {"bins": [], "counts": []}},
     }
-
-    rows, cols = 6, 6
 
     if has_sqlite:
         try:
@@ -792,6 +792,24 @@ def get_dashboard_data(
             materials_rows = query_materials(conn, protocol=protocol_name)
 
             close_db(conn)
+
+            # Compute dynamic grid dimensions from actual data
+            all_rs: set[int] = set()
+            all_cs: set[int] = set()
+            for f in files:
+                r, c = f.get("row"), f.get("col")
+                if r is not None:
+                    all_rs.add(r)
+                if c is not None:
+                    all_cs.add(c)
+            for m in materials_rows:
+                r, c = m.get("row"), m.get("col")
+                if r is not None:
+                    all_rs.add(r)
+                if c is not None:
+                    all_cs.add(c)
+            rows = (max(all_rs) + 1) if all_rs else rows
+            cols = (max(all_cs) + 1) if all_cs else cols
 
             # Build device_type lookup: (row, col) -> type
             type_lookup: dict[tuple[int, int], str] = {}
