@@ -1,9 +1,15 @@
 # Standard blocklist (repo is isolated — no allowlist needed)
 # Only deny what should be excluded
 
-# Ignore AGENTS.md, RULES.md, SCHEMA.md files, generated PLAN files at root level, test artifacts
+# Ignore all hidden files/dirs except .github (CI)
+.*
+!.github/
+!.gitignore
+
+# Ignore AGENTS.md, RULES.md, SCHEMA.md, issues.md, generated PLAN files, test artifacts
 AGENTS.md
 **/AGENTS.md
+issues.md
 RULES.md
 **/RULES.md
 SCHEMA.md
