@@ -8,7 +8,7 @@ feature / refactor
 
 ## Status
 - **Created**: 2026-05-31
-- **Status**: draft
+- **Status**: completed
 - **Branch**: dev
 
 ## Objective
@@ -104,11 +104,11 @@ Create a helper function `parse_cycles_list(cycle_str: str) -> list[int]` that p
 ---
 
 ## Progress
-- [ ] PLAN created
-- [ ] User approved
-- [ ] IMPLEMENT: Highlighted multi-cycle plotting
-- [ ] IMPLEMENT: Cycle range parser helper
-- [ ] IMPLEMENT: Plot command CLI integrations
-- [ ] IMPLEMENT: Info command switching statistics
-- [ ] TEST: Run unit tests & verify manually
-- [ ] COMMIT done
+- [x] PLAN created
+- [x] User approved
+- [x] IMPLEMENT: Highlighted multi-cycle plotting
+- [x] IMPLEMENT: Cycle range parser helper
+- [x] IMPLEMENT: Plot command CLI integrations
+- [x] IMPLEMENT: Info command switching statistics
+- [x] TEST: Run unit tests & verify manually
+- [x] COMMIT done
