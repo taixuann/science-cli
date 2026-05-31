@@ -1,8 +1,8 @@
 """sci serve — Python stdlib HTTP server for the AI Studio frontend."""
 
-from science_cli import __version__
-
 from __future__ import annotations
+
+from science_cli import __version__
 
 import http.server
 import json
