@@ -94,6 +94,7 @@ export default function App() {
   const [heatmapSnapshotType, setHeatmapSnapshotType] = useState<string>("V_reset");
   const [editedParams, setEditedParams] = useState<Record<string, { vSet?: number; vReset?: number }>>({});
   const [loaded, setLoaded] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState<string>("All");
 
   const [loading, setLoading] = useState(true);
   const [protocolNames, setProtocolNames] = useState<string[]>([]);
@@ -176,6 +177,19 @@ export default function App() {
       cellText: isL ? "text-slate-700" : "text-slate-400",
     };
   }, [theme]);
+
+  const availableMaterials = useMemo(() => {
+    const mats = dashboardData?.materials || [];
+    return ["All", ...mats];
+  }, [dashboardData]);
+
+  const filteredCellsList = useMemo(() => {
+    if (selectedMaterial === "All") return cellsList;
+    return cellsList.filter(c => {
+      const meta = dashboardData?.heatmap?.metadata?.[c.row]?.[c.col];
+      return meta && meta.material === selectedMaterial;
+    });
+  }, [cellsList, selectedMaterial, dashboardData]);
 
   const cellsList: CellData[] = useMemo(() => {
     const meta = dashboardData?.heatmap?.metadata;
@@ -349,7 +363,17 @@ export default function App() {
     dragmode: 'pan',
   }), [currentScale, t, cycleFilter]);
 
-  const heatmapZ = useMemo(() => dashboardData?.heatmap?.data || [], [dashboardData]);
+  const heatmapZ = useMemo(() => {
+    const data = dashboardData?.heatmap?.data || [];
+    const meta = dashboardData?.heatmap?.metadata || [];
+    if (selectedMaterial === "All" || !meta.length) return data;
+    return data.map((row, r) => row.map((val, c) => {
+      const cell = meta[r]?.[c];
+      if (!cell || cell.material !== selectedMaterial) return null;
+      return val;
+    }));
+  }, [dashboardData, selectedMaterial]);
+
   const heatmapHover = useMemo(() => {
     const meta = dashboardData?.heatmap?.metadata || [];
     return meta.map(row => row.map(cell => {
@@ -501,6 +525,29 @@ export default function App() {
             </div>
           </section>
 
+          <section>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3 font-mono">Material Filter</label>
+            <div className="relative group">
+              <select
+                value={selectedMaterial}
+                onChange={(e) => setSelectedMaterial(e.target.value)}
+                className={'w-full p-2.5 text-xs font-semibold rounded-lg border shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer appearance-none pr-8 ' + (theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-white/5 border-white/10 text-white')}
+              >
+                {availableMaterials.map((mat) => (
+                  <option key={mat} value={mat} className={theme === 'light' ? 'bg-slate-50 text-slate-800' : 'bg-[#0c0c0d] text-slate-300'}>{mat}</option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-3 pointer-events-none text-slate-400 text-[10px]">&#9660;</div>
+            </div>
+            <div className={'p-3 rounded-b-lg border-x border-b ' + (theme === 'light' ? 'bg-slate-200/40 border-slate-300' : 'bg-emerald-500/5 border-white/5')}>
+              <p className="text-[9px] text-slate-400 font-mono">
+                {selectedMaterial === "All"
+                  ? "Showing all " + cellsList.length + " devices"
+                  : "Showing " + filteredCellsList.length + " / " + cellsList.length + " devices"}
+              </p>
+            </div>
+          </section>
+
           <nav className="space-y-1">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3 font-mono">Protocol Tree</label>
             <div className="space-y-1.5 pl-1">
@@ -517,7 +564,7 @@ export default function App() {
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Heatmap Explorer ({nCols}x{nRows})</span>
             <div className={'grid gap-1 p-1.5 rounded-xl border transition-colors ' + (theme === 'light' ? 'bg-[#f2f2f7] border-slate-205 shadow-3xs' : 'bg-black/30 border-zinc-800/85')}
               style={{ gridTemplateColumns: 'repeat(' + nCols + ', minmax(0, 1fr))' }}>
-              {cellsList.map((cell) => {
+              {filteredCellsList.map((cell) => {
                 const isSelected = selectedCell.row === cell.row && selectedCell.col === cell.col;
                 let bg = "bg-emerald-500";
                 if (cell.cellType.includes("Stuck-ON")) bg = "bg-red-500 shadow-[0_0_3.5px_#ef4444]";
@@ -544,9 +591,9 @@ export default function App() {
             </div>
 
             <div className="space-y-3 pt-4 border-t border-slate-200/80 dark:border-white/5 mt-auto">
-              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Device Listing ({cellsList.length})</span>
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Device Listing ({filteredCellsList.length})</span>
               <div className={'max-h-[180px] overflow-y-auto space-y-1 p-1 rounded-xl border transition-colors custom-scrollbar ' + (theme === 'light' ? 'bg-[#f2f2f7] border-slate-200' : 'bg-black/30 border-zinc-800/85')}>
-                {cellsList.map((cell) => {
+                {filteredCellsList.map((cell) => {
                   const isActive = selectedCell.row === cell.row && selectedCell.col === cell.col;
                   const dotColor = cell.classificationColor === "emerald" ? "bg-emerald-400" : cell.classificationColor === "amber" ? "bg-amber-400" : cell.classificationColor === "red" ? "bg-red-500" : cell.classificationColor === "purple" ? "bg-purple-400" : "bg-slate-400";
                   return (
@@ -645,12 +692,12 @@ export default function App() {
                         {currentScale === "log" ? "Log10 |I| (A) vs. V_appl (V)" : currentScale === "linear_abs" ? "Absolute |I| (A) vs. V_appl (V)" : "Signed I (A) vs. V_appl (V)"}
                       </span>
                       <span className="text-[9px] text-emerald-500 font-semibold font-mono uppercase mt-0.5">
-                        Mode: {currentScale === "log" ? "Log Magnitude" : currentScale === "linear_abs" ? "Abs Linear" : "Signed Linear"}
+                        Mode: {currentScale === "log" ? "Log" : currentScale === "linear_abs" ? "Absolute Current" : "Raw"}
                       </span>
                     </div>
                     <div className={'flex p-0.5 rounded-lg border text-[9px] font-medium transition-colors ' + (theme === 'light' ? 'bg-slate-100 border-slate-200/80 shadow-3xs' : 'bg-black/40 border-white/10')}>
                       {["log","linear_abs","linear_signed"].map(scale => {
-                        const labels: Record<string,string> = {log:"LOG",linear_abs:"|I|",linear_signed:"I (Signed)"};
+                          const labels: Record<string,string> = {log:"Log",linear_abs:"Absolute Current",linear_signed:"Raw"};
                         return (
                           <button key={scale} onClick={() => setCurrentScale(scale as any)}
                             className={'px-3 py-1 rounded-md text-[9px] font-medium cursor-pointer transition-all duration-200 ' + (currentScale === scale ? (theme === 'light' ? 'bg-white text-slate-800 border border-slate-200/60 shadow-2xs font-semibold' : 'bg-white/10 text-white border border-white/15 font-semibold') : (theme === 'light' ? 'text-slate-500 hover:text-slate-800 border border-transparent' : 'text-slate-400 hover:text-slate-250 border border-transparent'))}
@@ -692,7 +739,7 @@ export default function App() {
                         hovertext: heatmapHover,
                         hoverinfo: 'text',
                         hoverlabel: { bgcolor: '#1c1c1e', font: { size: 10, color: '#e2e8f0' }, bordercolor: '#334155' },
-                        colorscale: [[0,'#0f172a'],[0.25,'#1e3a5f'],[0.5,'#0d9488'],[0.75,'#10b981'],[1,'#f59e0b']],
+                        colorscale: [[0,'#1e1b4b'],[0.15,'#312e81'],[0.3,'#0369a1'],[0.45,'#0d9488'],[0.6,'#65a30d'],[0.75,'#ca8a04'],[0.9,'#ea580c'],[1,'#dc2626']],
                         zsmooth: 'best',
                         showscale: true,
                         colorbar: { title: { text: heatmapSnapshotType, font: { size: 9 } }, tickfont: { size: 8 } },
