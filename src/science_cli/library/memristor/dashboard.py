@@ -3857,7 +3857,6 @@ def _build_neurophase_html(
                     f"Ratio: {cell.get('ratio', 0):.1f}<br>"
                     f"Files: {cell.get('n_files', 0)}"
                 )
-            hrow.append("")
         hover_lines.append(hrow)
     hover_json = str(hover_lines).replace("'", '"')
 
