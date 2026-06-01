@@ -2136,25 +2136,77 @@ def cmd_plot(args: argparse.Namespace) -> None:
         sys.exit(1)
     config = read_devices(pdir)
 
-    # ── Issue 1: Auto-sync if no sweep metadata found ──
-    total_sweep = sum(1 for _, fe in config.get_all_files("iv") if fe.sweep)
-    if total_sweep == 0:
-        print("No sweep metadata found. Running sync first...")
-        sync_devices(pdir)
-        config = read_devices(pdir)
-        if config is None:
-            print("Failed to re-read device configuration after sync.")
-            sys.exit(1)
-
-    # Collect all IV files
     row_filter = args.row if getattr(args, "row", None) is not None else None
     col_filter = args.col if getattr(args, "col", None) is not None else None
     material_filter = getattr(args, "material", "") or ""
 
-    targets = collect_iv_files(config, material=material_filter, row=row_filter, col=col_filter)
+    # ── Collect targets from devices.yaml (if it exists) ──
+    targets: list[dict] = []
+    if config is not None:
+        total_sweep = sum(1 for _, fe in config.get_all_files("iv") if fe.sweep)
+        if total_sweep == 0:
+            print("No sweep metadata found. Running sync first...")
+            sync_devices(pdir)
+            config = read_devices(pdir)
+
+        if config is not None:
+            targets = collect_iv_files(config, material=material_filter, row=row_filter, col=col_filter)
 
     if not targets:
-        print("No IV files found in devices.yaml.")
+        # ── SQLite fallback: query files table directly ──
+        from science_cli.core.project import get_current_project_path
+        from science_cli.library.memristor.db import close_db, open_db
+        from science_cli.library.memristor.device import extract_material_batch
+
+        proj = get_current_project_path()
+        if proj:
+            db_path = proj / f"{proj.name}.db"
+            if db_path.exists():
+                conn = open_db(proj)
+                try:
+                    db_files = conn.execute(
+                        """SELECT protocol, step, filename, material, row, col
+                           FROM files
+                           WHERE protocol = ? AND technique_id LIKE 'iv%'
+                             AND row IS NOT NULL AND col IS NOT NULL
+                           ORDER BY row, col, filename""",
+                        (pdir.name,),
+                    ).fetchall()
+                finally:
+                    close_db(conn)
+
+                if db_files:
+                    print(f"  Found {len(db_files)} file(s) in SQLite. Using them for plotting.")
+                    for r in db_files:
+                        step = r["step"]
+                        filename = r["filename"]
+                        material = r["material"]
+                        db_row, db_col = r["row"], r["col"]
+
+                        if material_filter and material != material_filter:
+                            continue
+                        if row_filter is not None and db_row != row_filter:
+                            continue
+                        if col_filter is not None and db_col != col_filter:
+                            continue
+
+                        mb = extract_material_batch(filename)
+                        mat_key = f"{mb[0]}({mb[1]})" if mb and mb[1] else (mb[0] if mb else "unknown")
+                        if material_filter and mat_key != material_filter:
+                            continue
+
+                        targets.append({
+                            "file_entry": FileEntry(file=filename),
+                            "material_key": mat_key,
+                            "order": len(targets) + 1,
+                            "sweep_type": "uc",
+                            "row": db_row,
+                            "col": db_col,
+                            "step": step,
+                        })
+
+    if not targets:
+        print("No IV files found in devices.yaml or SQLite database.")
         return
 
     # Default to fzf when no specific filter flags given
@@ -2182,7 +2234,10 @@ def cmd_plot(args: argparse.Namespace) -> None:
         targets = [display_map[line] for line in selected_lines if line in display_map]
 
     # Resolve results directory
-    step_dir_name = config.steps.get("iv", "4_iv-characterization")
+    if targets and "step" in targets[0]:
+        step_dir_name = targets[0]["step"]
+    else:
+        step_dir_name = config.steps.get("iv", "4_iv-characterization") if config else "4_iv"
     results_dir = pdir / step_dir_name / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2244,7 +2299,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
         all_traces = []
         for t in cell_targets:
             fe = t["file_entry"]
-            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            step_ov = t.get("step")
+            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:
@@ -2265,7 +2321,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         if all_traces:
             m_safe = m_val.replace("/", "-").replace(" ", "_")
-            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.svg" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.svg"
+            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.pdf" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.pdf"
             output_path = results_dir / output_filename
             try:
                 generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current)
@@ -2301,7 +2357,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
         all_traces = []
         for t in targets:
             fe = t["file_entry"]
-            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            step_ov = t.get("step")
+            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:
@@ -2346,7 +2403,8 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         for t in targets:
             fe = t["file_entry"]
-            filepath = config.resolve_file_path(pdir, "iv", fe.file)
+            step_ov = t.get("step")
+            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:

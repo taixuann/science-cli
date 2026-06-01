@@ -193,8 +193,10 @@ class DeviceConfig:
     protocol_name: str = ""
     _meta: dict = field(default_factory=dict)
 
-    def resolve_file_path(self, protocol_dir: Path, technique: str, filename: str) -> Path:
+    def resolve_file_path(self, protocol_dir: Path, technique: str, filename: str, step_override: str | None = None) -> Path:
         """Resolve a data file to its physical path via the steps mapping."""
+        if step_override:
+            return protocol_dir / step_override / filename
         tech_resolved = technique
         if technique == "iv" and "iv" not in self.steps and "iv-sweep" in self.steps:
             tech_resolved = "iv-sweep"

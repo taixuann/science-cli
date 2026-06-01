@@ -27,6 +27,8 @@ sci = "science_cli.app:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["science_cli*"]
+exclude = ["results", "protocol"]
 
 [tool.setuptools.package-data]
 "science_cli.theme.themes" = ["*.yaml"]
