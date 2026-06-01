@@ -474,7 +474,7 @@ def build_plot_filename(
 ) -> str:
     """Build a plot filename following the naming convention.
 
-    Format: ``iv_r{row}c{col}_{material}_{sweep_type}_{order:02d}.svg``
+    Format: ``iv_r{row}c{col}_{material}_{sweep_type}_{order:02d}.pdf``
 
     Args:
         row: Matrix row index (0-based).
@@ -484,12 +484,12 @@ def build_plot_filename(
         order: Sequence number.
 
     Returns:
-        Filename string, e.g. ``"iv_r0c0_Ta-PDAc-ITO(1)_f_01.svg"``.
+        Filename string, e.g. ``"iv_r0c0_Ta-PDAc-ITO(1)_f_01.pdf"``.
     """
     # Sanitize material key for filename (already alphanumeric with hyphens/parens)
     material_safe = material_key.replace("/", "-").replace(" ", "_")
     st = sweep_type or "uc"
-    return f"iv_r{row}c{col}_{material_safe}_{st}_{order:02d}.svg"
+    return f"iv_r{row}c{col}_{material_safe}_{st}_{order:02d}.pdf"
 
 
 def build_plot_title(
@@ -1057,7 +1057,9 @@ def generate_iv_svg(
                 handle.set_linewidth(0.8)
 
         fig.tight_layout()
-        fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
+        ext = Path(output_path).suffix.lower()
+        fmt = "pdf" if ext == ".pdf" else "svg"
+        fig.savefig(str(output_path), format=fmt, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
 
     logger.info(f"Generated plot: {output_path}")
@@ -1134,7 +1136,9 @@ def generate_iv_overlay_svg(
             ax.legend(handles, labels, frameon=False, fontsize=8, loc="upper left")
 
         fig.tight_layout()
-        fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
+        ext = Path(output_path).suffix.lower()
+        fmt = "pdf" if ext == ".pdf" else "svg"
+        fig.savefig(str(output_path), format=fmt, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
 
     logger.info(f"Generated overlay plot: {output_path}")
@@ -1345,6 +1349,7 @@ def collect_iv_files(
             if order is None:
                 order = 0
 
+        step_name = config.steps.get("iv") or config.steps.get("iv-sweep") or ""
         results.append({
             "point": pt,
             "file_entry": fe,
@@ -1353,6 +1358,7 @@ def collect_iv_files(
             "sweep_type": fe.sweep_type or "uc",
             "row": pt.row,
             "col": pt.col,
+            "step": step_name,
         })
 
     # Sort by row, col, material, order

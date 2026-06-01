@@ -58,6 +58,28 @@ logger = logging.getLogger(__name__)
 # ── Protocol directory resolution ───────────────────────────
 
 
+def _resolve_file(pdir: Path, config, fe, step_ov: str | None, target: dict) -> Path:
+    """Resolve file path with fallback when config or pdir is wrong."""
+    if config is not None:
+        filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
+    else:
+        filepath = (pdir / step_ov / fe.file) if step_ov else (pdir / fe.file)
+    if not filepath.exists() and step_ov:
+        from science_cli.core.project import get_current_project_path as _gpp
+        _proj = _gpp()
+        if _proj:
+            _pdir = _proj / "protocol" / target.get("protocol", "")
+            if _pdir.exists():
+                filepath = _pdir / step_ov / fe.file
+            else:
+                for _pd in sorted(_proj.glob("protocol/*")):
+                    _candidate = _pd / step_ov / fe.file
+                    if _candidate.exists():
+                        filepath = _candidate
+                        break
+    return filepath
+
+
 def _resolve_protocol_dir(args) -> Path:
     """Resolve protocol directory: --step -> session -> cwd().
 
@@ -98,6 +120,10 @@ def _resolve_protocol_dir(args) -> Path:
             pdir = proj / "protocol" / last_proto
             if pdir.exists():
                 return pdir.resolve()
+            # Search for matching protocol dir by name prefix
+            for _pd in sorted(proj.glob("protocol/*")):
+                if last_proto.replace("_", "").replace("-", "") in _pd.name.replace("_", "").replace("-", ""):
+                    return _pd.resolve()
 
     return Path.cwd()
 
@@ -2156,9 +2182,12 @@ def cmd_plot(args: argparse.Namespace) -> None:
         # ── SQLite fallback: query files table directly ──
         from science_cli.core.project import get_current_project_path
         from science_cli.library.memristor.db import close_db, open_db
+        from science_cli.core.session import load_session
 
         proj = get_current_project_path()
         if proj:
+            sess = load_session()
+            proto_name = sess.get("last_protocol", pdir.name)
             db_path = proj / f"{proj.name}.db"
             if db_path.exists():
                 conn = open_db(proj)
@@ -2169,13 +2198,20 @@ def cmd_plot(args: argparse.Namespace) -> None:
                            WHERE protocol = ? AND technique_id LIKE 'iv%'
                              AND row IS NOT NULL AND col IS NOT NULL
                            ORDER BY row, col, filename""",
-                        (pdir.name,),
+                        (proto_name,),
                     ).fetchall()
                 finally:
                     close_db(conn)
 
                 if db_files:
                     print(f"  Found {len(db_files)} file(s) in SQLite. Using them for plotting.")
+                    # Resolve protocol directory from DB results (session may be stale)
+                    db_protocol = db_files[0]["protocol"] if db_files else proto_name
+                    if proj:
+                        actual_pdir = proj / "protocol" / db_protocol
+                        if actual_pdir.exists():
+                            pdir = actual_pdir.resolve()
+                            config = read_devices(pdir)
                     for r in db_files:
                         step = r["step"]
                         filename = r["filename"]
@@ -2198,6 +2234,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
                             "row": db_row,
                             "col": db_col,
                             "step": step,
+                            "protocol": r["protocol"],
                         })
 
     if not targets:
@@ -2229,10 +2266,10 @@ def cmd_plot(args: argparse.Namespace) -> None:
         targets = [display_map[line] for line in selected_lines if line in display_map]
 
     # Resolve results directory
-    if targets and "step" in targets[0]:
+    if targets and "step" in targets[0] and targets[0]["step"]:
         step_dir_name = targets[0]["step"]
     else:
-        step_dir_name = config.steps.get("iv", "4_iv-characterization") if config else "4_iv"
+        step_dir_name = config.steps.get("iv") or config.steps.get("iv-sweep") or "4_iv" if config else "4_iv"
     results_dir = pdir / step_dir_name / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2295,7 +2332,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         for t in cell_targets:
             fe = t["file_entry"]
             step_ov = t.get("step")
-            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
+            filepath = _resolve_file(pdir, config, fe, step_ov, t)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:
@@ -2353,7 +2390,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         for t in targets:
             fe = t["file_entry"]
             step_ov = t.get("step")
-            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
+            filepath = _resolve_file(pdir, config, fe, step_ov, t)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:
@@ -2377,7 +2414,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
             all_traces.append((voltage, current, metadata))
 
         if all_traces:
-            output_path = results_dir / ("overlay_raw.svg" if raw_current else "overlay.svg")
+            output_path = results_dir / ("overlay_raw.pdf" if raw_current else "overlay.pdf")
             try:
                 generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current)
                 plotted = len(all_traces)
@@ -2399,7 +2436,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         for t in targets:
             fe = t["file_entry"]
             step_ov = t.get("step")
-            filepath = config.resolve_file_path(pdir, "iv", fe.file, step_override=step_ov)
+            filepath = _resolve_file(pdir, config, fe, step_ov, t)
             try:
                 voltage, current, info = read_iv_csv(str(filepath))
             except Exception as exc:
