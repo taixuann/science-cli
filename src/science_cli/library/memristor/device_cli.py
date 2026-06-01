@@ -2156,7 +2156,6 @@ def cmd_plot(args: argparse.Namespace) -> None:
         # ── SQLite fallback: query files table directly ──
         from science_cli.core.project import get_current_project_path
         from science_cli.library.memristor.db import close_db, open_db
-        from science_cli.library.memristor.device import extract_material_batch
 
         proj = get_current_project_path()
         if proj:
@@ -2183,16 +2182,12 @@ def cmd_plot(args: argparse.Namespace) -> None:
                         material = r["material"]
                         db_row, db_col = r["row"], r["col"]
 
-                        if material_filter and material != material_filter:
+                        mat_key = material
+                        if material_filter and mat_key != material_filter:
                             continue
                         if row_filter is not None and db_row != row_filter:
                             continue
                         if col_filter is not None and db_col != col_filter:
-                            continue
-
-                        mb = extract_material_batch(filename)
-                        mat_key = f"{mb[0]}({mb[1]})" if mb and mb[1] else (mb[0] if mb else "unknown")
-                        if material_filter and mat_key != material_filter:
                             continue
 
                         targets.append({
