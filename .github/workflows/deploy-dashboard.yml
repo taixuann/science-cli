@@ -1,0 +1,43 @@
+# .github/workflows/deploy-dashboard.yml
+name: Deploy Dashboard
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, dev]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install project dependencies
+        run: |
+          pip install -e .
+          # Ensure any build tools are installed
+
+      - name: Build standalone dashboard
+        run: |
+          ./bin/sci memristor dashboard --standalone --output results/dashboard_standalone.html
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p results/deploy
+          cp results/dashboard_standalone.html results/deploy/index.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: results/deploy
+          keep_files: false
+          enable_jekyll: false
+          force_orphan: true
