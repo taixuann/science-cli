@@ -1,0 +1,16 @@
+# OS-specific files
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Python caches (if any analysis scripts are run here)
+__pycache__/
+*.py[cod]
+
+# Temporary, swap, and editor files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak

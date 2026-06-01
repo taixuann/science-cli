@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>res_internship — Dashboard Index</title>
+<style>
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-card: #1c2333;
+  --border: #30363d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg-primary); color: var(--text-primary); padding: 32px 24px;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+.subtitle { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+.summary-bar {
+  display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap;
+}
+.summary-card {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 24px; flex: 1; min-width: 140px;
+}
+.summary-card .num { font-size: 28px; font-weight: 700; }
+.summary-card .label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+.protocol-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.protocol-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; transition: border-color 0.2s;
+  position: relative;
+}
+.protocol-card:hover { border-color: var(--accent); }
+.protocol-card a {
+  color: var(--accent); text-decoration: none; font-size: 16px; font-weight: 600;
+}
+.protocol-card a:hover { color: var(--accent-hover); }
+.protocol-card .stats { margin-top: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+.protocol-card .stat { font-size: 13px; }
+.protocol-card .stat .val { font-weight: 600; }
+.protocol-card .stat .lbl { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+.protocol-card .status-ok { color: var(--green); }
+.protocol-card .status-warn { color: var(--orange); }
+.protocol-card .status-none { color: var(--text-secondary); }
+.protocol-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+.protocol-card .actions a {
+  font-size: 12px; padding: 4px 12px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-secondary);
+  color: var(--text-secondary); text-decoration: none;
+}
+.protocol-card .actions a:hover { border-color: var(--accent); color: var(--accent); }
+.materials { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mat-item {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 4px 8px; border-radius: 4px;
+  background: var(--bg-secondary); color: var(--accent); text-decoration: none;
+}
+.mat-item:hover { background: var(--bg-card); color: var(--accent-hover); }
+.mat-item-plain { color: var(--text-secondary); cursor: default; }
+.mat-item-plain:hover { background: var(--bg-secondary); }
+.mat-stat { font-size: 11px; color: var(--text-secondary); }
+.footer { margin-top: 32px; color: var(--text-secondary); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>res_internship</h1>
+  <div class="subtitle">Generated 2026-05-18 08:18 &middot; 3 protocol(s), 3 with dashboard</div>
+  <div class="summary-bar">
+    <div class="summary-card"><div class="num">3</div><div class="label">Protocols</div></div>
+    <div class="summary-card"><div class="num">1825</div><div class="label">Files</div></div>
+    <div class="summary-card"><div class="num">10</div><div class="label">Materials</div></div>
+    <div class="summary-card"><div class="num">64</div><div class="label">Cells</div></div>
+    <div class="summary-card"><div class="num">1458</div><div class="label">Analyzed</div></div>
+  </div>
+  <div class="protocol-grid">
+    <div class="protocol-card">
+  <a href="../protocol/4_ta-pda-ito(c_q_n)/4_iv-characterization/results/dashboard.html">4_ta-pda-ito(c_q_n)</a>
+  <div class="stats">
+    <div class="stat"><span class="val">23</span> <span class="lbl">files</span></div>
+    <div class="stat"><span class="val">3</span> <span class="lbl">materials</span></div>
+    <div class="stat"><span class="val">10</span> <span class="lbl">cells</span></div>
+    <div class="stat status-ok"><span class="val">100.0%</span> <span class="lbl">yield</span></div>
+  </div>
+  <div class="materials"><a href="../protocol/4_ta-pda-ito(c_q_n)/4_iv-characterization/results/dashboard.html" class="mat-item">ta-pda(c1)-ito<span class="mat-stat">4 files Vₛₑₜ=0.237V</span></a><a href="../protocol/4_ta-pda-ito(c_q_n)/4_iv-characterization/results/dashboard.html" class="mat-item">ta-pda(n1)-ito<span class="mat-stat">17 files Vₛₑₜ=0.488V</span></a><a href="../protocol/4_ta-pda-ito(c_q_n)/4_iv-characterization/results/dashboard.html" class="mat-item">ta-pda(n2)-ito<span class="mat-stat">2 files Vₛₑₜ=1.475V</span></a></div>
+  <div class="actions"><a href="../protocol/4_ta-pda-ito(c_q_n)/4_iv-characterization/results/dashboard.html">Open Dashboard</a></div>
+</div>
+<div class="protocol-card">
+  <a href="../protocol/5.1_cu-c-pda(q2)_cu-c-pda(kcl)/4_iv-sweep/results/dashboard.html">5.1_cu-c-pda(q2)_cu-c-pda(kcl)</a>
+  <div class="stats">
+    <div class="stat"><span class="val">348</span> <span class="lbl">files</span></div>
+    <div class="stat"><span class="val">2</span> <span class="lbl">materials</span></div>
+    <div class="stat"><span class="val">27</span> <span class="lbl">cells</span></div>
+    <div class="stat status-ok"><span class="val">94.8%</span> <span class="lbl">yield</span></div>
+  </div>
+  <div class="materials"><a href="../protocol/5.1_cu-c-pda(q2)_cu-c-pda(kcl)/4_iv-sweep/results/dashboard.html" class="mat-item">cu-c-pda(kcl)-ito<span class="mat-stat">154 files Vₛₑₜ=1.117V</span></a><a href="../protocol/5.1_cu-c-pda(q2)_cu-c-pda(kcl)/4_iv-sweep/results/dashboard.html" class="mat-item">cu-c-pda(q2)-ito<span class="mat-stat">194 files Vₛₑₜ=1.491V</span></a></div>
+  <div class="actions"><a href="../protocol/5.1_cu-c-pda(q2)_cu-c-pda(kcl)/4_iv-sweep/results/dashboard.html">Open Dashboard</a></div>
+</div>
+<div class="protocol-card">
+  <a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html">5_cu-c_ta-cu</a>
+  <div class="stats">
+    <div class="stat"><span class="val">1454</span> <span class="lbl">files</span></div>
+    <div class="stat"><span class="val">5</span> <span class="lbl">materials</span></div>
+    <div class="stat"><span class="val">27</span> <span class="lbl">cells</span></div>
+    <div class="stat status-ok"><span class="val">76.0%</span> <span class="lbl">yield</span></div>
+  </div>
+  <div class="materials"><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html" class="mat-item">cu-c-pda(c)-ito<span class="mat-stat">286 files Vₛₑₜ=0.287V</span></a><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html" class="mat-item">cu-c-pda(n)-ito<span class="mat-stat">58 files Vₛₑₜ=0.459V</span></a><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html" class="mat-item">cu-c-pda(q)-ito<span class="mat-stat">708 files Vₛₑₜ=0.399V</span></a><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html" class="mat-item">cu-ta-pda(n)-ito<span class="mat-stat">291 files Vₛₑₜ=0.307V</span></a><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html" class="mat-item">cu-ta-pda(q)-ito<span class="mat-stat">111 files Vₛₑₜ=0.296V</span></a></div>
+  <div class="actions"><a href="../protocol/5_cu-c_ta-cu/4_iv/results/dashboard.html">Open Dashboard</a></div>
+</div>
+  </div>
+  <div class="footer">science-cli &middot; 2026-05-18 08:18</div>
+</div>
+</body>
+</html>
