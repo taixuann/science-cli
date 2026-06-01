@@ -24,9 +24,12 @@ jobs:
           pip install -e .
           # Ensure any build tools are installed
 
+      - name: Make CLI scripts executable
+        run: chmod +x ./bin/sci ./bin/s-cli
+
       - name: Build standalone dashboard
         run: |
-          ./bin/sci memristor dashboard --standalone --output results/dashboard_standalone.html
+          python -m science_cli.cli.memristor dashboard --standalone --output results/dashboard_standalone.html
 
       - name: Prepare deployment directory
         run: |
