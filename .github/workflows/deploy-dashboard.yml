@@ -29,7 +29,7 @@ jobs:
 
       - name: Build standalone dashboard
         run: |
-          ./bin/sci memristor dashboard --standalone --output results/dashboard_standalone.html
+          ./bin/sci memristor dashboard --standalone --project . --output results/dashboard_standalone.html
 
       - name: Prepare deployment directory
         run: |

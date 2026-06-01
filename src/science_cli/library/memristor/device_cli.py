@@ -2412,27 +2412,47 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Generate per-protocol dashboards + main index page (default)."""
+    from pathlib import Path
     from science_cli.core.project import get_current_project_path
     from science_cli.library.memristor.dashboard import (
         generate_main_dashboard,
         generate_standalone_dashboard,
     )
 
-    sess = load_session()
-    last_proj = sess.get("last_project", "")
-    if not last_proj:
-        print("No project open. Use 'open -m project <path>' first.")
-        sys.exit(1)
-
-    project_dir = get_current_project_path()
-    if not project_dir or not project_dir.exists():
-        print(f"Project directory not found: {project_dir}")
-        sys.exit(1)
+    # Allow --project to override session (useful in CI)
+    project_override = getattr(args, "project", "") or ""
+    if project_override:
+        project_dir = Path(project_override).resolve()
+        if not project_dir.exists():
+            print(f"Project path not found: {project_dir}")
+            sys.exit(1)
+    else:
+        sess = load_session()
+        last_proj = sess.get("last_project", "")
+        if not last_proj:
+            print("No project open. Use 'open -m project <path>' or --project.")
+            sys.exit(1)
+        project_dir = get_current_project_path()
+        if not project_dir or not project_dir.exists():
+            print(f"Project directory not found: {project_dir}")
+            sys.exit(1)
 
     force = getattr(args, "force", False)
     proto_filter = getattr(args, "protocol", "") or ""
     standalone = getattr(args, "standalone", False)
     deploy = getattr(args, "deploy", False)
+    repo_url = getattr(args, "repo", "") or ""
+    branch = getattr(args, "branch", "") or "gh-pages"
+
+    if deploy and not repo_url:
+        try:
+            import subprocess
+            res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                repo_url = res.stdout.strip()
+                print(f"Automatically detected git remote origin URL: {repo_url}")
+        except Exception as e:
+            print(f"Could not automatically detect git remote origin URL: {e}")
 
     # Ensure results dir exists
     results_dir = project_dir / "results"
@@ -2447,16 +2467,63 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
             
             if deploy:
                 import subprocess
-                print(f"Deploying {out.name} to GitHub...")
-                try:
-                    subprocess.run(["git", "add", str(out)], check=True)
-                    subprocess.run(["git", "commit", "-m", "deploy: update standalone dashboard [compiled]"], check=True)
-                    print("Pushing commits to git origin...")
-                    subprocess.run(["git", "push"], check=True)
-                    print("Successfully pushed and deployed to GitHub origin!")
-                except Exception as g_err:
-                    print(f"Git deployment failed: {g_err}")
+                if repo_url:
+                    import shutil
+                    deploy_dir = results_dir / "deploy"
+                    deploy_dir.mkdir(parents=True, exist_ok=True)
                     
+                    # Copy standalone dashboard to index.html for hosting at root of GitHub Pages
+                    index_path = deploy_dir / "index.html"
+                    shutil.copy(str(out), str(index_path))
+                    print(f"Prepared index.html at {index_path} for GitHub Pages deployment.")
+                    
+                    try:
+                        # 1. Initialize git if not already present
+                        if not (deploy_dir / ".git").exists():
+                            subprocess.run(["git", "init", "-b", branch], cwd=deploy_dir, check=True)
+                        else:
+                            subprocess.run(["git", "checkout", "-B", branch], cwd=deploy_dir, check=True)
+                        
+                        # 2. Add or update remote origin
+                        has_remote = False
+                        try:
+                            res = subprocess.run(["git", "remote", "get-url", "origin"], cwd=deploy_dir, capture_output=True, text=True)
+                            if res.returncode == 0:
+                                has_remote = True
+                        except Exception:
+                            pass
+                            
+                        if has_remote:
+                            subprocess.run(["git", "remote", "set-url", "origin", repo_url], cwd=deploy_dir, check=True)
+                        else:
+                            subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=deploy_dir, check=True)
+                            
+                        # 3. Stage, commit, and force-push
+                        subprocess.run(["git", "add", "index.html"], cwd=deploy_dir, check=True)
+                        
+                        # Check if there is anything to commit
+                        status_res = subprocess.run(["git", "status", "--porcelain"], cwd=deploy_dir, capture_output=True, text=True)
+                        if status_res.stdout.strip():
+                            subprocess.run(["git", "commit", "-m", "deploy: update standalone dashboard [compiled]"], cwd=deploy_dir, check=True)
+                        else:
+                            print("No changes to commit in deploy folder.")
+                            
+                        print(f"Pushing compiled standalone dashboard to remote origin {repo_url} on branch '{branch}'...")
+                        subprocess.run(["git", "push", "-u", "origin", branch, "--force"], cwd=deploy_dir, check=True)
+                        print(f"Successfully deployed standalone dashboard online on GitHub at: {repo_url} [{branch}]!")
+                    except Exception as g_err:
+                        print(f"Git deployment to remote failed: {g_err}")
+                else:
+                    print(f"Deploying {out.name} to local repository GitHub...")
+                    try:
+                        subprocess.run(["git", "add", str(out)], check=True)
+                        subprocess.run(["git", "commit", "-m", "deploy: update standalone dashboard [compiled]"], check=True)
+                        print("Pushing commits to git origin...")
+                        subprocess.run(["git", "push"], check=True)
+                        print("Successfully pushed and deployed to GitHub origin!")
+                    except Exception as g_err:
+                        print(f"Git deployment failed: {g_err}")
+                        
             if getattr(args, "open", False):
                 import subprocess
                 subprocess.run(["open", str(out)], check=False)
@@ -2478,17 +2545,72 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
         
         if deploy:
             import subprocess
-            print(f"Deploying {out.name} to GitHub...")
-            try:
-                subprocess.run(["git", "add", str(out)], check=True)
-                # Stage the rest of the results folder as well
-                subprocess.run(["git", "add", str(project_dir / "results")], check=True)
-                subprocess.run(["git", "commit", "-m", "deploy: update results dashboard [compiled]"], check=True)
-                print("Pushing commits to git origin...")
-                subprocess.run(["git", "push"], check=True)
-                print("Successfully pushed and deployed to GitHub origin!")
-            except Exception as g_err:
-                print(f"Git deployment failed: {g_err}")
+            if repo_url:
+                import shutil
+                deploy_dir = results_dir / "deploy"
+                deploy_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Copy results/dashboard.html to index.html for remote deployment
+                shutil.copy(str(out), str(deploy_dir / "index.html"))
+                
+                # Copy entire results directory contents to deploy folder
+                for item in results_dir.iterdir():
+                    if item.name == "deploy":
+                        continue
+                    dest = deploy_dir / item.name
+                    if item.is_dir():
+                        if dest.exists():
+                            shutil.rmtree(dest)
+                        shutil.copytree(item, dest)
+                    else:
+                        shutil.copy2(item, dest)
+                        
+                print(f"Prepared results folder at {deploy_dir} for GitHub Pages deployment.")
+                
+                try:
+                    if not (deploy_dir / ".git").exists():
+                        subprocess.run(["git", "init", "-b", branch], cwd=deploy_dir, check=True)
+                    else:
+                        subprocess.run(["git", "checkout", "-B", branch], cwd=deploy_dir, check=True)
+                        
+                    has_remote = False
+                    try:
+                        res = subprocess.run(["git", "remote", "get-url", "origin"], cwd=deploy_dir, capture_output=True, text=True)
+                        if res.returncode == 0:
+                            has_remote = True
+                    except Exception:
+                        pass
+                        
+                    if has_remote:
+                        subprocess.run(["git", "remote", "set-url", "origin", repo_url], cwd=deploy_dir, check=True)
+                    else:
+                        subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=deploy_dir, check=True)
+                        
+                    subprocess.run(["git", "add", "."], cwd=deploy_dir, check=True)
+                    
+                    status_res = subprocess.run(["git", "status", "--porcelain"], cwd=deploy_dir, capture_output=True, text=True)
+                    if status_res.stdout.strip():
+                        subprocess.run(["git", "commit", "-m", "deploy: update results dashboard [compiled]"], cwd=deploy_dir, check=True)
+                    else:
+                        print("No changes to commit in deploy folder.")
+                        
+                    print(f"Pushing compiled results dashboard to remote origin {repo_url} on branch '{branch}'...")
+                    subprocess.run(["git", "push", "-u", "origin", branch, "--force"], cwd=deploy_dir, check=True)
+                    print(f"Successfully deployed results dashboard online on GitHub at: {repo_url} [{branch}]!")
+                except Exception as g_err:
+                    print(f"Git deployment to remote failed: {g_err}")
+            else:
+                print(f"Deploying {out.name} to local repository GitHub...")
+                try:
+                    subprocess.run(["git", "add", str(out)], check=True)
+                    # Stage the rest of the results folder as well
+                    subprocess.run(["git", "add", str(project_dir / "results")], check=True)
+                    subprocess.run(["git", "commit", "-m", "deploy: update results dashboard [compiled]"], check=True)
+                    print("Pushing commits to git origin...")
+                    subprocess.run(["git", "push"], check=True)
+                    print("Successfully pushed and deployed to GitHub origin!")
+                except Exception as g_err:
+                    print(f"Git deployment failed: {g_err}")
                 
         if getattr(args, "open", False):
             import subprocess
@@ -2683,12 +2805,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_dash.add_argument("--open", action="store_true", help="Open in browser after generation")
     p_dash.add_argument("--pt", "--protocol", default="", dest="protocol",
                         help="Single protocol name (e.g. 'batch-demo')")
+    p_dash.add_argument("--project", default="",
+                        help="Project directory path (for CI/automation; overrides session)")
     p_dash.add_argument("--all", action="store_true", help="(default) Build all protocols — kept for compatibility")
     p_dash.add_argument("--force", action="store_true", help="Force full re-generation, ignore cache")
     p_dash.add_argument("--standalone", action="store_true",
                         help="Generate a self-contained static HTML build of the dashboard")
     p_dash.add_argument("--deploy", action="store_true",
                         help="Stages, commits, and pushes the compiled dashboard directly to GitHub")
+    p_dash.add_argument("--repo", default="",
+                        help="Git repository URL to deploy the dashboard to (for isolating and publishing online)")
+    p_dash.add_argument("--branch", default="gh-pages",
+                        help="Git branch to push deployment to (default: gh-pages)")
     p_dash.set_defaults(func=cmd_dashboard)
 
     p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")

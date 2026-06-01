@@ -1,4 +1,4 @@
 """Compatibility entry point for `python -m src`."""
-from science_cli.__main__ import main
+from science_cli.app import run_cli
 
-main()
+run_cli()
