@@ -1259,7 +1259,9 @@ def generate_iv_highlighted_svg(
             ax.legend(handles, labels, frameon=False, fontsize=6, loc="upper left")
 
         fig.tight_layout()
-        fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")
+        ext = Path(output_path).suffix.lower()
+        fmt = "pdf" if ext == ".pdf" else "svg"
+        fig.savefig(str(output_path), format=fmt, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
 
     logger.info(f"Generated multi-cycle highlight plot: {output_path}")
