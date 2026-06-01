@@ -2413,7 +2413,10 @@ def cmd_plot(args: argparse.Namespace) -> None:
 def cmd_dashboard(args: argparse.Namespace) -> None:
     """Generate per-protocol dashboards + main index page (default)."""
     from science_cli.core.project import get_current_project_path
-    from science_cli.library.memristor.dashboard import generate_main_dashboard
+    from science_cli.library.memristor.dashboard import (
+        generate_main_dashboard,
+        generate_standalone_dashboard,
+    )
 
     sess = load_session()
     last_proj = sess.get("last_project", "")
@@ -2428,10 +2431,39 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
 
     force = getattr(args, "force", False)
     proto_filter = getattr(args, "protocol", "") or ""
+    standalone = getattr(args, "standalone", False)
+    deploy = getattr(args, "deploy", False)
 
     # Ensure results dir exists
     results_dir = project_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
+
+    if standalone:
+        output_path = Path(args.output) if args.output else results_dir / "dashboard_standalone.html"
+        print("Generating standalone React HTML dashboard with embedded SQLite database cache...")
+        try:
+            out = generate_standalone_dashboard(project_dir, output_path)
+            print(f"Standalone dashboard generated successfully at: {out}")
+            
+            if deploy:
+                import subprocess
+                print(f"Deploying {out.name} to GitHub...")
+                try:
+                    subprocess.run(["git", "add", str(out)], check=True)
+                    subprocess.run(["git", "commit", "-m", "deploy: update standalone dashboard [compiled]"], check=True)
+                    print("Pushing commits to git origin...")
+                    subprocess.run(["git", "push"], check=True)
+                    print("Successfully pushed and deployed to GitHub origin!")
+                except Exception as g_err:
+                    print(f"Git deployment failed: {g_err}")
+                    
+            if getattr(args, "open", False):
+                import subprocess
+                subprocess.run(["open", str(out)], check=False)
+        except Exception as exc:
+            print(f"Error generating standalone dashboard: {exc}")
+            sys.exit(1)
+        return
 
     output_path = Path(args.output) if args.output else results_dir / "dashboard.html"
 
@@ -2443,6 +2475,21 @@ def cmd_dashboard(args: argparse.Namespace) -> None:
             force=force,
         )
         print(f"Main dashboard generated: {out}")
+        
+        if deploy:
+            import subprocess
+            print(f"Deploying {out.name} to GitHub...")
+            try:
+                subprocess.run(["git", "add", str(out)], check=True)
+                # Stage the rest of the results folder as well
+                subprocess.run(["git", "add", str(project_dir / "results")], check=True)
+                subprocess.run(["git", "commit", "-m", "deploy: update results dashboard [compiled]"], check=True)
+                print("Pushing commits to git origin...")
+                subprocess.run(["git", "push"], check=True)
+                print("Successfully pushed and deployed to GitHub origin!")
+            except Exception as g_err:
+                print(f"Git deployment failed: {g_err}")
+                
         if getattr(args, "open", False):
             import subprocess
             subprocess.run(["open", str(out)], check=False)
@@ -2638,6 +2685,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Single protocol name (e.g. 'batch-demo')")
     p_dash.add_argument("--all", action="store_true", help="(default) Build all protocols — kept for compatibility")
     p_dash.add_argument("--force", action="store_true", help="Force full re-generation, ignore cache")
+    p_dash.add_argument("--standalone", action="store_true",
+                        help="Generate a self-contained static HTML build of the dashboard")
+    p_dash.add_argument("--deploy", action="store_true",
+                        help="Stages, commits, and pushes the compiled dashboard directly to GitHub")
     p_dash.set_defaults(func=cmd_dashboard)
 
     p_analyze = sub.add_parser("analyze", help="Read CSVs and compute Vset/Vreset/ratio (depends on sync)")

@@ -4107,3 +4107,165 @@ def _build_neurophase_html(
 </script>
 </body>
 </html>"""
+
+
+def generate_standalone_dashboard(project_dir: Path, output_path: Path) -> Path:
+    """Generate a single standalone React-based HTML dashboard with embedded project data."""
+    import json
+    import re
+    from science_cli.serve.api import get_dashboard_data, get_device_iv
+    from science_cli.library.memristor.db import open_db, close_db
+    
+    # 1. Fetch `/api/project` data
+    protocols_list = []
+    # Discover protocols from 'protocol' directory
+    proto_dir = project_dir / "protocol"
+    dirs = sorted(proto_dir.iterdir()) if proto_dir.exists() else []
+    
+    conn = open_db(project_dir)
+    try:
+        for pdir in dirs:
+            if not pdir.is_dir():
+                continue
+            pname = pdir.name
+            # Check if there are materials in SQLite for this protocol
+            has_mats = False
+            try:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM files WHERE protocol = ? AND material IS NOT NULL",
+                    (pname,)
+                ).fetchone()
+                has_mats = row[0] > 0 if row else False
+            except Exception:
+                pass
+            protocols_list.append({"name": pname, "has_materials": has_mats})
+    finally:
+        if conn:
+            close_db(conn)
+            
+    project_payload = {"protocols": protocols_list}
+    
+    # 2. Fetch all `/api/protocol/{protocol_name}/dashboard` data
+    dashboards_payload = {}
+    iv_payload = {}
+    
+    for proto in protocols_list:
+        pname = proto["name"]
+        dashboards_payload[pname] = {}
+        
+        # Load dashboard with material = "" (corresponds to "All")
+        dash_all = get_dashboard_data(project_dir, pname, metric="ratio", material_filter="")
+        dashboards_payload[pname]["All"] = dash_all
+        
+        # Extract individual materials
+        materials = dash_all.get("materials", [])
+        for mat in materials:
+            dash_mat = get_dashboard_data(project_dir, pname, metric="ratio", material_filter=mat)
+            dashboards_payload[pname][mat] = dash_mat
+            
+        # Get all measured cells for this protocol in database
+        conn = open_db(project_dir)
+        try:
+            measured_cells = conn.execute(
+                "SELECT DISTINCT row, col FROM files WHERE protocol = ?",
+                (pname,)
+            ).fetchall()
+        except Exception:
+            measured_cells = []
+        finally:
+            if conn:
+                close_db(conn)
+                
+        # 3. Fetch `/api/protocol/{protocol_name}/device/{cell_id}/iv` data
+        for cell in measured_cells:
+            r = cell["row"]
+            c = cell["col"]
+            cell_id = f"R{r}C{c}"
+            cache_key = f"{pname}:{cell_id}"
+            
+            try:
+                iv_data = get_device_iv(project_dir, pname, cell_id)
+                iv_payload[cache_key] = iv_data
+            except Exception as e:
+                print(f"[WARN] Standalone failed to fetch IV for {cache_key}: {e}")
+                
+    standalone_data = {
+        "project": project_payload,
+        "dashboards": dashboards_payload,
+        "iv": iv_payload
+    }
+    
+    # 4. Read the React index.html and assets
+    serve_dir = Path(__file__).parent.parent.parent / "serve"
+    neuro_dir = serve_dir / "neurophase"
+    
+    index_path = neuro_dir / "index.html"
+    if not index_path.exists():
+        raise FileNotFoundError(f"React build index.html not found at: {index_path}. Please run 'npm run build' first.")
+        
+    index_html = index_path.read_text(encoding="utf-8")
+    
+    # Find CSS and JS paths in index.html
+    css_match = re.search(r'href="([^"]+\.css)"', index_html)
+    js_match = re.search(r'src="([^"]+\.js)"', index_html)
+    
+    css_content = ""
+    js_content = ""
+    
+    if css_match:
+        css_url_path = css_match.group(1)
+        css_rel = css_url_path
+        if css_rel.startswith("/neurophase/"):
+            css_rel = css_rel[len("/neurophase/"):]
+        elif css_rel.startswith("neurophase/"):
+            css_rel = css_rel[len("neurophase/"):]
+        else:
+            css_rel = css_rel.lstrip("/")
+        css_path = neuro_dir / css_rel
+        if css_path.exists():
+            css_content = css_path.read_text(encoding="utf-8")
+        else:
+            print(f"[WARN] CSS path not found: {css_path}")
+            
+    if js_match:
+        js_url_path = js_match.group(1)
+        js_rel = js_url_path
+        if js_rel.startswith("/neurophase/"):
+            js_rel = js_rel[len("/neurophase/"):]
+        elif js_rel.startswith("neurophase/"):
+            js_rel = js_rel[len("neurophase/"):]
+        else:
+            js_rel = js_rel.lstrip("/")
+        js_path = neuro_dir / js_rel
+        if js_path.exists():
+            js_content = js_path.read_text(encoding="utf-8")
+        else:
+            print(f"[WARN] JS path not found: {js_path}")
+            
+    # 5. Construct standalone consolidated HTML
+    # Strip script and link tags
+    inlined_html = index_html
+    inlined_html = re.sub(r'<link[^>]+rel="stylesheet"[^>]+>', "", inlined_html)
+    inlined_html = re.sub(r'<script[^>]+src="[^"]+\.js"[^>]*>.*?</script>', "", inlined_html)
+    
+    # Inject Standalone Data Script
+    data_json = json.dumps(standalone_data)
+    data_script = f"""
+    <script>
+      window.STANDALONE_DB_DATA = {data_json};
+    </script>
+    """
+    
+    # Inject JS and CSS directly
+    inlined_css = f"<style>{css_content}</style>"
+    inlined_js = f'<script type="module">{js_content}</script>'
+    
+    # Insert CSS before </head> and our Data + JS before </body>
+    inlined_html = inlined_html.replace("</head>", f"{inlined_css}\n</head>")
+    inlined_html = inlined_html.replace("</body>", f"{data_script}\n{inlined_js}\n</body>")
+    
+    # 6. Write out the standalone file
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(inlined_html, encoding="utf-8")
+    
+    return output_path

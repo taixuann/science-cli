@@ -103,6 +103,20 @@ export default function App() {
   const [ivCache, setIvCache] = useState<Record<string, IVResponse>>({});
 
   useEffect(() => {
+    if ((window as any).STANDALONE_DB_DATA) {
+      const data = (window as any).STANDALONE_DB_DATA.project;
+      const names: string[] = (data?.protocols || [])
+        .filter((p: any) => p.has_materials)
+        .map((p: any) => p.name);
+      setProtocolNames(names);
+      if (names.length > 0) {
+        setActiveProtocol(names[0]);
+        setActiveProjectIdx(0);
+      }
+      setLoading(false);
+      setLoaded(true);
+      return;
+    }
     setLoading(true);
     fetch(`${BASE}/api/project`)
       .then(r => r.json())
@@ -123,6 +137,17 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProtocol) return;
+    if ((window as any).STANDALONE_DB_DATA) {
+      const db = (window as any).STANDALONE_DB_DATA.dashboards?.[activeProtocol];
+      const matKey = selectedMaterial || "All";
+      const data = db?.[matKey] || db?.["All"] || (db ? db[Object.keys(db)[0]] : null);
+      setDashboardData(data);
+      if (data?.materials?.length && !selectedMaterial) {
+        setSelectedMaterial(data.materials[0]);
+      }
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
       .then(r => r.json())
@@ -138,6 +163,12 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProtocol || !selectedMaterial) return;
+    if ((window as any).STANDALONE_DB_DATA) {
+      const db = (window as any).STANDALONE_DB_DATA.dashboards?.[activeProtocol];
+      const data = db?.[selectedMaterial] || db?.["All"];
+      if (data) setDashboardData(data);
+      return;
+    }
     // When the material filter changes, reload the dashboard metrics for that material
     fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
       .then(r => r.json())
@@ -150,6 +181,16 @@ export default function App() {
     const cacheKey = `${activeProtocol}:${cellId}`;
     if (ivCache[cacheKey]) { setIvData(ivCache[cacheKey]); return; }
     if (!activeProtocol) return;
+    if ((window as any).STANDALONE_DB_DATA) {
+      const iv = (window as any).STANDALONE_DB_DATA.iv?.[cacheKey];
+      if (iv) {
+        setIvData(iv);
+        setIvCache(prev => ({ ...prev, [cacheKey]: iv }));
+      } else {
+        setIvData(null);
+      }
+      return;
+    }
     fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/device/${cellId}/iv`)
       .then(r => r.json())
       .then(data => {
