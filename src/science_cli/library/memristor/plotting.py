@@ -1147,43 +1147,50 @@ def generate_iv_highlighted_svg(
     dpi: int = 150,
     raw_current: bool = False,
 ):
-    """Generate an overlay SVG highlighting specific cycles in color, others in grey.
+    """Generate a Nature-quality overlay SVG highlighting specific cycles in color.
+
+    Non-highlighted cycles are plotted in light grey with low opacity so the
+    coloured highlight cycles stand out.  Each highlighted cycle gets a distinct
+    color from the Nature Research discrete palette and is annotated in the legend
+    with its cycle number (and Vset/Vreset when available from analysis).
 
     Args:
         traces: List of (voltage, current, metadata) tuples.
         highlight_cycles: List of 1-based cycle numbers (orders) to highlight.
         output_path: Path to save the SVG.
         dpi: Resolution for SVG rendering.
+        raw_current: If True, plot raw linear current (no abs, no log).
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    acs_rc = {
+    # Nature Research rcParams (Helvetica 5-7pt, 88 mm single column, open axes)
+    nature_rc = {
         "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.sans-serif": ["Helvetica", "Arial", "DejaVu Sans"],
         "mathtext.fontset": "dejavusans",
-        "axes.linewidth": 1.0,
-        "xtick.major.width": 0.8,
-        "ytick.major.width": 0.8,
-        "xtick.major.size": 4,
-        "ytick.major.size": 4,
+        "axes.linewidth": 0.5,
+        "xtick.major.width": 0.5,
+        "ytick.major.width": 0.5,
+        "xtick.major.size": 3,
+        "ytick.major.size": 3,
         "xtick.direction": "in",
         "ytick.direction": "in",
         "legend.frameon": False,
     }
 
-    # Publication Nature theme discrete colors (vibrant and high-contrast)
-    highlight_colors = ["#D55E00", "#0072B2", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442", "#000000"]
+    # Nature Research discrete color cycle
+    highlight_colors = ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#CC79A7", "#F0E442", "#000000"]
     use_log = False if raw_current else any(_should_use_log_scale(t[1]) for t in traces)
 
-    with plt.rc_context(acs_rc):
-        fig, ax = plt.subplots(figsize=(6, 4.5), dpi=dpi)
+    with plt.rc_context(nature_rc):
+        # Nature single-column width: 88 mm ≈ 3.46 in
+        fig, ax = plt.subplots(figsize=(3.46, 2.75), dpi=dpi)
 
-        # Plot all background non-highlighted traces first so highlighted ones are layered on top!
-        bg_traces = []
-        fg_traces = []
-        
+        # Separate background and foreground traces
+        bg_traces: list[tuple[np.ndarray, np.ndarray, dict, int]] = []
+        fg_traces: list[tuple[np.ndarray, np.ndarray, dict, int]] = []
         for i, (voltage, current, meta) in enumerate(traces):
             order = meta.get("order", i + 1)
             if order in highlight_cycles:
@@ -1191,22 +1198,22 @@ def generate_iv_highlighted_svg(
             else:
                 bg_traces.append((voltage, current, meta, order))
 
-        # 1. Plot background (grey) traces
+        # 1. Background: all non-highlighted cycles in faint grey
         for voltage, current, meta, order in bg_traces:
             plot_current = np.abs(current) if use_log else current
+            kw = dict(color="#E0E0E0", alpha=0.08, linewidth=0.3, label=None)
             if use_log:
-                ax.semilogy(voltage, plot_current, color="#E0E0E0", alpha=0.15, linewidth=0.5, label=None)
+                ax.semilogy(voltage, plot_current, **kw)
             else:
-                ax.plot(voltage, plot_current, color="#E0E0E0", alpha=0.15, linewidth=0.5, label=None)
+                ax.plot(voltage, plot_current, **kw)
 
-        # 2. Plot foreground (colored highlighted) traces
+        # 2. Foreground: highlighted cycles in distinct colours
         color_idx = 0
         for voltage, current, meta, order in fg_traces:
             color = highlight_colors[color_idx % len(highlight_colors)]
             color_idx += 1
             label = f"Cycle {order}"
-            
-            # Add Vset/Vreset info to legend label if available
+
             v_set = meta.get("v_set")
             v_reset = meta.get("v_reset")
             v_info = []
@@ -1218,38 +1225,38 @@ def generate_iv_highlighted_svg(
                 label += f" ({', '.join(v_info)})"
 
             plot_current = np.abs(current) if use_log else current
+            kw = dict(color=color, linewidth=0.75, label=label)
             if use_log:
-                ax.semilogy(voltage, plot_current, color=color, linewidth=1.2, label=label)
+                ax.semilogy(voltage, plot_current, **kw)
             else:
-                ax.plot(voltage, plot_current, color=color, linewidth=1.2, label=label)
+                ax.plot(voltage, plot_current, **kw)
 
-        # Labels, titles, spines
-        ax.set_xlabel("Voltage (V)", fontsize=10)
-        
-        # Determine title from metadata of first trace
-        first_meta = traces[0][2] if traces else {}
-        row = first_meta.get("row", "?")
-        col = first_meta.get("col", "?")
-        mat = first_meta.get("material", "unknown")
-        title = f"IV Multi-Cycle Highlight | r{row}c{col} ({mat})"
-        ax.set_title(title, fontsize=11, fontweight="bold")
-        
-        ax.tick_params(labelsize=8, direction="in", which="both")
-        ax.grid(False)
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(0.8)
-
+        # Labels — Nature standard 7 pt
+        ax.set_xlabel("Voltage (V)", fontsize=7)
         if use_log:
             has_neg = any(np.any(t[1] < 0) for t in traces if t[1] is not None and len(t[1]) > 0)
-            ax.set_ylabel("|Current| (A)" if has_neg else "Current (A)", fontsize=10)
+            ax.set_ylabel("|Current| (A)" if has_neg else "Current (A)", fontsize=7)
             ax.set_yscale("log")
         else:
-            ax.set_ylabel("Current (A)", fontsize=10)
+            ax.set_ylabel("Current (A)", fontsize=7)
 
+        # Nature open axes
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        for s in ("left", "bottom"):
+            ax.spines[s].set_linewidth(0.5)
+
+        ax.tick_params(labelsize=6, direction="in", which="both")
+        ax.grid(False)
+
+        # Scientific notation on linear y-axis to keep labels compact
+        if not use_log:
+            ax.ticklabel_format(style="sci", axis="y", scilimits=(0, 0), useOffset=False)
+
+        # Legend (Nature style: no frame, compact)
         handles, labels = ax.get_legend_handles_labels()
         if handles:
-            ax.legend(handles, labels, frameon=False, fontsize=8, loc="upper left")
+            ax.legend(handles, labels, frameon=False, fontsize=6, loc="upper left")
 
         fig.tight_layout()
         fig.savefig(str(output_path), format="svg", dpi=dpi, bbox_inches="tight")

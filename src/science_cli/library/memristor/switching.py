@@ -2,6 +2,10 @@
 
 import logging
 from pathlib import Path
+import warnings
+
+# Suppress division-by-zero or gradient warnings from raw sweep steps
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import numpy as np
 
@@ -193,9 +197,38 @@ def detect_vset(voltage, current, v_read=0.1):
 
     v_seg, i_seg = forward_seg
 
-    # ── Derivative method: d(log10|I|)/dV maximum ──
+    # ── SCLC Log-Log Slope Method (Primary Physics-Based Method) ──
+    sclc_vset = None
+    pos_mask = np.abs(v_seg) >= 0.05
+    if np.sum(pos_mask) >= 5:
+        v_pos = np.abs(v_seg[pos_mask])
+        i_pos = np.abs(i_seg[pos_mask])
+        log_v = np.log10(v_pos)
+        log_i = np.log10(i_pos + 1e-30)
+        
+        # Smooth log_i with a 3-point moving average to suppress derivative noise
+        log_i_smoothed = np.convolve(log_i, np.ones(3)/3, mode='same')
+        log_i_smoothed[0] = log_i[0]
+        log_i_smoothed[-1] = log_i[-1]
+        
+        # Compute gradient d(log_i)/d(log_v)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            dlogi_dlogv = np.gradient(log_i_smoothed, log_v)
+        
+        # SCLC Transition: Slope >= 3.0 (Trap-Filled Limit/filamentation)
+        # and current magnitude is above the noise floor (> 10 nA)
+        switching_points = np.where((dlogi_dlogv >= 3.0) & (i_pos > 1e-8))[0]
+        if len(switching_points) > 0:
+            sclc_vset = float(v_pos[switching_points[0]])
+
+    # ── Fallback 1: Derivative method: d(log10|I|)/dV maximum ──
     log_i = np.log10(np.abs(i_seg) + 1e-30)
-    dlogi_dv = np.gradient(log_i, v_seg)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        dlogi_dv = np.gradient(log_i, v_seg)
     valid = np.isfinite(dlogi_dv)
     if np.any(valid):
         max_idx = int(np.argmax(dlogi_dv[valid]))
@@ -203,7 +236,7 @@ def detect_vset(voltage, current, v_read=0.1):
     else:
         deriv_vset = None
 
-    # ── Threshold method: current exceeds baseline × 10 ──
+    # ── Fallback 2: Threshold method: current exceeds baseline × 10 ──
     n_first = max(5, len(i_seg) // 10)
     baseline = float(np.median(np.abs(i_seg[:n_first])))
     if baseline <= 0:
@@ -216,7 +249,10 @@ def detect_vset(voltage, current, v_read=0.1):
         else:
             thresh_vset = None
 
-    # ── Pick earlier (lower-voltage) result ──
+    # ── Pick primary (SCLC) if found, otherwise fall back to lower of derivative/threshold ──
+    if sclc_vset is not None:
+        return sclc_vset
+
     candidates = []
     if deriv_vset is not None:
         candidates.append(deriv_vset)

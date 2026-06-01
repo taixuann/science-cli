@@ -3887,20 +3887,22 @@ def _build_neurophase_html(
             selected = ' selected' if p["name"] == protocol_name else ''
             proto_options += f'<option value="{p["href"]}"{selected}>{p["name"]}</option>\n'
 
+    # ── Inline SVG for heatmap ──
+    svg_heatmap = _render_svg_heatmap(heatmap_data, meta, rows, cols)
+    svg_hist = _render_svg_histogram(
+        hist_vset.get("bins", []), hist_vset.get("counts", []),
+        hist_vreset.get("bins", []), hist_vreset.get("counts", []),
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NeuroPhase - {protocol_name}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" async></script>
 <style>
   *,*::before,*::after {{ box-sizing:border-box; margin:0; padding:0; }}
   .dark {{ --bg:#0A0A0B; --bg-card:rgba(0,0,0,0.4); --border:rgba(255,255,255,0.08); --text:#cbd5e1; --text-dim:#64748b; --text-bright:#f1f5f9; }}
-  .fallback {{ display:none; text-align:center; padding:60px 20px; }}
-  .fallback h2 {{ font-size:16px; color:var(--text-bright); margin-bottom:8px; }}
-  .fallback p {{ font-size:11px; color:var(--text-dim); }}
-  .fallback a {{ color:#10b981; }}
   body {{ font-family:'SF Mono','Fira Code','Cascadia Code',ui-monospace,monospace; background:var(--bg); color:var(--text); padding:24px; }}
   .kpi-row {{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }}
   .kpi {{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 20px; min-width:130px; flex:1; }}

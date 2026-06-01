@@ -1826,7 +1826,53 @@ def _analyze_protocol(
     }
 
 
-def cmd_analyze(args: argparse.Namespace) -> None:
+def expand_material_cluster(pattern: str) -> list[str]:
+    """Expand bracketed clusters like 'cu-c-pda(q,q2,q3)-ito' to separate material strings.
+    
+    E.g. 'cu-c-pda(q,q2,q3)-ito' -> ['cu-c-pda(q)-ito', 'cu-c-pda(q2)-ito', 'cu-c-pda(q3)-ito']
+    """
+    import re
+    match = re.search(r'\(([^)]+)\)', pattern)
+    if not match:
+        return [pattern]
+    inner = match.group(1)
+    items = [item.strip() for item in inner.split(',') if item.strip()]
+    start_idx, end_idx = match.span()
+    prefix = pattern[:start_idx]
+    suffix = pattern[end_idx:]
+    return [f"{prefix}({item}){suffix}" for item in items]
+
+
+def update_yaml_device_overrides(pdir: Path, mat_overrides: dict = None, cell_overrides: dict = None) -> None:
+    """Merge and write material/cell overrides into the protocol YAML file."""
+    yaml_path = pdir / f"{pdir.name}.yaml"
+    if not yaml_path.exists():
+        print(f"  [WARN] Protocol YAML not found at {yaml_path}, cannot save overrides persistently.")
+        return
+    import yaml
+    try:
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        data = {}
+    overrides = data.setdefault("device_overrides", {})
+    mat_section = overrides.setdefault("materials", {})
+    cell_section = overrides.setdefault("cells", {})
+    if mat_overrides:
+        for mat, dev_type in mat_overrides.items():
+            mat_section[mat] = dev_type
+    if cell_overrides:
+        for cell, dev_type in cell_overrides.items():
+            cell_section[cell] = dev_type
+    try:
+        with open(yaml_path, "w") as f:
+            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+        print(f"  [INFO] Persistent overrides written to {yaml_path.name}")
+    except Exception as e:
+        print(f"  [WARN] Failed to write persistent overrides to protocol YAML: {e}")
+
+
+def cmd_analyze(args: list) -> None:
     """Analyze: read CSVs, compute Vset/Vreset/ratio/compliance, update SQLite.
 
     Depends on 'memristor sync' having populated the metadata.
@@ -1844,6 +1890,52 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     if not proj:
         print("No project open. Use 'open -m project <path>' first.")
         sys.exit(1)
+
+    # ── Override Processing (Tier B writing to Tier A) ──
+    override_mat = getattr(args, "mat", "") or ""
+    override_cell = getattr(args, "cell", "") or ""
+    override_type = getattr(args, "type", "") or ""
+    extra_args = getattr(args, "extra_args", []) or []
+
+    # Support natural language format: --mat cu-c-pda(q,q2,q3)-ito is volatile
+    if not override_type and len(extra_args) >= 2 and extra_args[0].lower() == "is":
+        override_type = extra_args[1].lower()
+
+    if (override_mat or override_cell) and not override_type:
+        print("  Error: Please specify the classification type (e.g., 'is volatile' or '--type volatile')")
+        sys.exit(1)
+
+    if override_type and override_type not in ("volatile", "non-volatile", "short", "insulating", "resistor"):
+        print(f"  Error: Invalid type '{override_type}'. Valid types: volatile, non-volatile, short, insulating, resistor")
+        sys.exit(1)
+
+    if (override_mat or override_cell):
+        # Resolve target protocol directory
+        if getattr(args, "all", False):
+            print("  Error: Overrides cannot be run with --all. Specify a single protocol.")
+            sys.exit(1)
+        elif getattr(args, "protocol", "") or getattr(args, "pt", ""):
+            protocol_name = getattr(args, "protocol", "") or getattr(args, "pt", "")
+            pdir = proj / "protocol" / protocol_name
+        else:
+            pdir = _resolve_protocol_dir(args)
+            
+        if pdir and pdir.exists():
+            mat_overrides = {}
+            cell_overrides = {}
+            if override_mat:
+                expanded = expand_material_cluster(override_mat)
+                for mat in expanded:
+                    mat_overrides[mat] = override_type
+                    print(f"  [INFO] Designating material '{mat}' as {override_type}")
+            if override_cell:
+                cell_overrides[override_cell] = override_type
+                print(f"  [INFO] Designating cell '{override_cell}' as {override_type}")
+                
+            update_yaml_device_overrides(pdir, mat_overrides, cell_overrides)
+        else:
+            print("  Error: Could not resolve protocol directory for overrides.")
+            sys.exit(1)
 
     force = getattr(args, "force", False)
     single_file = getattr(args, "file", "") or ""
@@ -2528,8 +2620,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_plot.add_argument("--row", type=int, default=None, help="Filter by matrix row")
     p_plot.add_argument("--col", type=int, default=None, help="Filter by matrix column")
     p_plot.add_argument("--dpi", type=int, default=150, help="SVG resolution (default: 150)")
-    p_plot.add_argument("--highlight", default="", help="Highlight specific cycles in color, others in grey (e.g. '1,5,10,50,100')")
-    p_plot.add_argument("--raw", action="store_true", help="Plot raw current on linear scale (no absolute value)")
+    p_plot.add_argument("--highlight", default="",
+                        help="Multi-cycle overlay: highlight specific cycles, grey out rest. "
+                             "Comma/range syntax (e.g. '1,5,10-15,50,100'). "
+                             "Merges all files for a single cell into one Nature-style plot.")
+    p_plot.add_argument("--raw", action="store_true",
+                        help="Plot raw linear current (no |I|, no log scale). "
+                             "Recommended with --highlight for direct current readout.")
     p_plot.set_defaults(func=cmd_plot)
 
 
@@ -2550,6 +2647,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("--step", default="", help="Filter to a specific step name (e.g. '4_iv')")
     p_analyze.add_argument("--force", action="store_true", help="Re-analyze all files (ignore cached analysis)")
     p_analyze.add_argument("--file", default="", help="Single-file re-analysis")
+    p_analyze.add_argument("--mat", default="", help="Material name or pattern to override (supports bracket clusters)")
+    p_analyze.add_argument("--cell", default="", help="Coordinate cell (row,col) to override")
+    p_analyze.add_argument("--type", default="", help="Target classification type (volatile, non-volatile, short, insulating)")
+    p_analyze.add_argument("extra_args", nargs="*", help="Capture trailing custom expressions (e.g. 'is volatile')")
     p_analyze.set_defaults(func=cmd_analyze)
 
     return parser

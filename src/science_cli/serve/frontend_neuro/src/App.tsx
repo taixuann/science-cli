@@ -94,7 +94,7 @@ export default function App() {
   const [heatmapSnapshotType, setHeatmapSnapshotType] = useState<string>("V_reset");
   const [editedParams, setEditedParams] = useState<Record<string, { vSet?: number; vReset?: number }>>({});
   const [loaded, setLoaded] = useState(false);
-  const [selectedMaterial, setSelectedMaterial] = useState<string>("All");
+  const [selectedMaterial, setSelectedMaterial] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
   const [protocolNames, setProtocolNames] = useState<string[]>([]);
@@ -124,11 +124,26 @@ export default function App() {
   useEffect(() => {
     if (!activeProtocol) return;
     setLoading(true);
-    fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard`)
+    fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
       .then(r => r.json())
-      .then(data => { setDashboardData(data); setLoading(false); })
+      .then(data => {
+        setDashboardData(data);
+        if (data?.materials?.length && !selectedMaterial) {
+          setSelectedMaterial(data.materials[0]);
+        }
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [activeProtocol]);
+
+  useEffect(() => {
+    if (!activeProtocol || !selectedMaterial) return;
+    // When the material filter changes, reload the dashboard metrics for that material
+    fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
+      .then(r => r.json())
+      .then(data => { setDashboardData(data); })
+      .catch(() => {});
+  }, [activeProtocol, selectedMaterial]);
 
   useEffect(() => {
     const cellId = `R${selectedCell.row + 1}C${selectedCell.col + 1}`;
@@ -180,8 +195,7 @@ export default function App() {
   }, [theme]);
 
   const availableMaterials = useMemo(() => {
-    const mats = dashboardData?.materials || [];
-    return ["All", ...mats];
+    return dashboardData?.materials || [];
   }, [dashboardData]);
 
   const cellsList: CellData[] = useMemo(() => {
@@ -205,6 +219,15 @@ export default function App() {
       return meta && meta.material === selectedMaterial;
     });
   }, [cellsList, selectedMaterial, dashboardData]);
+
+  useEffect(() => {
+    if (filteredCellsList.length > 0) {
+      const exists = filteredCellsList.some(c => c.row === selectedCell.row && c.col === selectedCell.col);
+      if (!exists) {
+        setSelectedCell({ row: filteredCellsList[0].row, col: filteredCellsList[0].col });
+      }
+    }
+  }, [filteredCellsList, selectedCell]);
 
   const cellsMap = useMemo(() => {
     const map = new Map<string, CellData>();
@@ -345,7 +368,7 @@ export default function App() {
 
   const plotlyLayout = useMemo(() => ({
     autosize: true,
-    margin: { l: 55, r: 20, t: 10, b: 55 },
+    margin: { l: 50, r: 15, t: 30, b: 35 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     font: { color: t.graphText, family: 'ui-monospace, monospace' },
@@ -403,7 +426,7 @@ export default function App() {
 
   const heatmapLayout = useMemo(() => ({
     autosize: true,
-    margin: { l: 45, r: 25, t: 10, b: 55 },
+    margin: { l: 45, r: 25, t: 25, b: 45 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
     font: { color: t.graphText, family: 'ui-monospace, monospace' },
@@ -425,8 +448,22 @@ export default function App() {
     dragmode: 'select',
   }), [t, dashboardData]);
 
-  const vSetValues = useMemo(() => cellsList.map(c => c.vSet).filter(v => v > 0), [cellsList]);
-  const vResetValues = useMemo(() => cellsList.map(c => c.vReset).filter(v => v > 0), [cellsList]);
+  const vSetValues = useMemo(() => filteredCellsList.map(c => c.vSet).filter(v => v > 0), [filteredCellsList]);
+  const vResetValues = useMemo(() => filteredCellsList.map(c => c.vReset).filter(v => v > 0), [filteredCellsList]);
+
+  const cyclesData = useMemo(() => {
+    if (!ivData || !ivData.sweeps || ivData.sweeps.length === 0) {
+      return null;
+    }
+    const hasRealResistances = ivData.sweeps.some(s => (s.r_on || 0) > 0);
+    if (!hasRealResistances) {
+      return null;
+    }
+    const x = ivData.sweeps.map((_, i) => i + 1);
+    const r_on = ivData.sweeps.map(s => s.r_on || 0);
+    const r_off = ivData.sweeps.map(s => s.r_off || 0);
+    return { x, r_on, r_off };
+  }, [ivData]);
 
   const updateActiveCellParam = (field: "vSet" | "vReset", val: number) => {
     const key = activeProjectIdx + '-' + selectedCell.row + '-' + selectedCell.col;
@@ -533,40 +570,39 @@ export default function App() {
             </div>
           </section>
 
-          <section>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3 font-mono">Material Filter</label>
-            <div className="relative group">
-              <select
-                value={selectedMaterial}
-                onChange={(e) => setSelectedMaterial(e.target.value)}
-                className={'w-full p-2.5 text-xs font-semibold rounded-lg border shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer appearance-none pr-8 ' + (theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-white/5 border-white/10 text-white')}
-              >
-                {availableMaterials.map((mat) => (
-                  <option key={mat} value={mat} className={theme === 'light' ? 'bg-slate-50 text-slate-800' : 'bg-[#0c0c0d] text-slate-300'}>{mat}</option>
-                ))}
-              </select>
-              <div className="absolute right-3 top-3 pointer-events-none text-slate-400 text-[10px]">&#9660;</div>
-            </div>
-            <div className={'p-3 rounded-b-lg border-x border-b ' + (theme === 'light' ? 'bg-slate-200/40 border-slate-300' : 'bg-emerald-500/5 border-white/5')}>
-              <p className="text-[9px] text-slate-400 font-mono">
-                {selectedMaterial === "All"
-                  ? "Showing all " + cellsList.length + " devices"
-                  : "Showing " + filteredCellsList.length + " / " + cellsList.length + " devices"}
-              </p>
+          <section className="flex flex-col min-h-0 flex-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3 font-mono">Material Tree</label>
+            <div className="space-y-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+              {availableMaterials.filter(mat => mat !== "All").map((mat) => {
+                const isActive = selectedMaterial === mat;
+                // Count active cells for this material (status is not Unmeasured)
+                const cellCount = cellsList.filter(c => {
+                  const meta = dashboardData?.heatmap?.metadata?.[c.row]?.[c.col];
+                  return meta && meta.material === mat && meta.status !== "Unmeasured";
+                }).length;
+
+                return (
+                  <button
+                    key={mat}
+                    onClick={() => setSelectedMaterial(mat)}
+                    className={'w-full flex items-center justify-between text-left text-xs p-2.5 rounded-lg transition-all cursor-pointer font-medium ' + 
+                      (isActive 
+                        ? 'text-emerald-600 bg-emerald-500/10 border-l-2 border-emerald-500 font-bold' 
+                        : (theme === 'light' ? 'hover:bg-slate-200/60 text-slate-600' : 'hover:bg-white/5 text-slate-400'))
+                    }
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <Cpu className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{mat}</span>
+                    </span>
+                    <span className={'text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded-full ' + (isActive ? 'bg-emerald-500/20 text-emerald-600' : 'bg-slate-500/10 text-slate-400')}>
+                      {cellCount}c
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
-
-          <nav className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3 font-mono">Protocol Tree</label>
-            <div className="space-y-1.5 pl-1">
-              <button onClick={() => setActiveProtocol(protocolNames[activeProjectIdx] || "iv")}
-                className={'w-full flex items-center justify-between text-left text-xs p-2.5 rounded transition-all cursor-pointer text-emerald-600 bg-emerald-500/10 border-l-2 border-emerald-500 font-bold'}
-              >
-                <span className="flex items-center gap-2"><Activity className="w-3.5 h-3.5" /> {protocolNames[activeProjectIdx] || "Protocol"}</span>
-                <span className="text-[8px] opacity-75 font-mono tracking-tighter font-semibold">RUNNING</span>
-              </button>
-            </div>
-          </nav>
 
           <div className="space-y-3 pt-4 border-t border-slate-200/80 dark:border-white/5 mt-auto">
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono tracking-wider block uppercase">Heatmap Explorer ({nCols}x{nRows})</span>
@@ -579,7 +615,12 @@ export default function App() {
                 const bg = hasData ? 'bg-emerald-500' : 'bg-slate-800/20';
                 return (
                   <button key={'mini-' + r + '-' + c}
-                    onClick={() => hasData && setSelectedCell({ row: r, col: c })}
+                    onClick={() => {
+                      if (hasData) {
+                        setSelectedCell({ row: r, col: c });
+                        setActiveTab("IV CURVES");
+                      }
+                    }}
                     className={'aspect-square w-full ' + bg + ' ' + (isSelected && hasData ? (theme === 'light' ? 'ring-2 ring-indigo-500 scale-110 shadow-xs' : 'ring-2 ring-indigo-400 scale-110 shadow-xs') : '') + ' transition-all duration-150 rounded-md ' + (hasData ? 'cursor-pointer' : '')}
                     title={hasData ? ('Cell R' + (r + 1) + ' C' + (c + 1) + ': ' + (meta?.material || '') + ' | Vset=' + (meta?.v_set?.toFixed(2) ?? 'N/A')) : 'Cell R' + (r + 1) + ' C' + (c + 1) + ': No data'}
                   />
@@ -605,7 +646,10 @@ export default function App() {
                   const dotColor = cell.classificationColor === "emerald" ? "bg-emerald-400" : cell.classificationColor === "amber" ? "bg-amber-400" : cell.classificationColor === "red" ? "bg-red-500" : cell.classificationColor === "purple" ? "bg-purple-400" : "bg-slate-400";
                   return (
                     <button key={'dev-' + cell.row + '-' + cell.col}
-                      onClick={() => setSelectedCell({ row: cell.row, col: cell.col })}
+                      onClick={() => {
+                        setSelectedCell({ row: cell.row, col: cell.col });
+                        setActiveTab("IV CURVES");
+                      }}
                       className={'w-full flex items-center justify-between text-left p-1.5 rounded-lg transition-all cursor-pointer text-[9px] font-mono ' + (isActive
                         ? (theme === 'light' ? 'bg-indigo-100/80 ring-1 ring-indigo-300 text-slate-800' : 'bg-indigo-500/15 ring-1 ring-indigo-500/30 text-white')
                         : (theme === 'light' ? 'hover:bg-slate-200/60 text-slate-600' : 'hover:bg-white/5 text-slate-400'))}
@@ -715,6 +759,7 @@ export default function App() {
                   </div>
                   <div className="flex-1 min-h-[300px]">
                     <Plot
+                      key={`iv-${activeProtocol}-${selectedCell.row}-${selectedCell.col}-${currentScale}`}
                       data={plotlyTraces}
                       layout={{
                         ...plotlyLayout,
@@ -740,6 +785,7 @@ export default function App() {
                   </div>
                   <div className="flex-1 min-h-[300px]">
                     <Plot
+                      key={`heatmap-${activeProtocol}-${selectedMaterial}-${heatmapSnapshotType}`}
                       data={[{
                         z: heatmapZ,
                         type: 'heatmap',
@@ -758,7 +804,10 @@ export default function App() {
                       onClick={(data: any) => {
                         if (data.points && data.points.length > 0) {
                           const pt = data.points[0];
-                          if (pt.y >= 0 && pt.x >= 0) setSelectedCell({ row: pt.y, col: pt.x });
+                          if (pt.y >= 0 && pt.x >= 0) {
+                            setSelectedCell({ row: pt.y, col: pt.x });
+                            setActiveTab("IV CURVES");
+                          }
                         }
                       }}
                     />
@@ -801,7 +850,7 @@ export default function App() {
                           { x: vResetValues, type: 'histogram', name: 'V_reset', marker: { color: '#6366f1', opacity: 0.7 }, nbinsx: 15, hovertemplate: 'V_reset: %{x:.2f} V<br>Count: %{y}<extra></extra>' },
                         ]}
                         layout={{
-                          barmode: 'overlay', autosize: true, margin: { l: 50, r: 20, t: 10, b: 50 },
+                          barmode: 'overlay', autosize: true, margin: { l: 45, r: 15, t: 15, b: 35 },
                           paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
                           font: { color: t.graphText, family: 'ui-monospace, monospace' },
                           xaxis: { title: { text: 'Threshold Voltage (V)', font: { size: 11 } }, gridcolor: t.graphGridLine },
@@ -818,7 +867,9 @@ export default function App() {
                     <div className="flex justify-between items-center border-b border-white/5 pb-2">
                       <div>
                         <span className="text-[9px] text-slate-500 font-mono uppercase">Reliability</span>
-                        <h4 className={'text-xs font-bold uppercase tracking-wider font-mono mt-0.5 ' + (theme === 'light' ? 'text-slate-800' : 'text-white')}>Resistance vs. Program Cycles (Endurance)</h4>
+                        <h4 className={'text-xs font-bold uppercase tracking-wider font-mono mt-0.5 ' + (theme === 'light' ? 'text-slate-800' : 'text-white')}>
+                          {cyclesData ? `Resistance vs. Cycles (Endurance) — Cell ${ivData?.cell_id}` : 'Resistance vs. Program Cycles (Endurance demo)'}
+                        </h4>
                       </div>
                       <div className="flex gap-4 text-[9px] font-mono text-slate-400">
                         <span className="flex items-center gap-1.1"><span className="w-2.5 h-1 bg-emerald-400 rounded-sm"></span> LRS (R_on)</span>
@@ -827,15 +878,19 @@ export default function App() {
                     </div>
                     <div className="h-32">
                       <Plot
-                        data={[
-                          { x: Array.from({ length: 100 }, (_, i) => i + 1), y: Array.from({ length: 100 }, (_, i) => 500 + Math.random() * 100 + Math.sin(i * 0.1) * 30), type: 'scatter', mode: 'lines', name: 'LRS (R_on)', line: { color: '#10b981', width: 1.5 }, hovertemplate: 'Cycle: %{x}<br>R_on: %{y:.0f} Ohm<extra></extra>' },
-                          { x: Array.from({ length: 100 }, (_, i) => i + 1), y: Array.from({ length: 100 }, (_, i) => 50000 - i * 50 + Math.random() * 5000 + Math.cos(i * 0.05) * 2000), type: 'scatter', mode: 'lines', name: 'HRS (R_off)', line: { color: '#6366f1', width: 1.5 }, hovertemplate: 'Cycle: %{x}<br>R_off: %{y:.0f} Ohm<extra></extra>' },
+                        key={`endurance-${activeProtocol}-${selectedCell.row}-${selectedCell.col}`}
+                        data={cyclesData ? [
+                          { x: cyclesData.x, y: cyclesData.r_on, type: 'scatter', mode: 'lines+markers', name: 'LRS (R_on)', line: { color: '#10b981', width: 1.5 }, marker: { size: 4 }, hovertemplate: 'Cycle: %{x}<br>R_on: %{y:.1f} Ohm<extra></extra>' },
+                          { x: cyclesData.x, y: cyclesData.r_off, type: 'scatter', mode: 'lines+markers', name: 'HRS (R_off)', line: { color: '#6366f1', width: 1.5 }, marker: { size: 4 }, hovertemplate: 'Cycle: %{x}<br>R_off: %{y:.1f} Ohm<extra></extra>' },
+                        ] : [
+                          { x: Array.from({ length: 100 }, (_, i) => i + 1), y: Array.from({ length: 100 }, (_, i) => 500 + Math.random() * 100 + Math.sin(i * 0.1) * 30), type: 'scatter', mode: 'lines', name: 'LRS (R_on) [Demo]', line: { color: '#10b981', width: 1.5, dash: 'dash' }, hovertemplate: 'Cycle: %{x}<br>R_on: %{y:.0f} Ohm<extra></extra>' },
+                          { x: Array.from({ length: 100 }, (_, i) => i + 1), y: Array.from({ length: 100 }, (_, i) => 50000 - i * 50 + Math.random() * 5000 + Math.cos(i * 0.05) * 2000), type: 'scatter', mode: 'lines', name: 'HRS (R_off) [Demo]', line: { color: '#6366f1', width: 1.5, dash: 'dash' }, hovertemplate: 'Cycle: %{x}<br>R_off: %{y:.0f} Ohm<extra></extra>' },
                         ]}
                         layout={{
-                          autosize: true, margin: { l: 50, r: 20, t: 10, b: 45 },
+                          autosize: true, margin: { l: 45, r: 15, t: 15, b: 35 },
                           paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
                           font: { color: t.graphText, family: 'ui-monospace, monospace', size: 9 },
-                          xaxis: { title: { text: 'Cycle #', font: { size: 10 } }, gridcolor: t.graphGridLine, type: 'log' },
+                          xaxis: { title: { text: 'Cycle #', font: { size: 10 } }, gridcolor: t.graphGridLine, type: cyclesData ? 'linear' : 'log' },
                           yaxis: { title: { text: 'Resistance (Ohm)', font: { size: 10 } }, gridcolor: t.graphGridLine, type: 'log' },
                           legend: { font: { size: 8 }, bgcolor: 'transparent' }, showlegend: true,
                         }}

@@ -326,7 +326,23 @@ def upsert_material(
 
 
 def classify_and_populate_materials(conn: sqlite3.Connection, protocol_name: str) -> None:
-    """Classify device types and populate the materials table based on material naming, measured parameters, and slopes."""
+    """Classify device types and populate the materials table based on material naming, overrides, and cycle volatility yields."""
+    from science_cli.core.project import get_current_project_path
+    
+    # Load Tier A persistent configuration overrides from protocol YAML
+    proj = get_current_project_path()
+    device_overrides = {}
+    if proj:
+        yaml_path = proj / "protocol" / protocol_name / f"{protocol_name}.yaml"
+        if yaml_path.exists():
+            import yaml
+            try:
+                with open(yaml_path) as f:
+                    proto_data = yaml.safe_load(f) or {}
+                device_overrides = proto_data.get("device_overrides", {})
+            except Exception:
+                pass
+
     # 1. Fetch all unique rows, cols, and materials for the protocol
     cursor = conn.execute(
         """SELECT DISTINCT row, col, material 
@@ -337,6 +353,42 @@ def classify_and_populate_materials(conn: sqlite3.Connection, protocol_name: str
     points = cursor.fetchall()
     
     for r, c, mat in points:
+        # Check manual overrides first (exact match or wildcard prefix matching)
+        mat_overrides = device_overrides.get("materials", {})
+        cell_overrides = device_overrides.get("cells", {})
+        
+        matched_override_type = None
+        
+        # Check cell coordinate override first (handles both 'rRcC' and 'R,C')
+        for key in [f"r{r}c{c}", f"{r},{c}"]:
+            if key in cell_overrides:
+                matched_override_type = cell_overrides[key]
+                break
+                
+        # Check material name override
+        if not matched_override_type:
+            for pattern, dev_type in mat_overrides.items():
+                if pattern.endswith("*"):
+                    prefix = pattern[:-1]
+                    if mat.startswith(prefix):
+                        matched_override_type = dev_type
+                        break
+                elif pattern == mat:
+                    matched_override_type = dev_type
+                    break
+                    
+        if matched_override_type:
+            upsert_material(
+                conn,
+                protocol=protocol_name,
+                row=r,
+                col=c,
+                material=mat,
+                device_type=matched_override_type,
+                errors="manual override",
+            )
+            continue
+
         # Fetch all sweep measurements for this coordinate
         cursor_params = conn.execute(
             """SELECT v_set, v_reset, on_off_ratio, compliance_confidence
@@ -357,27 +409,25 @@ def classify_and_populate_materials(conn: sqlite3.Connection, protocol_name: str
         ratios = [sw[2] for sw in sweeps if sw[2] is not None]
         median_ratio = np.median(ratios) if ratios else 1.0
         
-        # Calculate median v_set
-        v_sets = [sw[0] for sw in sweeps if sw[0] is not None]
-        median_v_set = np.median(v_sets) if v_sets else None
+        # Dynamic cycle-level volatility calculation
+        n_switching_sweeps = 0
+        n_volatile_sweeps = 0
         
-        # Calculate median v_reset
-        v_resets = [sw[1] for sw in sweeps if sw[1] is not None]
-        median_v_reset = np.median(v_resets) if v_resets else None
-        
-        mat_lower = mat.lower()
-        
-        # Base classification from material name patterns first (e.g. cu-c-pda is inherently volatile)
-        if "cu-c-pda" in mat_lower:
-            device_type = "volatile"
-            reasons = ["volatile material naming pattern"]
-        elif "ta-pda" in mat_lower:
-            device_type = "non-volatile"
-            reasons = ["stable Ta-PDA filament barrier"]
+        for sw in sweeps:
+            v_s, v_r = sw[0], sw[1]
+            if v_s is not None:
+                n_switching_sweeps += 1
+                # Volatile sweep if no reset or negligible reset (< 0.15 V)
+                if v_r is None or abs(v_r) < 0.15:
+                    n_volatile_sweeps += 1
+                    
+        if n_switching_sweeps > 0:
+            volatility_yield = (n_volatile_sweeps / n_switching_sweeps) * 100.0
         else:
-            device_type = "non-volatile"
-            reasons = []
-            
+            volatility_yield = 0.0
+
+        mat_lower = mat.lower()
+        device_type = "non-volatile"
         errors = ""
         
         # Shorted heuristic (extremely low ON/OFF ratio, high leakage, no SET detected)
@@ -389,22 +439,23 @@ def classify_and_populate_materials(conn: sqlite3.Connection, protocol_name: str
             device_type = "insulating"
             errors = "no switching detected (stuck OFF/open)"
         else:
-            # Check for volatile behavior indicators
+            # Check for volatile behavior indicators based on volatility yield and material name
             is_volatile = "cu-c-pda" in mat_lower
             
-            if n_v_set > 0 and n_v_reset == 0:
+            if volatility_yield >= 80.0:
                 is_volatile = True
-                reasons.append("spontaneous relaxation (no reset sweep required)")
-            if n_v_set > 0 and median_v_reset is not None and abs(median_v_reset) < 0.15:
+                errors = f"relaxation profile ({int(n_volatile_sweeps)}/{int(n_switching_sweeps)} cycles volatile)"
+            elif volatility_yield < 20.0:
+                is_volatile = False
+                errors = f"stable non-volatile switching ({int(n_volatile_sweeps)}/{int(n_switching_sweeps)} cycles volatile)"
+            else:
                 is_volatile = True
-                reasons.append(f"extremely low relaxation reset voltage ({abs(median_v_reset):.3f} V)")
+                errors = f"mixed volatility: {volatility_yield:.1f}% ({int(n_volatile_sweeps)}/{int(n_switching_sweeps)} cycles volatile)"
                 
             if is_volatile:
                 device_type = "volatile"
-                errors = f"relaxation profile via {', '.join(reasons)}"
             else:
                 device_type = "non-volatile"
-                errors = ""
                 
         # Preserve user manual overrides if already present in the database!
         # Manual overrides have priority over automated heuristics

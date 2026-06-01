@@ -519,6 +519,7 @@ def get_device_iv(
     cell_id: str,
 ) -> dict:
     import re
+    import numpy as np
     match = re.match(r"R(\d+)C(\d+)", cell_id, re.IGNORECASE)
     if not match:
         return {"error": f"invalid cell_id '{cell_id}' — expected R<n>C<m>"}
@@ -526,6 +527,74 @@ def get_device_iv(
     row = int(match.group(1)) - 1
     col = int(match.group(2)) - 1
 
+    db_path = project_path / f"{project_path.name}.db"
+    if db_path.exists():
+        try:
+            from science_cli.library.memristor.db import open_db, close_db
+            from science_cli.library.memristor.switching import compute_on_off_ratio
+            from science_cli.library.memristor.plotting import read_iv_csv
+            
+            conn = open_db(project_path)
+            qfiles = conn.execute(
+                """SELECT step, filename, v_set, v_reset, on_off_ratio, sweep_order
+                   FROM files
+                   WHERE protocol = ? AND row = ? AND col = ?
+                   ORDER BY COALESCE(sweep_order, filename)""",
+                (protocol_name, row + 1, col + 1)
+            ).fetchall()
+            close_db(conn)
+            
+            if qfiles:
+                sweeps = []
+                for idx, f in enumerate(qfiles):
+                    step = f["step"]
+                    filename = f["filename"]
+                    filepath = project_path / "protocol" / protocol_name / step / filename
+                    
+                    # Read experimental data points
+                    voltage, current, info = read_iv_csv(str(filepath))
+                    
+                    # Compute LRS/HRS resistances dynamically at v_read=0.1 V
+                    ratio_data = compute_on_off_ratio(voltage, current)
+                    
+                    sweeps.append({
+                        "label": f"Sweep #{f['sweep_order'] if f['sweep_order'] is not None else idx + 1:02d}",
+                        "voltage": voltage.tolist() if hasattr(voltage, "tolist") else list(voltage),
+                        "current": current.tolist() if hasattr(current, "tolist") else list(current),
+                        "v_set": f["v_set"] or 0.0,
+                        "v_reset": f["v_reset"] or 0.0,
+                        "r_on": ratio_data.get("r_on") or 0.0,
+                        "r_off": ratio_data.get("r_off") or 0.0,
+                    })
+                
+                # Fetch material and dynamic classification
+                conn2 = open_db(project_path)
+                mat_row = conn2.execute(
+                    "SELECT material, device_type FROM materials WHERE protocol = ? AND row = ? AND col = ?",
+                    (protocol_name, row + 1, col + 1)
+                ).fetchone()
+                close_db(conn2)
+                
+                material = mat_row["material"] if mat_row else "unknown"
+                device_type = mat_row["device_type"] if mat_row else "non-volatile"
+                switching = device_type in ("volatile", "non-volatile")
+                
+                return {
+                    "cell_id": cell_id,
+                    "row": row,
+                    "col": col,
+                    "material": material,
+                    "v_set": sweeps[0]["v_set"] if sweeps else 0.0,
+                    "v_reset": sweeps[0]["v_reset"] if sweeps else 0.0,
+                    "ratio": sweeps[0]["r_off"] / sweeps[0]["r_on"] if sweeps and sweeps[0]["r_on"] else 0.0,
+                    "switching": switching,
+                    "sweeps": sweeps,
+                }
+        except Exception as e:
+            # Fall back to filesystem scan on failure
+            print(f"[WARN] SQLite fetch in get_device_iv failed: {e}")
+
+    # Fallback to direct cache scan
     cache = _read_analysis_cache(project_path)
     if cache:
         proto = next(
@@ -544,6 +613,8 @@ def get_device_iv(
                         "current": f.get("current", []),
                         "v_set": f.get("v_set", 0),
                         "v_reset": f.get("v_reset", 0),
+                        "r_on": 0.0,
+                        "r_off": 0.0,
                     })
                 return {
                     "cell_id": cell_id,
@@ -608,7 +679,7 @@ def _iv_from_csv_direct(
             fname = f.name.lower()
 
             import re
-            pattern = rf"r{row}[c_\-]c{col}"
+            pattern = rf"r{row + 1}[c_\-]c{col + 1}"
             if not re.search(pattern, fname):
                 continue
 
@@ -632,12 +703,16 @@ def _iv_from_csv_direct(
 
                 if voltages:
                     v_set, v_reset = _estimate_switching(voltages, currents)
+                    from science_cli.library.memristor.switching import compute_on_off_ratio
+                    ratio_data = compute_on_off_ratio(np.array(voltages), np.array(currents))
                     sweeps.append({
                         "label": f"Sweep #{len(sweeps) + 1:02d}",
                         "voltage": voltages,
                         "current": currents,
                         "v_set": v_set,
                         "v_reset": v_reset,
+                        "r_on": ratio_data.get("r_on") or 0.0,
+                        "r_off": ratio_data.get("r_off") or 0.0,
                     })
             except Exception:
                 continue
@@ -788,7 +863,17 @@ def get_dashboard_data(
 
             conn = open_db(project_path)
 
-            files = query_files(conn, protocol=protocol_name)
+            # Get unique materials first from files table for this protocol!
+            materials_cursor = conn.execute(
+                "SELECT DISTINCT material FROM files WHERE protocol = ? AND material IS NOT NULL ORDER BY material",
+                (protocol_name,)
+            )
+            all_materials = [row["material"] for row in materials_cursor.fetchall()]
+
+            if not material_filter and all_materials:
+                material_filter = all_materials[0]
+
+            files = query_files(conn, protocol=protocol_name, material=material_filter if material_filter else None)
             materials_rows = query_materials(conn, protocol=protocol_name)
 
             close_db(conn)
@@ -808,20 +893,35 @@ def get_dashboard_data(
                     all_rs.add(r)
                 if c is not None:
                     all_cs.add(c)
-            rows = (max(all_rs) + 1) if all_rs else rows
-            cols = (max(all_cs) + 1) if all_cs else cols
+            rows = max(6, max(all_rs)) if all_rs else rows
+            cols = max(6, max(all_cs)) if all_cs else cols
 
             # Build device_type lookup: (row, col) -> type
             type_lookup: dict[tuple[int, int], str] = {}
             for m in materials_rows:
                 type_lookup[(m["row"], m["col"])] = m.get("device_type", "non-volatile")
+            for f in files:
+                r, c = f.get("row"), f.get("col")
+                if r is not None and c is not None:
+                    if (r, c) not in type_lookup:
+                        mat_lower = f.get("material", "").lower()
+                        if "cu-c-pda" in mat_lower:
+                            type_lookup[(r, c)] = "volatile"
+                        elif "ta-pda" in mat_lower:
+                            type_lookup[(r, c)] = "non-volatile"
+                        else:
+                            type_lookup[(r, c)] = "non-volatile"
 
-            # Build material lookup: (row, col) -> material (from materials table, not files)
+            # Build material lookup: (row, col) -> material
             mat_lookup: dict[tuple[int, int], str] = {}
             for m in materials_rows:
                 r, c = m.get("row"), m.get("col")
                 if r is not None and c is not None:
                     mat_lookup[(r, c)] = m.get("material", "unknown")
+            for f in files:
+                r, c = f.get("row"), f.get("col")
+                if r is not None and c is not None:
+                    mat_lookup[(r, c)] = f.get("material", "unknown")
 
             # Build per-cell analysis from files
             cell_data: dict[tuple[int, int], dict] = {}
@@ -866,16 +966,16 @@ def get_dashboard_data(
                 row_data: list = []
                 row_meta: list = []
                 for c in range(cols):
-                    cd = cell_data.get((r, c))
+                    cd = cell_data.get((r + 1, c + 1))
                     if not cd:
                         row_data.append(None)
                         row_meta.append({
                             "cell": f"R{r + 1}C{c + 1}",
-                            "material": mat_lookup.get((r, c), "unknown"),
+                            "material": mat_lookup.get((r + 1, c + 1), "unknown"),
                             "n_files": 0,
                             "status": "Unmeasured",
                             "v_set": 0, "v_reset": 0, "ratio": 0,
-                            "device_type": type_lookup.get((r, c), "unknown"),
+                            "device_type": type_lookup.get((r + 1, c + 1), "unknown"),
                         })
                         continue
 
@@ -920,13 +1020,13 @@ def get_dashboard_data(
                     row_data.append(val)
                     row_meta.append({
                         "cell": f"R{r + 1}C{c + 1}",
-                        "material": mat_lookup.get((r, c), "unknown"),
+                        "material": mat_lookup.get((r + 1, c + 1), "unknown"),
                         "n_files": cd["n_files"],
                         "status": "Active Switching" if switching else "Non-Switching",
                         "v_set": round(med_vset, 2) if med_vset else 0,
                         "v_reset": round(med_vreset, 2) if med_vreset else 0,
                         "ratio": round(med_ratio, 1) if med_ratio else 0,
-                        "device_type": type_lookup.get((r, c), "non-volatile"),
+                        "device_type": type_lookup.get((r + 1, c + 1), "non-volatile"),
                     })
 
                 grid_data.append(row_data)
@@ -952,8 +1052,8 @@ def get_dashboard_data(
             for t in type_lookup.values():
                 type_counts[t] = type_counts.get(t, 0) + 1
 
-            # Unique materials
-            unique_materials = sorted(set(mat_lookup.values()))
+            # Unique materials (computed from files table initially)
+            unique_materials = all_materials
 
             result["device"] = {
                 "rows": rows, "cols": cols,
