@@ -518,24 +518,30 @@ def _do_single_raman_plot(filepath: str, flags: dict, auto_save: bool = False) -
     intensity = intensity[mask]
 
     meta = info.get("raman_metadata", {})
-    title = flags.get("title") or p.stem
+    title = flags.get("title", "")  # only show title if explicitly set
     xlabel = flags.get("xlabel") or "Raman shift (cm⁻¹)"
     ylabel = flags.get("ylabel") or "Intensity (counts)"
 
     plt.figure()
-    
-    # Custom color and linewidth
-    color = flags.get("color") or "#1f77b4"
-    linewidth = float(flags.get("linewidth", 1.2)) if flags.get("linewidth") else 1.2
-    linestyle = flags.get("linestyle", "solid")
-    
-    plt.plot(shift, intensity, color=color, linewidth=linewidth, linestyle=linestyle)
+
+    # Only override color/linewidth/linestyle if user explicitly passed them;
+    # otherwise let the active theme rcParams (prop_cycle, lines.*) control style.
+    plot_kwargs: dict = {}
+    if flags.get("color"):
+        plot_kwargs["color"] = flags["color"]
+    if flags.get("linewidth"):
+        plot_kwargs["linewidth"] = float(flags["linewidth"])
+    if flags.get("linestyle"):
+        plot_kwargs["linestyle"] = flags["linestyle"]
+
+    plt.plot(shift, intensity, **plot_kwargs)
 
     laser = meta.get("laser", "")
     grating = meta.get("grating", "")
     subtitle = f"  [{laser} | {grating}]" if laser and grating else ""
 
-    plt.title(f"{title}{subtitle}")
+    if title:
+        plt.title(f"{title}{subtitle}")
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
