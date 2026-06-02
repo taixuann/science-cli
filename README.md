@@ -14,19 +14,19 @@ A Python CLI for managing, plotting, and analyzing experimental data — IV curv
 ## Quick Install
 
 ```bash
-# One-liner (auto-installs via pipx or pip):
+# macOS / Linux (via pipx, recommended):
 curl -fsSL https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.sh | bash
 
-# Requires Python 3.9+
+# Windows (via PowerShell):
+irm https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.ps1 | iex
+
+# Manual installation (requires Python 3.9+):
 pip install science-cli
 
-# Or with pipx (isolated, recommended for CLI tools):
-pipx install science-cli
-
-# Or with uv (Rust-based, faster):
+# Using uv (fast, cross-platform):
 uv tool install science-cli
 
-# From source (editable, for development):
+# From source (development):
 git clone https://github.com/taixuann/science-cli.git
 cd science-cli
 pip install -e .
