@@ -1,6 +1,7 @@
 """raman command handler — list, inspect, plot, and analyze Raman spectra."""
 
 from pathlib import Path
+from rich import print as rprint
 
 import numpy as np
 from rich.console import Console
@@ -96,6 +97,87 @@ def _raman_fzf_pick_single(prompt: str = "Select Raman file") -> str | None:
     return str(raw_dir / selected[0])
 
 
+def _raman_fzf_pick_multi(prompt: str = "Select Raman file(s)") -> list[str]:
+    raw_dir = _get_project_raw_dir()
+    if not raw_dir:
+        console.print("[yellow]No project open.[/yellow]")
+        return []
+
+    files = _get_raman_files(raw_dir)
+    if not files:
+        console.print("[yellow]No Raman files found.[/yellow]")
+        return []
+
+    import re
+    from science_cli.core.fzf_utils import fzf_select
+
+    # Build file-to-step mapping from all protocols
+    from science_cli.core.paths import ProjectPaths
+    from science_cli.core.project import get_current_project_path
+    proj = get_current_project_path()
+    paths = ProjectPaths(proj)
+    file_step_map: dict[str, tuple[str, str, str]] = {}
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        with open(py) as f:
+            proto_data = __import__("yaml").safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            tech = s.get("technique", "").lower()
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                file_step_map[fname] = (pname, s["name"], tech)
+
+    from science_cli.core.session import load_session
+    sess = load_session()
+    active_proto = sess.get("last_protocol", "")
+
+    # Determine which files to display and whether to show protocol column
+    display_files = []
+    show_proto = True
+    if active_proto:
+        active_protocol_files = [
+            f for f in files 
+            if f.name in file_step_map 
+            and file_step_map[f.name][0] == active_proto
+            and file_step_map[f.name][2] == "raman"
+        ]
+        if active_protocol_files:
+            display_files = active_protocol_files
+            show_proto = False
+        else:
+            # Fallback to all files
+            display_files = files
+            show_proto = True
+    else:
+        display_files = files
+        show_proto = True
+
+    # Build display items with step/protocol info
+    from science_cli.core.fzf_utils import build_fzf_display
+    display_items = []
+    for f in display_files:
+        name = f.name
+        if name in file_step_map:
+            proto, step, tech = file_step_map[name]
+            display_items.append(build_fzf_display(proto, step, name, show_protocol=show_proto))
+        else:
+            display_items.append(name)
+
+    selected = fzf_select(
+        items=display_items,
+        prompt=prompt,
+        multi=True,
+        preview=f"head -n 20 {raw_dir}/$(echo {{}} | awk '{{print $NF}}')",
+        preview_window="right:50%:border-sharp",
+    )
+    if not selected:
+        return []
+
+    # Strip prefix columns to get clean filenames using the last token
+    selected = [s.split()[-1] for s in selected]
+    return [str(raw_dir / s) for s in selected]
+
+
 def _get_results_dir(filepath: str) -> Path:
     """Determine results directory for a given Raman file."""
     import yaml
@@ -141,23 +223,11 @@ def raman_handler(args: list) -> None:
     if sub == "ls":
         _raman_ls(sub_args)
     elif sub == "info":
-        if not sub_args or sub_args[0].startswith("--"):
-            _raman_info("--fzf")
-        else:
-            _raman_info(sub_args[0])
+        _raman_info_cmd(sub_args)
     elif sub == "plot":
-        if not sub_args or sub_args[0].startswith("--"):
-            _raman_plot("--fzf", sub_args)
-        else:
-            _raman_plot(sub_args[0], sub_args[1:])
+        _raman_plot(sub_args)
     elif sub == "analyze":
-        pos, flags = _parse_flags(sub_args)
-        if not pos:
-            picked = _raman_fzf_pick_single("Select Raman file for analysis")
-            if not picked:
-                return
-            _raman_analyze(picked, flags)
-        _raman_analyze(pos[0], flags)
+        _raman_analyze_cmd(sub_args)
     else:
         console.print(f"[yellow]Unknown raman subcommand: {sub}[/yellow]")
         show_command_help("raman")
@@ -229,18 +299,25 @@ def _find_step_dir(proj: Path, step_name: str) -> Path | None:
     return None
 
 
-def _raman_info(filename_or_fzf: str) -> None:
-    if filename_or_fzf == "--fzf":
-        picked = _raman_fzf_pick_single("Select Raman file for info")
-        if not picked:
+def _raman_info_cmd(args: list) -> None:
+    pos, flags = _parse_flags(args)
+    if not pos:
+        files = _raman_fzf_pick_multi("Select Raman file(s) for info")
+        if not files:
             return
-        filename_or_fzf = picked
+    else:
+        files = [_resolve_file(f) for f in pos]
+        files = [f for f in files if f]
 
-    filepath = _resolve_file(filename_or_fzf)
-    if not filepath:
-        console.print(f"[red]File not found: {filename_or_fzf}[/red]")
+    if not files:
+        console.print("[red]No valid file(s) found.[/red]")
         return
 
+    for filepath in files:
+        _do_raman_info(filepath)
+
+
+def _do_raman_info(filepath: str) -> None:
     meta = extract_raman_metadata(filepath)
 
     table = Table(title=f"Raman Metadata: {Path(filepath).name}", border_style="cyan", show_lines=True)
@@ -297,21 +374,125 @@ def _raman_info(filename_or_fzf: str) -> None:
     console.print(f"\n[dim]Data rows: loaded on demand via `raman plot {Path(filepath).name}`[/dim]")
 
 
-def _raman_plot(filename_or_fzf: str, plot_args: list) -> None:
-    import matplotlib.pyplot as plt
-
-    if filename_or_fzf == "--fzf":
-        picked = _raman_fzf_pick_single("Select Raman file for plot")
-        if not picked:
+def _raman_analyze_cmd(args: list) -> None:
+    pos, flags = _parse_flags(args)
+    if not pos:
+        files = _raman_fzf_pick_multi("Select Raman file(s) for analysis")
+        if not files:
             return
-        filename_or_fzf = picked
+    else:
+        files = [_resolve_file(f) for f in pos]
+        files = [f for f in files if f]
 
-    pos, flags = _parse_flags(plot_args)
-    filepath = _resolve_file(filename_or_fzf)
-    if not filepath:
-        console.print(f"[red]File not found: {filename_or_fzf}[/red]")
+    if not files:
+        console.print("[red]No valid file(s) found.[/red]")
         return
 
+    for filepath in files:
+        _raman_analyze(filepath, flags)
+
+
+def _raman_plot(args: list) -> None:
+    pos, flags = _parse_flags(args)
+
+    overlay_mode = "--overlay" in args
+    all_mode = "--all" in args
+
+    if not pos:
+        selected_files = _raman_fzf_pick_multi("Select Raman file(s) to plot")
+        if not selected_files:
+            return
+
+        # Pre-fill flags from raman template + config labels
+        all_flags: dict = {}
+        from science_cli.theme import template_to_flags
+        all_flags.update(template_to_flags("raman"))
+        from science_cli.core.config import get_plot_labels
+        all_flags.update(get_plot_labels("raman"))
+
+        # Apply active theme defaults
+        from science_cli.core.session import get_active_theme
+        from science_cli.theme import apply_theme
+        apply_theme(get_active_theme())
+
+        if not (all_mode or overlay_mode):
+            # Prompt 1: Style / analysis flags with Raman hints
+            from science_cli.cli.commands.plot import _technique_hints
+            style_hint = _technique_hints("raman").get(
+                "plot_style",
+                "--type line | --color | --linewidth",
+            )
+            rprint(f"  [dim]# {style_hint}[/dim]")
+            raw_style = input("  Style options (Enter to skip — uses theme defaults): ").strip()
+            if raw_style:
+                _, style_flags = _parse_flags(raw_style.split())
+                all_flags.update(style_flags)
+
+            # Prompt 2: Figure / output flags
+            fig_hint = _technique_hints("raman").get(
+                "figure",
+                "-n spectrum.pdf | --xlabel | --ylabel | --grid | --zoom x1,x2",
+            )
+            rprint(f"  [dim]# {fig_hint}[/dim]")
+            raw_figure = input("  Figure options (Enter to skip — uses theme defaults): ").strip()
+            if raw_figure:
+                _, figure_flags = _parse_flags(raw_figure.split())
+                all_flags.update(figure_flags)
+
+        # Combine with CLI-passed flags
+        all_flags.update(flags)
+        all_flags["technique"] = "raman"
+
+        resolved = selected_files
+    else:
+        # Direct files provided via CLI — still apply theme + template defaults
+        from science_cli.core.session import get_active_theme
+        from science_cli.theme import apply_theme, template_to_flags
+        from science_cli.core.config import get_plot_labels
+        all_flags: dict = {}
+        all_flags.update(template_to_flags("raman"))
+        all_flags.update(get_plot_labels("raman"))
+        apply_theme(get_active_theme())
+        all_flags.update(flags)
+        resolved = [_resolve_file(f) for f in pos]
+        resolved = [f for f in resolved if f]
+
+    if not resolved:
+        console.print("[red]No valid file(s) found.[/red]")
+        return
+
+    # Enforce boundaries on all files
+    from science_cli.core.technique import detect_technique
+    for f in resolved:
+        name = Path(f).name.lower()
+        if not any(p in name for p in ["_raman", "_sers", "_raman-sers"]):
+            console.print(f"[red]Error: File '{Path(f).name}' is not identified as Raman. Enforcing Raman boundaries.[/red]")
+            return
+
+    if len(resolved) == 1:
+        _do_single_raman_plot(resolved[0], all_flags, auto_save=(all_mode or overlay_mode))
+    else:
+        # Symmetrically determine overlay vs individual mode
+        if not overlay_mode and not all_mode:
+            choice = input("  Overlay all (o) or individual plots (i)? [o/i] ").strip().lower()
+            if choice == "i":
+                all_mode = True
+            else:
+                overlay_mode = True
+
+        if all_mode:
+            for f in resolved:
+                _do_single_raman_plot(f, all_flags, auto_save=True)
+        else:
+            _do_overlay_raman_plot(resolved, all_flags, auto_save=True)
+
+
+def _do_single_raman_plot(filepath: str, flags: dict, auto_save: bool = False) -> None:
+    import matplotlib.pyplot as plt
+    # Always enforce active theme before creating figure
+    from science_cli.core.session import get_active_theme
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
     p = Path(filepath)
 
     try:
@@ -321,15 +502,16 @@ def _raman_plot(filename_or_fzf: str, plot_args: list) -> None:
 
     cols = info.get("columns", [])
     if len(cols) < 2:
-        console.print("[red]Not enough columns in data.[/red]")
+        console.print(f"[red]Not enough columns in {p.name}.[/red]")
         return
 
-    shift = df[cols[0]].values
-    intensity = df[cols[1]].values
+    import pandas as pd
+    shift = pd.to_numeric(df[cols[0]], errors="coerce").values
+    intensity = pd.to_numeric(df[cols[1]], errors="coerce").values
     mask = ~(np.isnan(shift) | np.isnan(intensity) | (shift <= 0))
 
     if not mask.any():
-        console.print("[red]No valid data points.[/red]")
+        console.print(f"[red]No valid data points in {p.name}.[/red]")
         return
 
     shift = shift[mask]
@@ -340,21 +522,27 @@ def _raman_plot(filename_or_fzf: str, plot_args: list) -> None:
     xlabel = flags.get("xlabel") or "Raman shift (cm⁻¹)"
     ylabel = flags.get("ylabel") or "Intensity (counts)"
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(shift, intensity, color="#1f77b4", linewidth=1.2)
+    plt.figure()
+    
+    # Custom color and linewidth
+    color = flags.get("color") or "#1f77b4"
+    linewidth = float(flags.get("linewidth", 1.2)) if flags.get("linewidth") else 1.2
+    linestyle = flags.get("linestyle", "solid")
+    
+    plt.plot(shift, intensity, color=color, linewidth=linewidth, linestyle=linestyle)
 
     laser = meta.get("laser", "")
     grating = meta.get("grating", "")
     subtitle = f"  [{laser} | {grating}]" if laser and grating else ""
 
-    plt.title(f"{title}{subtitle}", fontsize=12)
-    plt.xlabel(xlabel, fontsize=11)
-    plt.ylabel(ylabel, fontsize=11)
+    plt.title(f"{title}{subtitle}")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
 
     if flags.get("grid"):
         plt.grid(True, alpha=0.3)
 
-    xlim = flags.get("xlim")
+    xlim = flags.get("xlim") or flags.get("zoom")
     if xlim:
         try:
             parts = [float(v.strip().replace(",", ".")) for v in xlim.split(",")]
@@ -374,9 +562,92 @@ def _raman_plot(filename_or_fzf: str, plot_args: list) -> None:
 
     plt.tight_layout()
 
-    out_name = flags.get("name", "")
+    out_name = flags.get("name") or flags.get("n")
+    if not out_name and auto_save:
+        out_name = f"raman_{p.stem}.pdf"
+
     if out_name:
-        save_path = Path(out_name)
+        out_dir = _get_results_dir(filepath)
+        save_path = out_dir / out_name
+        if not save_path.suffix:
+            save_path = save_path.with_suffix(".pdf")
+        plt.savefig(save_path, dpi=int(flags.get("dpi", 300)))
+        console.print(f"[green]✓[/green] Saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+def _do_overlay_raman_plot(files: list, flags: dict, auto_save: bool = False) -> None:
+    import matplotlib.pyplot as plt
+    # Always enforce active theme before creating figure
+    from science_cli.core.session import get_active_theme
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
+    plt.figure()
+
+    title = flags.get("title") or "Raman Overlay Plot"
+    xlabel = flags.get("xlabel") or "Raman shift (cm⁻¹)"
+    ylabel = flags.get("ylabel") or "Intensity (counts)"
+    linewidth = float(flags.get("linewidth", 1.2)) if flags.get("linewidth") else 1.2
+
+    for f in files:
+        p = Path(f)
+        try:
+            df, info = load_data_file(str(p), technique="raman", device="horiba-usth")
+        except Exception:
+            continue
+
+        cols = info.get("columns", [])
+        if len(cols) < 2:
+            continue
+
+        import pandas as pd
+        shift = pd.to_numeric(df[cols[0]], errors="coerce").values
+        intensity = pd.to_numeric(df[cols[1]], errors="coerce").values
+        mask = ~(np.isnan(shift) | np.isnan(intensity) | (shift <= 0))
+
+        if not mask.any():
+            continue
+
+        plt.plot(shift[mask], intensity[mask], label=p.stem, linewidth=linewidth)
+
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+
+    if flags.get("grid"):
+        plt.grid(True, alpha=0.3)
+
+    xlim = flags.get("xlim") or flags.get("zoom")
+    if xlim:
+        try:
+            parts = [float(v.strip().replace(",", ".")) for v in xlim.split(",")]
+            if len(parts) >= 2:
+                plt.xlim(parts[0], parts[1])
+        except ValueError:
+            pass
+
+    ylim = flags.get("ylim")
+    if ylim:
+        try:
+            parts = [float(v.strip().replace(",", ".")) for v in ylim.split(",")]
+            if len(parts) >= 2:
+                plt.ylim(parts[0], parts[1])
+        except ValueError:
+            pass
+
+    plt.tight_layout()
+
+    out_name = flags.get("name") or flags.get("n")
+    if not out_name and auto_save:
+        out_name = "raman_overlay.pdf"
+
+    if out_name:
+        out_dir = _get_results_dir(files[0])
+        save_path = out_dir / out_name
         if not save_path.suffix:
             save_path = save_path.with_suffix(".pdf")
         plt.savefig(save_path, dpi=int(flags.get("dpi", 300)))
