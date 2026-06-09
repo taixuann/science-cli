@@ -126,10 +126,10 @@ def build_patches():
     )
     copy_btn = (
         'c.jsxs("button",{'
-        + 'onClick:()=>{navigator.clipboard.writeText(X.name),ut(!0),setTimeout(()=>ut(!1),2e3)},'
+        + 'onClick:()=>{navigator.clipboard.writeText(X.name),av(!0),setTimeout(()=>av(!1),2e3)},'
         + 'className:"flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border transition-all bg-slate-800/50 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:border-slate-600",'
         + 'title:"Copy filename to clipboard",'
-        + 'children:[c.jsx(Nh,{className:"w-3 h-3"}),c.jsx("span",{children:Dt?"Copied!":"Copy Name"})]'
+        + 'children:[c.jsx(Nh,{className:"w-3 h-3"}),c.jsx("span",{children:Av?"Copied!":"Copy Name"})]'
         + '})'
     )
 
@@ -175,7 +175,7 @@ def build_patches():
         ("Auto-fit sidebar", "max-h-[640px] xl:max-h-[740px]",
          "max-h-[calc(100vh-120px)]"),
         ("Copy filename state", "[bt,lt]=al.useState(!1)",
-         "[bt,lt]=al.useState(!1),[Dt,ut]=al.useState(!1)"),
+         "[bt,lt]=al.useState(!1),[Av,av]=al.useState(!1)"),
         ("Prev/Next + Copy Name buttons", edit4_old, edit4_new),
         ("Technique metadata grid", edit5_old, edit5_new),
     ]
