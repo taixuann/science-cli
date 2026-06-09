@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -164,6 +165,103 @@ def _get_step_files(
     return files
 
 
+# Technique detection from step/file names — mirrors core/technique.py PATTERNS
+_TECHNIQUE_PATTERNS: dict[str, list[str]] = {
+    "ec-cv": [r"_CV\.", r"\.cv$", r"cv_", r"cv-"],
+    "ec-ca": [r"_CA\.", r"\.ca$", r"ca_", r"ca-"],
+    "ec-eis": [r"\.mpt$", r"_EIS\.", r"\.eis$", r"_impedance", r"\.z"],
+    "ec-lsv": [r"_LSV\.", r"\.lsv$"],
+    "ec-swv": [r"_SWV\.", r"\.swv$"],
+    "iv-sweep": [r"_IV\.", r"\.iv$", r"iv_", r"iv-", r"_sweep", r"sweep_"],
+    "iv-breakdown": [r"_bd\.", r"breakdown_", r"_Vbd", r"bd_"],
+    "iv-leakage": [r"_leak", r"leakage_", r"leak_"],
+    "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
+    "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
+    "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
+    "raman": [r"_raman", r"_sers", r"_raman-sers", r"_SERS"],
+    "uv-vis": [r"_uv-vis", r"_uvvis", r"uv-vis", r"uvvis"],
+    "afm-gwy": [r"\.gwy$"],
+    "afm-spm": [r"\.spm$"],
+    "afm-ibw": [r"\.ibw$"],
+    "afm-jpk": [r"\.jpk$", r"jpk-", r"jpk_"],
+    "afm-stp": [r"\.stp$"],
+    "afm-top": [r"\.top$"],
+}
+
+
+def _detect_technique(name: str) -> str | None:
+    for tech, patterns in _TECHNIQUE_PATTERNS.items():
+        for pat in patterns:
+            if re.search(pat, name, re.IGNORECASE):
+                return tech
+    return None
+
+
+def _extract_technique_params(step_name: str, step_path: Path) -> dict:
+    params: dict[str, str] = {}
+    name = step_name.lower().replace("_", " ")
+
+    # Common: X cycles
+    m = re.search(r"(\d+)\s*cycles?", name)
+    if m:
+        params["cycles"] = m.group(1)
+
+    # CV: scan rate — 100 mV/s, 50mVs, 0.1V/s
+    m = re.search(r"(\d+(?:\.\d+)?)\s*m[Vv]/s", name)
+    if not m:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*mVs", name)
+    if not m:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*[Vv]/s", name)
+    if m:
+        params["scan_rate"] = m.group(1) + (" mV/s" if float(m.group(1)) < 1 else " V/s")
+
+    # CV: potential range — 0-2V, -1–1V
+    m = re.search(r"([-\d.]+)\s*[-–]\s*([-\d.]+)\s*[Vv]", name)
+    if m:
+        params["potential_range"] = f"{m.group(1)}–{m.group(2)} V"
+
+    # CA: potential applied (single voltage, not a range)
+    if "potential_range" not in params:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*[Vv]", name)
+        if m:
+            params["potential_applied"] = m.group(1) + " V"
+
+    # CA: time
+    m = re.search(r"(\d+)\s*s(?:ec(?:onds?)?)?\b", name)
+    if m:
+        params["time"] = m.group(1) + " s"
+
+    # Raman: ND filter
+    m = re.search(r"nd\s*(\d+)", name) or re.search(r"filter\s*(\d+)", name)
+    if m:
+        params["nd_filter"] = m.group(1)
+
+    # Raman: accumulation
+    m = re.search(r"acc(?:um)?\s*(\d+)", name)
+    if m:
+        params["accumulation"] = m.group(1)
+
+    # Raman: acquisition time
+    m = re.search(r"acq(?:uisition)?\s*(\d+(?:\.\d+)?)", name)
+    if m:
+        params["acquisition_time"] = m.group(1) + " s"
+
+    # Raman: spectral range (cm⁻¹)
+    m = re.search(r"(\d+)\s*[-–]\s*(\d+)\s*cm", name)
+    if m:
+        params["range"] = f"{m.group(1)}–{m.group(2)} cm⁻¹"
+
+    return params
+
+
+def _step_technique_params(
+    step_name: str, step_path: Path
+) -> tuple[str | None, dict]:
+    technique = _detect_technique(step_name)
+    params = _extract_technique_params(step_name, step_path)
+    return technique, params
+
+
 def get_protocol_files(project_path: Path, protocol_name: str) -> dict:
     proto_dir = project_path / "protocol" / protocol_name
     if not proto_dir.exists():
@@ -225,6 +323,12 @@ def _scan_protocol_dirs(
             if entry.is_dir() and not entry.name.startswith("."):
                 step_name = entry.name
                 step_files_data = _get_step_files(proj_name, protocol_name, step_name, entry)
+                technique, t_params = _step_technique_params(step_name, entry)
+                for f in step_files_data:
+                    if technique:
+                        f["technique"] = technique
+                    if t_params:
+                        f["params"] = t_params
                 steps.append({
                     "name": step_name,
                     "files": step_files_data,

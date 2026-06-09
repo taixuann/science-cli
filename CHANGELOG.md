@@ -237,6 +237,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AFM CLI Commands**: `sci afm ls|info|plot|analyze|export` registered under `src/science_cli/cli/commands/afm.py` for listing, inspecting, visualizing, analyzing, and exporting AFM data.
 - **AFM Plotting Module**: Dedicated `src/science_cli/plot/afm.py` for publication-quality AFM image rendering with Nature-compliant colormaps, scale bars, and cross-section overlays.
 
+## [3.8.0] - 2026-06-09
+
+### Added
+- **`sci serve` gallery technique-specific metadata**: Gallery metadata row now auto-detects the measurement technique from step names and shows relevant parameters:
+  - **ec-cv**: Number of Cycles, Scan rate, Potential range
+  - **ec-ca**: Potential applied, Time
+  - **raman**: ND filter, Spectral range (cm⁻¹), Accumulation · Acquisition time
+  - **Other techniques**: Fallback to generic metadata (file size, dimensions, quality scale)
+- **`api.py` technique detection**: `_detect_technique()` and `_extract_technique_params()` parse step names for CV/CA/Raman measurement parameters from naming conventions
+
 ## [3.7.0] - 2026-06-09
 
 ### Added

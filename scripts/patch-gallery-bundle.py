@@ -11,6 +11,9 @@ Patches:
   2. Auto-fit sidebar: file list → viewport-relative (calc(100vh-120px))
   3. Copy filename state: adds [Dt,ut]=useState for clipboard toggle
   4. Prev/Next + Copy Name buttons: injected after Download button in toolbar
+  5. Technique-specific metadata: replaces 4 static info cells with technique-aware
+     cells (ec-cv: cycles/scan rate/potential range; ec-ca: potential applied/time;
+     raman: ND filter/range/accumulation·acq; others: unchanged)
 
 This script is for re-applying when the bundle is regenerated.
 """
@@ -37,6 +40,73 @@ def check_file(path):
         c = f.read()
     bal, diff = is_balanced(c)
     return bal, len(c), diff
+
+
+def _cell(label, value):
+    """Build a single metadata cell (minified React c.jsxs call)."""
+    return (
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"' + label + '"}),'
+        'c.jsx("span",{className:`font-bold ${N==="light"?"text-slate-800":'
+        '"text-slate-300"}`,children:' + value + '})]})'
+    )
+
+
+def _build_technique_grid():
+    """Build technique-aware metadata grid with ternary chains."""
+    cell_created = (
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"Created On"}),'
+        'c.jsx("span",{className:`font-bold ${N==="light"?"text-slate-800":'
+        '"text-slate-300"}`,children:X.created||"2026-05-29"})]})'
+    )
+
+    c2_cv = _cell("Cycles", '(X.params||{}).cycles||"—"')
+    c2_ca = _cell("Potential Applied", '(X.params||{}).potential_applied||"—"')
+    c2_raman = _cell("ND Filter", '(X.params||{}).nd_filter||"—"')
+    c2_def = _cell("File Size", 'X.size||"15.4 KB"')
+
+    c3_cv = _cell("Scan Rate", '(X.params||{}).scan_rate||"—"')
+    c3_ca = _cell("Time", '(X.params||{}).time||"—"')
+    c3_raman = _cell("Range (cm⁻¹)", '(X.params||{}).range||"—"')
+    c3_def = _cell("Dimensions", 'X.dimensions||"1280x800 px"')
+
+    c4_cv = _cell("Potential Range", '(X.params||{}).potential_range||"—"')
+    c4_ca = _cell("Technique", 'X.technique||"ec-ca"')
+    c4_raman = _cell("Accumulation·Acq",
+        '((X.params||{}).accumulation||"—")+" s / "+((X.params||{}).acquisition_time||"—")')
+    c4_def = (
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"Quality Scale"}),'
+        'c.jsx("span",{className:"text-indigo-450 font-bold",'
+        'children:"Vector High-Fid"})]})'
+    )
+
+    def ternary(conds):
+        r = conds[-1][1]
+        for cond, val in reversed(conds[:-1]):
+            r = f'{cond}?{val}:{r}'
+        return r
+
+    c2 = ternary([('X.technique==="ec-cv"', c2_cv), ('X.technique==="ec-ca"', c2_ca),
+                  ('X.technique==="raman"', c2_raman), ('', c2_def)])
+    c3 = ternary([('X.technique==="ec-cv"', c3_cv), ('X.technique==="ec-ca"', c3_ca),
+                  ('X.technique==="raman"', c3_raman), ('', c3_def)])
+    c4 = ternary([('X.technique==="ec-cv"', c4_cv), ('X.technique==="ec-ca"', c4_ca),
+                  ('X.technique==="raman"', c4_raman), ('', c4_def)])
+
+    grid = (
+        'c.jsxs("div",{className:"pt-2 border-t border-slate-200/5 grid grid-cols-2 '
+        'sm:grid-cols-4 gap-3 text-center font-mono text-[9px]",'
+        'children:[' + cell_created + ',' + c2 + ',' + c3 + ',' + c4 + ']})'
+    )
+    return grid
 
 
 def build_patches():
@@ -70,6 +140,35 @@ def build_patches():
     assert is_balanced(copy_btn)[0], "copy_btn not balanced"
     assert is_balanced(edit4_old)[1] == is_balanced(edit4_new)[1], "edit4 bracket diff mismatch"
 
+    edit5_old = (
+        'c.jsxs("div",{className:"pt-2 border-t border-slate-200/5 grid grid-cols-2 '
+        'sm:grid-cols-4 gap-3 text-center font-mono text-[9px]",children:['
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"Created On"}),c.jsx("span",{className:`font-bold ${N==="light"?'
+        '"text-slate-800":"text-slate-300"}`,children:X.created||"2026-05-29"})]}),'
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"File Size"}),c.jsx("span",{className:`font-bold ${N==="light"?'
+        '"text-slate-800":"text-slate-300"}`,children:X.size||"15.4 KB"})]}),'
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"Dimensions"}),c.jsx("span",{className:`font-bold ${N==="light"?'
+        '"text-slate-800":"text-slate-300"}`,children:X.dimensions||"1280x800 px"})]}),'
+        'c.jsxs("div",{className:`p-1.5 rounded-lg border ${N==="light"?'
+        '"bg-slate-100/50 border-slate-200":"bg-slate-950/30 border-slate-900"}`,'
+        'children:[c.jsx("span",{className:"text-slate-500 block text-[8px] mb-0.5",'
+        'children:"Quality Scale"}),c.jsx("span",{className:"text-indigo-450 font-bold",'
+        'children:"Vector High-Fid"})]})]})'
+    )
+    edit5_new = _build_technique_grid()
+
+    assert is_balanced(edit5_old)[0], "edit5_old not balanced"
+    assert is_balanced(edit5_new)[0], "edit5_new not balanced"
+
     return [
         ("Auto-fit image", "max-h-[540px] xl:max-h-[600px] object-contain",
          "max-h-[calc(100vh-200px)] object-contain"),
@@ -78,6 +177,7 @@ def build_patches():
         ("Copy filename state", "[bt,lt]=al.useState(!1)",
          "[bt,lt]=al.useState(!1),[Dt,ut]=al.useState(!1)"),
         ("Prev/Next + Copy Name buttons", edit4_old, edit4_new),
+        ("Technique metadata grid", edit5_old, edit5_new),
     ]
 
 
