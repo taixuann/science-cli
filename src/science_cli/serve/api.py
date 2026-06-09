@@ -178,7 +178,7 @@ _TECHNIQUE_PATTERNS: dict[str, list[str]] = {
     "mem-endurance": [r"_endurance", r"\.end", r"end_", r"endurance", r"-endurance"],
     "mem-retention": [r"_retention", r"\.ret", r"ret_", r"retention", r"-retention"],
     "mem-switching": [r"_switch", r"\.sw", r"sw_", r"switch_", r"-switch"],
-    "raman": [r"_raman", r"_sers", r"_raman-sers", r"_SERS"],
+    "raman": [r"_raman", r"_sers", r"_raman-sers", r"_SERS", r"\braman"],
     "uv-vis": [r"_uv-vis", r"_uvvis", r"uv-vis", r"uvvis"],
     "afm-gwy": [r"\.gwy$"],
     "afm-spm": [r"\.spm$"],
@@ -206,12 +206,12 @@ def _extract_technique_params(step_name: str, step_path: Path) -> dict:
     if m:
         params["cycles"] = m.group(1)
 
-    # CV: scan rate — 100 mV/s, 50mVs, 0.1V/s
-    m = re.search(r"(\d+(?:\.\d+)?)\s*m[Vv]/s", name)
+    # CV: scan rate — 100 mV/s, 50mVs, 0.1V/s (name already lowercased)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*mv/s", name)
     if not m:
-        m = re.search(r"(\d+(?:\.\d+)?)\s*mVs", name)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*mvs", name)
     if not m:
-        m = re.search(r"(\d+(?:\.\d+)?)\s*[Vv]/s", name)
+        m = re.search(r"(\d+(?:\.\d+)?)\s*v/s", name)
     if m:
         params["scan_rate"] = m.group(1) + (" mV/s" if float(m.group(1)) < 1 else " V/s")
 
