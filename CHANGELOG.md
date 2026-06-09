@@ -5,6 +5,29 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-06-02
+
+### Added
+- **Memristor Plotting Flags & Prompts**: Integrated custom Matplotlib styling parameter forwarding (`color`, `linestyle`, `linewidth`, `marker`, `markersize`, `zoom`, `grid`, `legend`) and theme overrides into `sci memristor plot`. Implemented interactive prompts for "Style / analysis options" and "Figure options" in FZF mode.
+- **Protocol-Aware FZF Filtering**: Programmed FZF file selection to parse technique configurations from active protocol YAMLs for `raman`, `uv-vis`, and `ec` commands. The displayed list dynamically narrows to active protocol files mapping to matching techniques (`raman`, `uv-vis`, or starting with `ec-`), falling back to all raw files if no active protocol matches.
+- **Automated Testing Coverage**: Added a comprehensive test suite `tests/test_core/test_fzf_technique_filtering.py` verifying protocol-aware FZF technique filtering under active protocol scopes.
+
+### Changed
+- **Plotting Fixes & Background Automation**: Resolved undefined `rprint` error in `raman.py`, enabled automatic FZF selection bypass when `--all` or `--overlay` is supplied in CLI args, and configured automated plotting modes to automatically save figures (`raman_<file_stem>.pdf` or `raman_overlay.pdf`) to results, avoiding GUI popup freezes.
+- **Reverted Explicit --fzf Flag**: Reverted the redundant `--fzf` plot subcommand argument in `device_cli.py` while preserving interactive prompts and FZF file selection when positional arguments are omitted.
+
+## [3.1.0] - 2026-06-02
+
+### Added
+- **Symmetric Characterization Plotting**: Fully aligned specialized plotting namespaces (`sci ec plot`, `sci uv-vis plot`, and `sci raman plot`) with the global `sci plot` capabilities. Added support for `--all` and `--overlay` flags in each namespace.
+- **Robust FZF Protocol Filtering & Fallback**: Designed and implemented a smart intersection between technique-specific files and active protocol mapping. If technique files exist in the active protocol, FZF displays only those files; if none are assigned, it gracefully falls back to showing all raw files of that technique.
+- **Technique Boundaries Check**: Symmetrical, strict validation gates in all specialized plot handlers (`ec`, `uv-vis`, and `raman`) preventing cross-technique file processing.
+- **Safe Pandas Coercion in Raman Plotting**: Implemented robust numeric casting using `pd.to_numeric(..., errors='coerce')` in `raman.py` to prevent numpy `isnan` TypeErrors when loading custom textual file layouts with headers.
+
+### Changed
+- **Aligned Raman Plot Handler**: Restructured `_raman_plot` to match the clean, unified `(args: list) -> None` CLI handler signature, removing the complex `"--fzf"` internal flag and aligning it perfectly with `_ec_plot` and `_uv_plot`.
+- **Simplified File Stripping**: Replaced regex column stripping with a clean, bulletproof `.split()[-1]` last-token extraction method to resolve filenames from FZF selections, regardless of column formatting.
+
 ## [3.0.0] - 2026-05-31
 
 ### Added
@@ -206,4 +229,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **CLI Command Verification Tests**: Fixed expected command list validations in `tests/test_cli.py` to accurately verify all 16 registered CLI commands.
 - **Recursive Import Resolver Error**: Resolved a `ValueError` in relative path calculation when scanning and compiling deeply nested submodules.
+
+## [3.3.0] - 2026-06-06
+
+### Added
+- **AFM/SPM Image Analysis Module**: New `src/science_cli/library/afm/` backend wrapping AFMReader to load and analyze AFM/SPM images. Supports `.gwy` (Gwyddion), `.spm` (Bruker), `.ibw` (Igor/Asylum), `.jpk` (JPK), `.stp`/`.top` (WSxM) formats. Depends on `AFMReader>=0.0.7`.
+- **AFM CLI Commands**: `sci afm ls|info|plot|analyze|export` registered under `src/science_cli/cli/commands/afm.py` for listing, inspecting, visualizing, analyzing, and exporting AFM data.
+- **AFM Plotting Module**: Dedicated `src/science_cli/plot/afm.py` for publication-quality AFM image rendering with Nature-compliant colormaps, scale bars, and cross-section overlays.
+
+## [3.7.0] - 2026-06-09
+
+### Added
+- **`sci serve` gallery improvements**: Auto-fit figures to viewing area (viewport-relative sizing), prev/next navigation buttons for browsing figures, and copy filename button (with "Copied!" indicator)
+- **`scripts/patch-gallery-bundle.py`**: Repeatable patch script for gallery bundle modifications
+
+## [3.6.0] - Unreleased
+
+### Added
+- **Categorized `--help` Flag Output**: Restructured `COMMAND_HELP` dicts from flat lists to categorized dicts (THEME / ANALYSIS / OUTPUT / OPERATION groups) for raman, uv-vis, ec, afm, plot, analyze, add, edit, delete commands. Updated `show_command_help()` to render category sub-headers.
+- **Spectral Range in Raman fzf Pickers**: `sci raman ls`, `raman plot`, `raman info`, and `raman analyze` now display a `Range` column showing the spectral range (first-to-last Raman shift) computed from actual data via `_raman_spectral_range()`.
+
+### Fixed
+- **Robust Horiba Header Parsing**: Added `_load_raman_data()` which drops data rows where the first column starts with `#`, handling Horiba `.txt` files with variable header line counts (46 instead of 45) where `#AxisUnit[1]=1/cm` was incorrectly read as a data row.
+
+## [3.5.0] - 2026-06-06
+
+### Added
+- **`raman analyze --overlay`**: When processing multiple files, renders all corrected spectra overlaid on a single figure with auto-generated title and color cycling.
+- **`raman analyze --all`**: When processing multiple files, renders a subplot grid with each corrected spectrum in its own panel, including baseline (dashed) and peak markers.
+- **`raman analyze --no-legend`**: Hides the legend on overlay and regular plots.
+- **Multi-file `--ai` mode**: `sci raman analyze --ai` now supports multiple file selection via fzf, with agent recommendations applied across all chosen files.
+
+## [3.4.0] - 2026-06-06
+
+### Added
+- **RamanSPy Preprocessing Pipeline (`sci raman analyze`)**: Full RamanSPy-powered pipeline with four-stage processing: denoising (Savitzky-Golay / Whittaker), baseline correction (ASLS, AIRPLS, ARPLS, Poly, ModPoly), normalization (Vector, MinMax, MaxIntensity, AUC), and peak detection with configurable prominence/distance/height/width thresholds.
+- **Enhanced Analysis Plot**: Dedicated matplotlib figure showing raw data (gray), baseline curve (orange dashed), corrected/normalized spectrum (black), and annotated peaks (red scatter + text labels with wavenumber annotations).
+- **Automatic Text Report**: `{prefix}_report.txt` written alongside CSV exports, containing file metadata (laser, ND filter, acq time, accumulations), full pipeline description, detected peaks table (shift, intensity, prominence, FWHM), and summary statistics.
+- **`--ai` Interactive Wizard**: New `sci raman analyze --ai` mode that delegates flag recommendations to the `sci-raman` opencode agent (mimo-v2.5-pro). Picks files via fzf, extracts spectral metadata, sends a structured JSON payload to the agent, parses the returned JSON recommendations (flags with reasoning), and applies the normalized flags automatically. Includes flag name normalization with aliases (e.g. `savgol:7:3`, `area` → `auc`).
+- **`sci-raman` Agent**: Created agent definition at `tools/science-cli/.opencode/agents/sci-raman.md` with domain expertise in Raman spectroscopy preprocessing and band assignment.
+- **`sci-raman` Skill**: Created skill at `tools/science-cli/.opencode/skills/sci-raman/SKILL.md` providing Raman peak table references and preprocessing guidance for the agent.
+- **Updated Help Text**: Enhanced `raman analyze` help description covering pipeline, enhanced plot, text report, `--ai` mode, and all CLI flags.
+
+### Changed
+- **Raman Analyze Interactive Prompt**: Replaced static flag defaults with a guided step-by-step interactive pipeline builder for denoising, baseline, normalization, peak finding, and plot generation.
+- **RamanSPy Integration**: Under-the-hood migration from manual scipy processing to RamanSPy's preprocessing modules (`rp.preprocessing.denoise`, `rp.preprocessing.baseline`, `rp.preprocessing.normalise`) with standardized spectrometer object handling.
 
