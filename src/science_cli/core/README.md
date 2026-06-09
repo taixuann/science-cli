@@ -21,19 +21,18 @@
 **Core modules must never import from `cli/` or `plot/`.** They are the
 foundation layer — CLI and plot depend on core, not the reverse.
 
-## fzf Integration (/dev/tty Approach)
+## fzf Integration
 
-`fzf_utils.py` provides interactive file selection powered by [fzf](https://github.com/junegunn/fzf). fzf renders its UI on stderr (or directly to `/dev/tty`) and writes the selected item(s) to stdout. The implementation uses `subprocess.Popen` with stderr wired to `/dev/tty`:
+`fzf_utils.py` provides interactive file selection powered by [fzf](https://github.com/junegunn/fzf). fzf renders its UI on stderr (or directly to `/dev/tty`) and writes the selected item(s) to stdout. The implementation uses `subprocess.Popen`:
 
-1. fzf is launched via `subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=tty_fd)`
+1. fzf is launched via `subprocess.Popen` with piped stdin/stdout
 2. Items are written to stdin via `proc.communicate(input=input_text)`
-3. fzf's interactive UI appears on the real terminal via `/dev/tty`
-4. Selected item(s) are read from stdout — clean, no ANSI stripping needed
-5. If `/dev/tty` is unavailable, falls back to `_fallback_select()` (numbered list)
+3. Selected item(s) are read from stdout — clean, no ANSI stripping needed
+4. If fzf is unavailable or fails, falls back to `_fallback_select()` (numbered list)
 
-**Why this approach**: Opening `/dev/tty` explicitly guarantees fzf gets the real controlling terminal regardless of any Textual / asyncio / PTY wrappers around `sys.stdout` or `sys.stderr`. Previous approaches used `script -q` (via PLAN-tui-fzf-pty) and `pty.spawn()` — both required ANSI escape sequence stripping and had platform-specific issues.
+**Unix (`/dev/tty` approach)**: fzf's stderr is wired to `/dev/tty` via `os.open("/dev/tty", os.O_RDWR)`. This guarantees fzf gets the real controlling terminal regardless of any Textual / asyncio / PTY wrappers around `sys.stdout` or `sys.stderr`. Previous approaches used `script -q` (via PLAN-tui-fzf-pty) and `pty.spawn()` — both required ANSI escape sequence stripping and had platform-specific issues.
 
-**Platform differences**: None — works identically on macOS and Linux via standard Unix `/dev/tty`.
+**Windows**: `fzf_utils.py` detects the platform and avoids `/dev/tty`. Instead, fzf inherits the parent console directly (`stderr=None`) with `CREATE_NO_WINDOW` flag. This allows fzf to work natively on Windows without WSL.
 
 If fzf is unavailable, `_fallback_select()` presents a simple numbered list. The `SCI_TUI_ACTIVE` env var guard was removed in PLAN-tui-fzf-pty — fzf now works everywhere (CLI, TUI suspend mode via subprocess dispatch, and REPL).
 

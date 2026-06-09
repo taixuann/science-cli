@@ -13,24 +13,37 @@ A Python CLI for managing, plotting, and analyzing experimental data — IV curv
 
 ## Quick Install
 
+### macOS / Linux
 ```bash
-# macOS / Linux (via pipx, recommended):
 curl -fsSL https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.sh | bash
-
-# Windows (via PowerShell):
-irm https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.ps1 | iex
-
-# Manual installation (requires Python 3.9+):
-pip install science-cli
-
-# Using uv (fast, cross-platform):
-uv tool install science-cli
-
-# From source (development):
-git clone https://github.com/taixuann/science-cli.git
-cd science-cli
-pip install -e .
 ```
+
+### Windows
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+irm https://raw.githubusercontent.com/taixuann/science-cli/main/scripts/install.ps1 | iex
+```
+
+### Manual Installation (all platforms)
+```bash
+# Requires Python 3.9+
+pipx install science-cli     # recommended (isolated)
+# or
+pip install science-cli
+```
+
+### Using uv (fast, cross-platform)
+```bash
+uv tool install science-cli
+```
+
+### fzf Dependency
+
+science-cli uses **fzf** for interactive file selection. The install scripts above will install fzf automatically. If you install manually, you need fzf separately:
+
+- **macOS**: `brew install fzf`
+- **Linux**: Download from https://github.com/junegunn/fzf/releases
+- **Windows**: `winget install fzf` or download from https://github.com/junegunn/fzf/releases
 
 ### Dependencies
 

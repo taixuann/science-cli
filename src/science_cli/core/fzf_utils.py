@@ -1,6 +1,7 @@
 """fzf integration for interactive file selection with global styling."""
 
 import os
+import platform
 import shutil
 import subprocess
 
@@ -101,34 +102,47 @@ def _run_fzf(
     prompt: str,
     multi: bool,
 ) -> list[str]:
-    """Run fzf — stdout piped (captured), stderr wired to ``/dev/tty``.
+    """Run fzf — stdout piped (captured), stderr wired to the terminal.
 
-    fzf writes its interactive UI to stderr (or directly to ``/dev/tty``)
-    and the selected item(s) to stdout.  By piping stdout but routing
-    stderr to ``/dev/tty``, the user sees the full fzf UI on the real
-    terminal while we capture the selection result cleanly.
-
-    Opening ``/dev/tty`` explicitly guarantees fzf gets the real
-    controlling terminal, regardless of any Textual / asyncio / PTY
+    On Unix, stderr is routed to ``/dev/tty`` so fzf gets the real
+    controlling terminal regardless of any Textual / asyncio / PTY
     wrappers around sys.stdout or sys.stderr.
+
+    On Windows, the console is inherited directly (``stderr=None``)
+    since ``/dev/tty`` does not exist.
     """
-    try:
-        tty_fd = os.open("/dev/tty", os.O_RDWR)
-    except OSError:
-        return _fallback_select(items, prompt, multi)
+    if platform.system() == "Windows":
+        creationflags = 0
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+        try:
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=None,
+                creationflags=creationflags,
+            )
+        except FileNotFoundError:
+            return _fallback_select(items, prompt, multi)
+    else:
+        try:
+            tty_fd = os.open("/dev/tty", os.O_RDWR)
+        except OSError:
+            return _fallback_select(items, prompt, multi)
 
-    try:
-        proc = subprocess.Popen(
-            args,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=tty_fd,
-        )
-    except FileNotFoundError:
+        try:
+            proc = subprocess.Popen(
+                args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=tty_fd,
+            )
+        except FileNotFoundError:
+            os.close(tty_fd)
+            return _fallback_select(items, prompt, multi)
+
         os.close(tty_fd)
-        return _fallback_select(items, prompt, multi)
-
-    os.close(tty_fd)
 
     stdout_data, _ = proc.communicate(input=input_text.encode())
 
