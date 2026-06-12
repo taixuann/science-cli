@@ -198,6 +198,13 @@ def detect_vset(voltage, current, v_read=0.1):
         return None, None
 
     seg_start, _seg_end, v_seg, i_seg = forward_seg
+    
+    # Guard: no detection if current doesn't vary by at least 10×
+    # (prevents false triggers on flat/noisy lines)
+    i_median_start = float(np.median(np.abs(i_seg[:max(5, len(i_seg)//10)])))
+    i_max = float(np.max(np.abs(i_seg)))
+    if i_median_start <= 0 or i_max / i_median_start < 10:
+        return None, None
 
     # ── SCLC Log-Log Slope Method (Primary Physics-Based Method) ──
     sclc_vset = None
@@ -224,10 +231,39 @@ def detect_vset(voltage, current, v_read=0.1):
         # and current magnitude is above the noise floor (> 10 nA)
         switching_points = np.where((dlogi_dlogv >= 3.0) & (i_pos > 1e-8))[0]
         if len(switching_points) > 0:
-            sclc_vset = float(v_pos[switching_points[0]])
-            # Map back to original segment index
-            pos_indices = np.where(pos_mask)[0]
-            sclc_idx = int(seg_start + pos_indices[switching_points[0]])
+            # Group consecutive points into plateaus to avoid noisy false triggers
+            # A plateau is a contiguous run of qualifying points.
+            diffs = np.diff(switching_points)
+            plateau_breaks = np.where(diffs > 1)[0]
+            plateau_starts = np.concatenate([[0], plateau_breaks + 1])
+            plateau_ends = np.concatenate([plateau_breaks + 1, [len(switching_points)]])
+            
+            best_score = -1.0
+            sclc_vset = None
+            sclc_idx = None
+            
+            n_first_baseline = max(3, len(i_pos) // 15)
+            baseline_i = float(np.median(np.abs(i_pos[:n_first_baseline])))
+            if baseline_i <= 0:
+                baseline_i = 1e-15
+            
+            for ps, pe in zip(plateau_starts, plateau_ends):
+                p_len = pe - ps
+                if p_len < 1:
+                    continue
+                plateau_slopes = dlogi_dlogv[switching_points[ps:pe]]
+                p_max_slope = float(np.max(plateau_slopes))
+                p_first_idx = switching_points[ps]
+                i_at_start = float(np.abs(i_pos[p_first_idx]))
+                i_ratio = i_at_start / baseline_i
+                if i_ratio < 1:
+                    i_ratio = 1.0
+                score = p_len * p_max_slope * np.log10(max(i_ratio, 2.0))
+                if score > best_score:
+                    best_score = score
+                    sclc_vset = float(v_pos[p_first_idx])
+                    pos_indices = np.where(pos_mask)[0]
+                    sclc_idx = int(seg_start + pos_indices[p_first_idx])
 
     # ── Fallback 1: Derivative method: d(log10|I|)/dV maximum ──
     log_i = np.log10(np.abs(i_seg) + 1e-30)
