@@ -431,32 +431,31 @@ export default function App() {
       });
     }
     if (sweeps?.length && cycleFilter === 'single') {
-      for (let i = 0; i < sweeps.length; i++) {
-        const s = sweeps[i];
-        if (s.v_set_idx != null && s.v_set_idx >= 0 && s.v_set_idx < s.voltage.length) {
-          const v = s.voltage[s.v_set_idx];
-          const cur = currentScale === 'linear_signed' ? s.current[s.v_set_idx] : Math.abs(s.current[s.v_set_idx]);
-          traces.push({
-            x: [v], y: [cur],
-            type: 'scatter', mode: 'markers',
-            name: `V_set (${s.label})`,
-            marker: { symbol: 'circle', size: 11, color: '#ef4444', line: { color: '#fff', width: 1.5 } },
-            showlegend: false,
-            hovertemplate: `V_set: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
-          });
-        }
-        if (s.v_reset_idx != null && s.v_reset_idx >= 0 && s.v_reset_idx < s.voltage.length) {
-          const v = s.voltage[s.v_reset_idx];
-          const cur = currentScale === 'linear_signed' ? s.current[s.v_reset_idx] : Math.abs(s.current[s.v_reset_idx]);
-          traces.push({
-            x: [v], y: [cur],
-            type: 'scatter', mode: 'markers',
-            name: `V_reset (${s.label})`,
-            marker: { symbol: 'circle', size: 11, color: '#6366f1', line: { color: '#fff', width: 1.5 } },
-            showlegend: false,
-            hovertemplate: `V_reset: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
-          });
-        }
+      const idx = Math.min(Math.max(0, singleCycleVal - 1), sweeps.length - 1);
+      const s = sweeps[idx];
+      if (s.v_set_idx != null && s.v_set_idx >= 0 && s.v_set_idx < s.voltage.length) {
+        const v = s.voltage[s.v_set_idx];
+        const cur = currentScale === 'linear_signed' ? s.current[s.v_set_idx] : Math.abs(s.current[s.v_set_idx]);
+        traces.push({
+          x: [v], y: [cur],
+          type: 'scatter', mode: 'markers',
+          name: 'V_set',
+          marker: { symbol: 'circle', size: 11, color: '#ef4444', line: { color: '#fff', width: 1.5 } },
+          showlegend: false,
+          hovertemplate: `V_set: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
+        });
+      }
+      if (s.v_reset_idx != null && s.v_reset_idx >= 0 && s.v_reset_idx < s.voltage.length) {
+        const v = s.voltage[s.v_reset_idx];
+        const cur = currentScale === 'linear_signed' ? s.current[s.v_reset_idx] : Math.abs(s.current[s.v_reset_idx]);
+        traces.push({
+          x: [v], y: [cur],
+          type: 'scatter', mode: 'markers',
+          name: 'V_reset',
+          marker: { symbol: 'circle', size: 11, color: '#6366f1', line: { color: '#fff', width: 1.5 } },
+          showlegend: false,
+          hovertemplate: `V_reset: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
+        });
       }
     }
     return traces;
