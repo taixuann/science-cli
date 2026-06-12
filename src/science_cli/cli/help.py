@@ -13,7 +13,7 @@ console = Console()
 HELP_SECTIONS = {
     "GROUP 1: FILE MANAGEMENT": ["add", "delete", "edit", "ls"],
     "GROUP 2: CONTEXT & INFORMATION": ["open", "close", "config", "status", "results", "info", "chat"],
-    "GROUP 3: LIBRARY PLOTTING": ["plot", "analyze", "---", "serve", "---", "memristor", "raman", "uv-vis", "iv", "ec"],
+    "GROUP 3: LIBRARY PLOTTING": ["plot", "analyze", "---", "serve", "---", "memristor", "raman", "uv-vis", "iv", "ec", "afm"],
     "ADDITIONAL": ["help", "version", "clear", "history"],
 }
 
@@ -34,9 +34,10 @@ COMMAND_DESCRIPTIONS = {
     "serve":   "Start interactive dashboard server at localhost:8000",
     "memristor": "Memristor IV/endurance/retention — plot, dashboard, sync",
     "raman":   "Raman spectroscopy — list, inspect, plot, analyze",
-    "uv-vis":  "UV-Vis spectroscopy (coming)",
+    "uv-vis":  "UV-Vis spectroscopy — list, inspect, plot, analyze",
     "iv":      "IV sweep analysis (coming)",
-    "ec":      "Electrochemistry CV/CA/EIS (coming)",
+    "ec":      "Electrochemistry CV/CA/EIS — list, inspect, plot, analyze",
+    "afm":     "AFM/SPM image — ls, info, plot, analyze, export",
     "help":    "Show this help",
     "version": "Show version",
     "clear":   "Clear screen",
@@ -56,13 +57,15 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data [--all]"},
         },
         "flags": {
-            "-n, --name":     {"desc": "Protocol name (required for protocol mode)"},
-            "--desc":         {"desc": "Protocol description"},
-            "--step":         {"desc": "Step ID(s), comma-separated"},
-            "-t, --technique":{"desc": "Technique(s), comma-separated"},
-            "-d, --device":   {"desc": "Device name(s) per step, comma-separated (e.g. keithley-2400)"},
-            "-pt, --protocol":{"desc": "Protocol name (for metadata mode)"},
-            "--all":          {"desc": "Assign all selected files to one step (skip per-file prompt)"},
+            "OPERATION": {
+                "-n, --name":     {"desc": "Protocol name (required for protocol mode)"},
+                "--desc":         {"desc": "Protocol description"},
+                "--step":         {"desc": "Step ID(s), comma-separated"},
+                "-t, --technique":{"desc": "Technique(s), comma-separated"},
+                "-d, --device":   {"desc": "Device name(s) per step, comma-separated (e.g. keithley-2400)"},
+                "-pt, --protocol":{"desc": "Protocol name (for metadata mode)"},
+                "--all":          {"desc": "Assign all selected files to one step (skip per-file prompt)"},
+            },
         },
         "examples": [
             "add -m project my-project",
@@ -81,15 +84,17 @@ COMMAND_HELP: Dict[str, dict] = {
             "edit -m data":        {"desc": "Move/reassign files between steps (interactive fzf)", "usage": "edit -m data"},
         },
         "flags": {
-            "-n, --name":     {"desc": "Protocol name (required)"},
-            "--nn, --new-name":{"desc": "New protocol name (rename)"},
-            "--desc":         {"desc": "New description"},
-            "--step":         {"desc": "Step ID(s), comma-separated"},
-            "-t, --technique":{"desc": "Technique(s), comma-separated"},
-            "-d, --device":   {"desc": "Device name(s) per step, comma-separated"},
-            "--rm-step":      {"desc": "Step name to remove from protocol"},
-            "--reorder":      {"desc": "Comma-separated step order (e.g. 1_cv,2_ca,3_eis)"},
-            "--files":        {"desc": "File(s), comma-separated"},
+            "OPERATION": {
+                "-n, --name":     {"desc": "Protocol name (required)"},
+                "--nn, --new-name":{"desc": "New protocol name (rename)"},
+                "--desc":         {"desc": "New description"},
+                "--step":         {"desc": "Step ID(s), comma-separated"},
+                "-t, --technique":{"desc": "Technique(s), comma-separated"},
+                "-d, --device":   {"desc": "Device name(s) per step, comma-separated"},
+                "--rm-step":      {"desc": "Step name to remove from protocol"},
+                "--reorder":      {"desc": "Comma-separated step order (e.g. 1_cv,2_ca,3_eis)"},
+                "--files":        {"desc": "File(s), comma-separated"},
+            },
         },
         "examples": [
             "edit -m protocol -n doping --desc \"Updated description\"",
@@ -111,9 +116,11 @@ COMMAND_HELP: Dict[str, dict] = {
             "delete -m data":        {"desc": "Remove data files from protocol YAML (fzf)", "usage": "delete -m data [--step <name>]"},
         },
         "flags": {
-            "-n, --name": {"desc": "Protocol name (required)"},
-            "--step":     {"desc": "Step ID(s) to clear, comma-separated"},
-            "--all":      {"desc": "Clear file assignments from all protocols"},
+            "OPERATION": {
+                "-n, --name": {"desc": "Protocol name (required)"},
+                "--step":     {"desc": "Step ID(s) to clear, comma-separated"},
+                "--all":      {"desc": "Clear file assignments from all protocols"},
+            },
         },
         "examples": [
             "delete -m protocol -n doping",
@@ -247,25 +254,39 @@ COMMAND_HELP: Dict[str, dict] = {
             "raman ls":               {"desc": "List Raman files in current project", "usage": "raman ls [--step <name>]"},
             "raman info":             {"desc": "Show full header metadata (laser, grating, etc.)", "usage": "raman info [file]"},
             "raman plot":             {"desc": "Plot Raman spectrum with metadata annotation", "usage": "raman plot [file] [--grid] [--name out.pdf]"},
-            "raman analyze":          {"desc": "Peak finding, baseline, normalization, CSV export", "usage": "raman analyze [file] [--baseline] [--norm] [--prominence 500]"},
+            "raman analyze":          {"desc": "Preprocessing pipeline (denoise → baseline → norm → peak detect) via RamanSPy. Enhanced analysis plot (raw + baseline + corrected + annotated peaks). Automatic text report with metadata, pipeline, peaks table, and summary. --ai mode: uses sci-raman opencode agent for intelligent flag recommendations via file metadata analysis. --overlay: overlay all processed spectra on a single figure. --all: subplot grid with each spectrum in its own panel. Multi-file fzf picker with CSV/PDF export.", "usage": "raman analyze [file] [--ai] [--overlay] [--all] [--denoise savgol|whittaker] [--baseline asls|airpls|arpls|poly|modpoly] [--norm vector|minmax|maxintensity|auc] [--plot]"},
         },
         "flags": {
-            "-n, --name":   {"desc": "Output filename/prefix (plot, analyze)"},
-            "--step":       {"desc": "Step name (ls subcommand)"},
-            "--grid":       {"desc": "Show grid (plot subcommand)"},
-            "--title":      {"desc": "Plot title"},
-            "--xlabel":     {"desc": "X-axis label (default: Raman shift (cm⁻¹))"},
-            "--ylabel":     {"desc": "Y-axis label (default: Intensity (counts))"},
-            "--xlim":       {"desc": "X-axis limits: 800,1800"},
-            "--ylim":       {"desc": "Y-axis limits: 0,10000"},
-            "--baseline":   {"desc": "Enable ASLS baseline correction (analyze)"},
-            "--lam":        {"desc": "ASLS smoothness, default 1e7 (analyze)"},
-            "--p":          {"desc": "ASLS asymmetry, default 0.01 (analyze)"},
-            "--norm":       {"desc": "Max-intensity normalization (analyze)"},
-            "--prominence": {"desc": "Peak prominence threshold, default 500 (analyze)"},
-            "--distance":   {"desc": "Min peak separation in cm⁻¹ (analyze)"},
-            "--height":     {"desc": "Min peak height in counts (analyze)"},
-            "--width":      {"desc": "Min peak width in cm⁻¹ (analyze)"},
+            "THEME": {
+                "--grid":       {"desc": "Show grid (plot subcommand)"},
+                "--title":      {"desc": "Plot title"},
+                "--xlabel":     {"desc": "X-axis label (default: Raman shift (cm-1))"},
+                "--ylabel":     {"desc": "Y-axis label (default: Intensity (counts))"},
+                "--xlim":       {"desc": "X-axis limits: 800,1800"},
+                "--ylim":       {"desc": "Y-axis limits: 0,10000"},
+            },
+            "ANALYSIS": {
+                "--ai":         {"desc": "Interactive step-by-step wizard for pipeline choices (analyze)"},
+                "--denoise":    {"desc": "Denoising method: savgol|whittaker (analyze)"},
+                "--baseline":   {"desc": "Baseline method: asls|airpls|arpls|poly|modpoly (analyze)"},
+                "--norm":       {"desc": "Normalization method: vector|minmax|maxintensity|auc (analyze)"},
+                "--plot":       {"desc": "Generate analysis figure: raw data + baseline + corrected + labeled peaks (analyze)"},
+                "--savgol-window": {"desc": "Savitzky-Golay window length, default 9 (analyze)"},
+                "--savgol-order":  {"desc": "Savitzky-Golay polynomial order, default 3 (analyze)"},
+                "--lam":        {"desc": "Baseline smoothness (asls/airpls/arpls), default 1e7 (analyze)"},
+                "--p":          {"desc": "Baseline asymmetry (asls/airpls/arpls), default 0.01 (analyze)"},
+                "--overlay":    {"desc": "Single figure with all corrected spectra overlaid (analyze, multi-file)"},
+                "--all":        {"desc": "Subplot grid with each corrected spectrum in its own panel (analyze, multi-file)"},
+                "--no-legend":  {"desc": "Hide legend (plot and analyze overlay)"},
+                "--prominence": {"desc": "Peak prominence threshold, default 500 (analyze)"},
+                "--distance":   {"desc": "Min peak separation in cm-1 (analyze)"},
+                "--height":     {"desc": "Min peak height in counts (analyze)"},
+                "--width":      {"desc": "Min peak width in cm-1 (analyze)"},
+            },
+            "OUTPUT": {
+                "-n, --name":   {"desc": "Output filename/prefix (plot, analyze)"},
+                "--step":       {"desc": "Step name (ls subcommand)"},
+            },
         },
         "examples": [
             "raman ls",
@@ -274,8 +295,75 @@ COMMAND_HELP: Dict[str, dict] = {
             "raman info 260526_PDA-ITO_raman_01.txt",
             "raman plot",
             "raman plot 260526_PDA-ITO_raman_01.txt --name raman_spectrum.pdf",
-            "raman analyze",
-            "raman analyze 260526_PDA-ITO_raman_01.txt --baseline --prominence 1000",
+            "raman analyze --ai",
+            "raman analyze 260526_PDA-ITO_raman_01.txt --denoise whittaker --baseline airpls --norm vector --prominence 1000 --plot",
+            "raman analyze --overlay",
+            "raman analyze --overlay --no-legend",
+            "raman analyze --all",
+            "raman analyze --ai --overlay",
+        ],
+    },
+    "uv-vis": {
+        "usage": "uv-vis <subcommand> [args...]",
+        "desc": "UV-Vis spectroscopy: list, inspect, plot, and analyze spectra (Group 3).",
+        "subcommands": {
+            "uv-vis ls":               {"desc": "List UV-Vis files in current project", "usage": "uv-vis ls"},
+            "uv-vis info":             {"desc": "Show header and data range details", "usage": "uv-vis info [file]"},
+            "uv-vis plot":             {"desc": "Plot UV-Vis spectrum with standard axis labels", "usage": "uv-vis plot [file] [--grid] [--name out.pdf]"},
+            "uv-vis analyze":          {"desc": "Calculate range, min/max peaks, inflection onset slope, and CSV export", "usage": "uv-vis analyze [file] [--name prefix]"},
+        },
+        "flags": {
+            "THEME": {
+                "--grid":       {"desc": "Show grid (plot)"},
+                "--title":      {"desc": "Plot title"},
+                "--xlabel":     {"desc": "X-axis label (default: Wavelength (nm))"},
+                "--ylabel":     {"desc": "Y-axis label (default: Transmission (%))"},
+                "--xlim":       {"desc": "X-axis limits: 300,800"},
+                "--ylim":       {"desc": "Y-axis limits"},
+            },
+            "OUTPUT": {
+                "-n, --name":   {"desc": "Output filename/prefix (plot, analyze)"},
+            },
+        },
+        "examples": [
+            "uv-vis ls",
+            "uv-vis info",
+            "uv-vis plot",
+            "uv-vis plot 260526_PDA-ITO_uvvis_01.txt --name uv_vis.pdf",
+            "uv-vis analyze",
+        ],
+    },
+    "ec": {
+        "usage": "ec <subcommand> [args...]",
+        "desc": "Electrochemistry CV/CA/EIS: list, inspect, plot, and analyze (Group 3).",
+        "subcommands": {
+            "ec ls":                  {"desc": "List Electrochemistry files in current project", "usage": "ec ls"},
+            "ec info":                {"desc": "Show columns, shape, and value range", "usage": "ec info [file]"},
+            "ec plot":                {"desc": "Plot Cyclic Voltammetry, Chronoamperometry, or EIS Nyquist/Bode", "usage": "ec plot [file] [--grid] [--name out.pdf]"},
+            "ec analyze":             {"desc": "Run peak finding (CV), Cottrell fit (CA), or circuit fitting (EIS)", "usage": "ec analyze [file] [--peaks] [--charge] [--fit] [--circuit RRC] [--kk]"},
+        },
+        "flags": {
+            "THEME": {
+                "--grid":       {"desc": "Show grid"},
+                "--title":      {"desc": "Plot title"},
+            },
+            "ANALYSIS": {
+                "--peaks":      {"desc": "Find CV redox peaks"},
+                "--charge":     {"desc": "Integrate CV charge"},
+                "--fit":        {"desc": "Fit CA decay curve to Cottrell equation"},
+                "--circuit":    {"desc": "EIS equivalent circuit model, e.g. RRC, RQR"},
+                "--kk":         {"desc": "Validate EIS impedance data with Kramers-Kronig relation"},
+            },
+            "OUTPUT": {
+                "-n, --name":   {"desc": "Output filename/prefix (plot, analyze)"},
+            },
+        },
+        "examples": [
+            "ec ls",
+            "ec info",
+            "ec plot",
+            "ec analyze --peaks --charge",
+            "ec analyze --circuit RRC --kk",
         ],
     },
     "plot": {
@@ -290,25 +378,29 @@ COMMAND_HELP: Dict[str, dict] = {
             "plot delete <name>":  {"desc": "Delete a saved figure", "usage": "plot delete ca_potential-variation.pdf"},
         },
         "flags": {
-            "-n, --name": {"desc": "Output filename (format from extension: .svg, .pdf, .png)"},
-            "--type":     {"desc": "Plot type: line|scatter"},
-            "--color":    {"desc": "Color: #1f77b4, red"},
-            "--linewidth":{"desc": "Line width: 1.5, 2.0"},
-            "--linestyle":{"desc": "Line style: solid, dashed, dotted"},
-            "--marker":   {"desc": "Marker: o, s, ^, D"},
-            "--markersize":{"desc": "Marker size: 8, 10"},
-            "--cmap":     {"desc": "Colormap: viridis, plasma (scatter only)"},
-            "--title":    {"desc": "Plot title"},
-            "--xlabel":   {"desc": "X-axis label"},
-            "--ylabel":   {"desc": "Y-axis label"},
-            "--xlim":     {"desc": "X-axis limits: -0.5,0.5"},
-            "--ylim":     {"desc": "Y-axis limits: -1e-3,1e-3"},
-            "--zoom":     {"desc": "Axis limits: x1,x2,y1,y2 or x1,x2"},
-            "--size":     {"desc": "Figure size: 8,6"},
-            "--dpi":      {"desc": "Figure resolution: 150, 300"},
-            "--grid":     {"desc": "Show grid"},
-            "--legend":   {"desc": "Show legend"},
-            "--label-name": {"desc": "Custom legend labels (comma-separated, overlay only)"},
+            "THEME": {
+                "--type":     {"desc": "Plot type: line|scatter"},
+                "--color":    {"desc": "Color: #1f77b4, red"},
+                "--linewidth":{"desc": "Line width: 1.5, 2.0"},
+                "--linestyle":{"desc": "Line style: solid, dashed, dotted"},
+                "--marker":   {"desc": "Marker: o, s, ^, D"},
+                "--markersize":{"desc": "Marker size: 8, 10"},
+                "--cmap":     {"desc": "Colormap: viridis, plasma (scatter only)"},
+                "--title":    {"desc": "Plot title"},
+                "--xlabel":   {"desc": "X-axis label"},
+                "--ylabel":   {"desc": "Y-axis label"},
+                "--xlim":     {"desc": "X-axis limits: -0.5,0.5"},
+                "--ylim":     {"desc": "Y-axis limits: -1e-3,1e-3"},
+                "--zoom":     {"desc": "Axis limits: x1,x2,y1,y2 or x1,x2"},
+                "--size":     {"desc": "Figure size: 8,6"},
+                "--dpi":      {"desc": "Figure resolution: 150, 300"},
+                "--grid":     {"desc": "Show grid"},
+                "--legend":   {"desc": "Show legend"},
+                "--label-name": {"desc": "Custom legend labels (comma-separated, overlay only)"},
+            },
+            "OUTPUT": {
+                "-n, --name": {"desc": "Output filename (format from extension: .svg, .pdf, .png)"},
+            },
         },
         "examples": [
             "plot",
@@ -324,16 +416,58 @@ COMMAND_HELP: Dict[str, dict] = {
         "usage": "analyze [options]",
         "desc": "Analyze data — fzf-based, technique-aware analysis (Group 3). No plotting, only analysis results.",
         "flags": {
-            "--peaks":    {"desc": "Find CV peaks"},
-            "--charge":   {"desc": "Integrate CV charge"},
-            "--fit":      {"desc": "Fit CA decay"},
-            "--circuit":  {"desc": "EIS circuit model: RRC, RQR, etc."},
-            "--kk":       {"desc": "Kramers-Kronig validation (EIS)"},
+            "ANALYSIS": {
+                "--peaks":    {"desc": "Find CV peaks"},
+                "--charge":   {"desc": "Integrate CV charge"},
+                "--fit":      {"desc": "Fit CA decay"},
+                "--circuit":  {"desc": "EIS circuit model: RRC, RQR, etc."},
+                "--kk":       {"desc": "Kramers-Kronig validation (EIS)"},
+            },
         },
         "examples": [
             "analyze --peaks --charge",
             "analyze --fit",
             "analyze --circuit RRC --kk",
+        ],
+    },
+    "afm": {
+        "usage": "afm <subcommand> [args...]",
+        "desc": "AFM/SPM image analysis: list, inspect, plot, analyze, and export (Group 3).",
+        "subcommands": {
+            "afm ls":               {"desc": "List AFM files in current project", "usage": "afm ls"},
+            "afm info":             {"desc": "Show file metadata and available channels", "usage": "afm info [file]"},
+            "afm plot":             {"desc": "Plot AFM topography image with height distribution", "usage": "afm plot [file] [--cmap viridis|gray|terrain] [--name out.pdf]"},
+            "afm analyze":          {"desc": "Compute surface roughness, line profiles, height distribution, and PSD", "usage": "afm analyze [file] [--psd] [--export prefix]"},
+            "afm export":           {"desc": "Export AFM image to PNG/CSV/NPY", "usage": "afm export [file] --format png|csv|npy [--channel <name>]"},
+            "afm open":             {"desc": "Open .ibw file in Gwyddion, interactively record thickness, roughness (Sa/Sq), and material to afm_analysis.yaml", "usage": "afm open"},
+        },
+        "flags": {
+            "THEME": {
+                "--cmap":       {"desc": "Colormap: viridis, gray, terrain, plasma, inferno (default: viridis)"},
+                "--grid":       {"desc": "Show grid"},
+                "--title":      {"desc": "Plot title"},
+                "--dpi":        {"desc": "Figure resolution (default: 300)"},
+            },
+            "ANALYSIS": {
+                "--channel":    {"desc": "Channel name or index (default: first)"},
+                "--psd":        {"desc": "Include power spectral density in analysis output"},
+            },
+            "OUTPUT": {
+                "-n, --name":   {"desc": "Output filename/prefix (plot, analyze, export)"},
+                "--format":     {"desc": "Export format: png, csv, npy (export subcommand)"},
+            },
+        },
+        "examples": [
+            "afm ls",
+            "afm info",
+            "afm info 260526_PDA-ITO_topography.gwy",
+            "afm plot",
+            "afm plot sample.gwy --cmap terrain --name topography.pdf",
+            "afm analyze",
+            "afm analyze sample.gwy --psd --export results/sample",
+            "afm export sample.gwy --format csv",
+            "afm export sample.gwy --format png --channel Phase --cmap gray",
+            "afm open",
         ],
     },
     "config": {
@@ -431,10 +565,20 @@ def show_command_help(cmd: str) -> None:
 
     flags = info.get("flags")
     if flags:
-        console.print("  [bold]FLAGS / OPTIONS[/bold]")
-        for name, flag in flags.items():
-            req = " [bold](required)[/bold]" if flag.get("required") else ""
-            console.print(f"    {name:<25} [dim]{flag['desc']}[/dim]{req}")
+        # Check if categorized (first value is a dict of flags) or flat
+        first_val = next(iter(flags.values()))
+        if isinstance(first_val, dict) and "desc" not in first_val:
+            for category, cat_flags in flags.items():
+                console.print(f"  [bold]{category}[/bold]")
+                for name, flag in cat_flags.items():
+                    req = " [bold](required)[/bold]" if flag.get("required") else ""
+                    console.print(f"    {name:<25} [dim]{flag['desc']}[/dim]{req}")
+                console.print()
+        else:
+            console.print("  [bold]FLAGS / OPTIONS[/bold]")
+            for name, flag in flags.items():
+                req = " [bold](required)[/bold]" if flag.get("required") else ""
+                console.print(f"    {name:<25} [dim]{flag['desc']}[/dim]{req}")
         console.print()
 
     examples = info.get("examples")

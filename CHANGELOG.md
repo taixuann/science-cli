@@ -5,6 +5,11 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-06-09
+
+### Added
+- **`afm open`** — Interactive AFM analysis: open .ibw files in Gwyddion, record thickness, roughness (Sa/Sq), and material; skips if empty input, saves to afm_analysis.yaml in the step directory
+
 ## [3.2.0] - 2026-06-02
 
 ### Added
