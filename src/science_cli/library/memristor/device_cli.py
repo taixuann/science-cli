@@ -1831,6 +1831,8 @@ def _analyze_protocol(
             v_reset=params.get("v_reset"),
             i_set=params.get("i_set"),
             i_reset=params.get("i_reset"),
+            v_set_idx=params.get("v_set_idx"),
+            v_reset_idx=params.get("v_reset_idx"),
             on_off_ratio=params.get("on_off_ratio"),
             current_compliance=params.get("compliance"),
             compliance_confidence="high" if params.get("switching_detected") else "low",
@@ -2192,26 +2194,65 @@ def cmd_plot(args: argparse.Namespace) -> None:
             if db_path.exists():
                 conn = open_db(proj)
                 try:
-                    db_files = conn.execute(
+                    # Query ALL iv files (no protocol filter) then pick best protocol
+                    all_rows = conn.execute(
                         """SELECT protocol, step, filename, material, row, col
                            FROM files
-                           WHERE protocol = ? AND technique_id LIKE 'iv%'
+                           WHERE technique_id LIKE 'iv%'
                              AND row IS NOT NULL AND col IS NOT NULL
-                           ORDER BY row, col, filename""",
-                        (proto_name,),
+                           ORDER BY protocol, row, col, filename""",
                     ).fetchall()
                 finally:
                     close_db(conn)
 
-                if db_files:
-                    print(f"  Found {len(db_files)} file(s) in SQLite. Using them for plotting.")
-                    # Resolve protocol directory from DB results (session may be stale)
-                    db_protocol = db_files[0]["protocol"] if db_files else proto_name
-                    if proj:
-                        actual_pdir = proj / "protocol" / db_protocol
+                if all_rows:
+                    # Group rows by protocol, prefer protocol with existing dir
+                    from collections import defaultdict
+                    by_proto: dict[str, list] = defaultdict(list)
+                    for r in all_rows:
+                        by_proto[r["protocol"]].append(r)
+
+                    # Score protocols: existing dir first, then match material filter
+                    def proto_score(pname: str) -> tuple:
+                        dir_exists = (proj / "protocol" / pname).exists()
+                        has_material = any(
+                            r["material"] == material_filter
+                            for r in by_proto[pname]
+                        ) if material_filter else False
+                        # Sort by dir_exists (desc), has_material (desc), then name
+                        return (not dir_exists, not has_material, pname)
+
+                    chosen_proto = min(by_proto, key=proto_score)
+
+                    # If chosen protocol dir doesn't exist, fuzzy search
+                    if not (proj / "protocol" / chosen_proto).exists():
+                        for pd in sorted(proj.glob("protocol/*")):
+                            for pname in by_proto:
+                                if pname.replace("_", "").replace("-", "") in pd.name.replace("_", "").replace("-", "").replace(".", ""):
+                                    # Re-check this dir has matching rows
+                                    candidate_proto = by_proto[pname]
+                                    if material_filter:
+                                        candidate_proto = [r for r in candidate_proto if r["material"] == material_filter]
+                                    if candidate_proto:
+                                        chosen_proto = pd.name
+                                        break
+                            if chosen_proto and (proj / "protocol" / chosen_proto).exists():
+                                break
+
+                    db_files = by_proto.get(chosen_proto, [])
+                    if db_files:
+                        print(f"  Found {len(db_files)} file(s) in SQLite ({chosen_proto}). Using them for plotting.")
+                        actual_pdir = proj / "protocol" / chosen_proto
                         if actual_pdir.exists():
                             pdir = actual_pdir.resolve()
                             config = read_devices(pdir)
+                        else:
+                            # Fuzzy search for existing directory
+                            for pd in sorted(proj.glob("protocol/*")):
+                                if chosen_proto.replace("_", "").replace("-", "") in pd.name.replace("_", "").replace("-", "").replace(".", ""):
+                                    pdir = pd.resolve()
+                                    config = read_devices(pdir)
+                                    break
                     for r in db_files:
                         step = r["step"]
                         filename = r["filename"]
@@ -2243,6 +2284,13 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
     # Default to fzf when no specific filter flags given
     use_fzf = not material_filter and row_filter is None and col_filter is None
+    
+    # Parse CLI extra/remaining arguments
+    from science_cli.cli.commands.plot import _parse_flags as plot_parse
+    _, extra_flags = plot_parse(getattr(args, "extra_args", []))
+    all_flags = {}
+    all_flags.update(extra_flags)
+
     if use_fzf:
         from science_cli.core.fzf_utils import fzf_select
 
@@ -2264,6 +2312,33 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
         # Map back to targets
         targets = [display_map[line] for line in selected_lines if line in display_map]
+
+        if targets:
+            from science_cli.cli.commands.plot import _technique_hints
+            from rich import print as rprint
+            rprint(f"\n[bold]Selected {len(targets)} file(s) for memristor plotting.[/bold]")
+
+            # Prompt 1: Style / analysis flags
+            style_hint = _technique_hints("iv-sweep").get(
+                "plot_style",
+                "--type line|scatter | --color | --linewidth | --linestyle | --marker | --markersize",
+            )
+            rprint(f"  [dim]# {style_hint}[/dim]")
+            raw_style = input("  Style / analysis options (Enter to skip — uses theme defaults): ").strip()
+            if raw_style:
+                _, style_flags = plot_parse(raw_style.split())
+                all_flags.update(style_flags)
+
+            # Prompt 2: Figure / output flags
+            fig_hint = _technique_hints("iv-sweep").get(
+                "figure",
+                "-n name.pdf|png|svg | --label-name n1,n2,... | --title | --xlabel | --ylabel | --xlim | --ylim | --zoom x1,x2,y1,y2 | --size | --dpi | --grid | --legend",
+            )
+            rprint(f"  [dim]# {fig_hint}[/dim]")
+            raw_figure = input("  Figure options (Enter to skip — uses theme defaults): ").strip()
+            if raw_figure:
+                _, figure_flags = plot_parse(raw_figure.split())
+                all_flags.update(figure_flags)
 
     # Resolve results directory
     if targets and "step" in targets[0] and targets[0]["step"]:
@@ -2356,7 +2431,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
             output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.pdf" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.pdf"
             output_path = results_dir / output_filename
             try:
-                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current)
+                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
                 print(f"\n  ✓ Multi-cycle highlight plot generated: {output_path.name}")
                 print(f"  Highlighted cycles: {highlight_cycles}")
                 print(f"  Output path: {output_path}")
@@ -2416,7 +2491,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
         if all_traces:
             output_path = results_dir / ("overlay_raw.pdf" if raw_current else "overlay.pdf")
             try:
-                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current)
+                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
                 plotted = len(all_traces)
                 print(f"  ✓ {output_path.name} ({len(all_traces)} traces)")
             except Exception as exc:
@@ -2472,7 +2547,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
             output_path = results_dir / plot_filename
             try:
-                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi, raw_current=raw_current)
+                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
             except Exception as exc:
                 print(f"  Error plotting {fe.file}: {exc}")
                 errors += 1

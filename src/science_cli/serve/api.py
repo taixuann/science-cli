@@ -640,7 +640,7 @@ def get_device_iv(
             
             conn = open_db(project_path)
             qfiles = conn.execute(
-                """SELECT step, filename, v_set, v_reset, on_off_ratio, sweep_order
+                """SELECT step, filename, v_set, v_reset, v_set_idx, v_reset_idx, on_off_ratio, sweep_order
                    FROM files
                    WHERE protocol = ? AND row = ? AND col = ?
                    ORDER BY COALESCE(sweep_order, filename)""",
@@ -661,12 +661,11 @@ def get_device_iv(
                     # Compute LRS/HRS resistances dynamically at v_read=0.1 V
                     ratio_data = compute_on_off_ratio(voltage, current)
                     
-                    # Find detection indices from stored v_set/v_reset values
+                    # Read detection indices stored during analysis
                     v_set_val = f["v_set"] or 0.0
                     v_reset_val = f["v_reset"] or 0.0
-                    vlist = voltage.tolist() if hasattr(voltage, "tolist") else list(voltage)
-                    v_set_idx = _find_vset_idx(vlist, v_set_val)
-                    v_reset_idx = _find_vset_idx(vlist, v_reset_val)
+                    v_set_idx = f["v_set_idx"]
+                    v_reset_idx = f["v_reset_idx"]
                     
                     sweeps.append({
                         "label": f"Sweep #{f['sweep_order'] if f['sweep_order'] is not None else idx + 1:02d}",
@@ -906,16 +905,6 @@ def _estimate_switching(voltage, current):
     except Exception:
         pass
     return v_set, v_reset, v_set_idx, v_reset_idx
-
-
-def _find_vset_idx(voltage, target_v):
-    """Find nearest array index to target_v (for DB path where v_set is known)."""
-    if target_v == 0 or not voltage:
-        return None
-    import numpy as np
-    arr = np.asarray(voltage)
-    idx = int(np.argmin(np.abs(arr - target_v)))
-    return idx if idx >= 0 else None
 
 
 def get_histograms(

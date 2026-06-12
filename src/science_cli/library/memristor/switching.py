@@ -131,13 +131,15 @@ def extract_iv_parameters(voltage, current, v_read=0.1) -> dict:
 
     Convenience wrapper calling detect_vset, detect_vreset, compute_on_off_ratio.
     """
-    v_set = detect_vset(voltage, current, v_read)
-    v_reset = detect_vreset(voltage, current, v_read)
+    v_set, v_set_idx = detect_vset(voltage, current, v_read)
+    v_reset, v_reset_idx = detect_vreset(voltage, current, v_read)
     ratio_data = compute_on_off_ratio(voltage, current, v_read)
     switching_detected = v_set is not None or v_reset is not None
     return {
         "v_set": v_set,
         "v_reset": v_reset,
+        "v_set_idx": v_set_idx,
+        "v_reset_idx": v_reset_idx,
         "i_set": _current_at_voltage(v_set, voltage, current),
         "i_reset": _current_at_voltage(v_reset, voltage, current),
         "on_off_ratio": ratio_data.get("ratio"),
@@ -164,8 +166,8 @@ def detect_vset(voltage, current, v_read=0.1):
             interface consistency.
 
     Returns:
-        V_set voltage magnitude (positive float), or None if no
-        clear switching is detected.
+        (V_set voltage magnitude, index in original array), or
+        (None, None) if no clear switching is detected.
     """
     voltage = np.asarray(voltage, dtype=float)
     current = np.asarray(current, dtype=float)
@@ -175,11 +177,11 @@ def detect_vset(voltage, current, v_read=0.1):
     current = current[mask]
 
     if len(voltage) < 10:
-        return None
+        return None, None
 
     segments = _split_at_reversals(voltage)
     if not segments:
-        return None
+        return None, None
 
     # Find the forward branch: first segment where voltage goes
     # significantly positive (max > 0.5 V)
@@ -189,16 +191,17 @@ def detect_vset(voltage, current, v_read=0.1):
         if len(v_seg) < 5:
             continue
         if float(np.max(v_seg)) > 0.5:
-            forward_seg = (v_seg, current[start:end])
+            forward_seg = (start, end, v_seg, current[start:end])
             break
 
     if forward_seg is None:
-        return None
+        return None, None
 
-    v_seg, i_seg = forward_seg
+    seg_start, _seg_end, v_seg, i_seg = forward_seg
 
     # ── SCLC Log-Log Slope Method (Primary Physics-Based Method) ──
     sclc_vset = None
+    sclc_idx = None
     pos_mask = np.abs(v_seg) >= 0.05
     if np.sum(pos_mask) >= 5:
         v_pos = np.abs(v_seg[pos_mask])
@@ -222,6 +225,9 @@ def detect_vset(voltage, current, v_read=0.1):
         switching_points = np.where((dlogi_dlogv >= 3.0) & (i_pos > 1e-8))[0]
         if len(switching_points) > 0:
             sclc_vset = float(v_pos[switching_points[0]])
+            # Map back to original segment index
+            pos_indices = np.where(pos_mask)[0]
+            sclc_idx = int(seg_start + pos_indices[switching_points[0]])
 
     # ── Fallback 1: Derivative method: d(log10|I|)/dV maximum ──
     log_i = np.log10(np.abs(i_seg) + 1e-30)
@@ -230,38 +236,42 @@ def detect_vset(voltage, current, v_read=0.1):
         warnings.simplefilter("ignore", category=RuntimeWarning)
         dlogi_dv = np.gradient(log_i, v_seg)
     valid = np.isfinite(dlogi_dv)
+    deriv_vset = None
+    deriv_idx = None
     if np.any(valid):
         max_idx = int(np.argmax(dlogi_dv[valid]))
         deriv_vset = float(np.abs(v_seg[valid][max_idx]))
-    else:
-        deriv_vset = None
+        deriv_idx = int(seg_start + np.where(valid)[0][max_idx])
 
     # ── Fallback 2: Threshold method: current exceeds baseline × 10 ──
     n_first = max(5, len(i_seg) // 10)
     baseline = float(np.median(np.abs(i_seg[:n_first])))
-    if baseline <= 0:
-        thresh_vset = None
-    else:
+    thresh_vset = None
+    thresh_idx = None
+    if baseline > 0:
         threshold = baseline * 10.0
         above = np.where(np.abs(i_seg) > threshold)[0]
         if len(above) > 0:
             thresh_vset = float(np.abs(v_seg[above[0]]))
-        else:
-            thresh_vset = None
+            thresh_idx = int(seg_start + above[0])
 
     # ── Pick primary (SCLC) if found, otherwise fall back to lower of derivative/threshold ──
     if sclc_vset is not None:
-        return sclc_vset
+        return sclc_vset, sclc_idx
 
     candidates = []
+    cand_indices = []
     if deriv_vset is not None:
         candidates.append(deriv_vset)
+        cand_indices.append(deriv_idx)
     if thresh_vset is not None:
         candidates.append(thresh_vset)
+        cand_indices.append(thresh_idx)
 
     if candidates:
-        return min(candidates)
-    return None
+        best = min(range(len(candidates)), key=lambda k: candidates[k])
+        return candidates[best], cand_indices[best]
+    return None, None
 
 
 def detect_vreset(voltage, current, v_read=0.1):
@@ -277,8 +287,8 @@ def detect_vreset(voltage, current, v_read=0.1):
             interface consistency.
 
     Returns:
-        V_reset voltage magnitude (positive float), or None if no
-        clear reset is detected.
+        (V_reset voltage magnitude, index in original array), or
+        (None, None) if no clear reset is detected.
     """
     voltage = np.asarray(voltage, dtype=float)
     current = np.asarray(current, dtype=float)
@@ -288,11 +298,11 @@ def detect_vreset(voltage, current, v_read=0.1):
     current = current[mask]
 
     if len(voltage) < 10:
-        return None
+        return None, None
 
     segments = _split_at_reversals(voltage)
     if not segments:
-        return None
+        return None, None
 
     # Find the negative-going segment: first segment where voltage
     # drops below -0.5 V
@@ -302,13 +312,13 @@ def detect_vreset(voltage, current, v_read=0.1):
         if len(v_seg) < 5:
             continue
         if float(np.min(v_seg)) < -0.5:
-            neg_seg = (v_seg, current[start:end])
+            neg_seg = (start, v_seg, current[start:end])
             break
 
     if neg_seg is None:
-        return None
+        return None, None
 
-    v_seg, i_seg = neg_seg
+    seg_start, v_seg, i_seg = neg_seg
 
     # ── Derivative method: d(log10|I|)/dV minimum ──
     # The reset event corresponds to a rapid drop in current →
@@ -316,37 +326,40 @@ def detect_vreset(voltage, current, v_read=0.1):
     log_i = np.log10(np.abs(i_seg) + 1e-30)
     dlogi_dv = np.gradient(log_i, v_seg)
     valid = np.isfinite(dlogi_dv)
+    deriv_vreset = None
+    deriv_idx = None
     if np.any(valid):
         min_idx = int(np.argmin(dlogi_dv[valid]))
         deriv_vreset = float(np.abs(v_seg[valid][min_idx]))
-    else:
-        deriv_vreset = None
+        deriv_idx = int(seg_start + np.where(valid)[0][min_idx])
 
     # ── Threshold method: current drops below baseline × factor ──
     # Use the median of the first 10% of points on the negative-going
     # segment as baseline (device is in LRS near 0 V on the negative sweep).
     n_first = max(5, len(i_seg) // 10)
     baseline = float(np.median(np.abs(i_seg[:n_first])))
-    if baseline <= 0:
-        thresh_vreset = None
-    else:
-        # Reset: current drops to 30% of baseline
+    thresh_vreset = None
+    thresh_idx = None
+    if baseline > 0:
         threshold = baseline * 0.3
         below = np.where(np.abs(i_seg) < threshold)[0]
         if len(below) > 0:
             thresh_vreset = float(np.abs(v_seg[below[0]]))
-        else:
-            thresh_vreset = None
+            thresh_idx = int(seg_start + below[0])
 
     candidates = []
+    cand_indices = []
     if deriv_vreset is not None:
         candidates.append(deriv_vreset)
+        cand_indices.append(deriv_idx)
     if thresh_vreset is not None:
         candidates.append(thresh_vreset)
+        cand_indices.append(thresh_idx)
 
     if candidates:
-        return min(candidates)
-    return None
+        best = min(range(len(candidates)), key=lambda k: candidates[k])
+        return candidates[best], cand_indices[best]
+    return None, None
 
 
 def compute_on_off_ratio(voltage, current, v_read=0.1):

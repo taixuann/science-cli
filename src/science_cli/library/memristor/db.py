@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Data file suffixes (same as device.py DATA_SUFFIXES)
 DATA_SUFFIXES = {".txt", ".csv", ".dat", ".tsv", ".log"}
@@ -211,6 +211,17 @@ def _run_migrations(conn: sqlite3.Connection, from_version: int, to_version: int
         except sqlite3.OperationalError:
             pass  # column already exists
         conn.execute(CREATE_MATERIALS)
+
+    if from_version < 6 <= to_version:
+        # v5 → v6: add v_set_idx and v_reset_idx columns for detection marker plotting
+        for col, col_type in [
+            ("v_set_idx", "INTEGER"),
+            ("v_reset_idx", "INTEGER"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE files ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
 
 
 # ── CRUD helpers ───────────────────────────────────────────────────────
@@ -539,23 +550,27 @@ def update_file_analysis(
     v_reset: Optional[float] = None,
     i_set: Optional[float] = None,
     i_reset: Optional[float] = None,
+    v_set_idx: Optional[int] = None,
+    v_reset_idx: Optional[int] = None,
     on_off_ratio: Optional[float] = None,
     current_compliance: Optional[float] = None,
     compliance_confidence: Optional[str] = None,
 ) -> None:
     """Update analysis results for a file row.
 
-    Updates Vset, Vreset, switching currents, on/off ratio, current compliance, and
-    compliance confidence for the matching file.
+    Updates Vset, Vreset, switching currents, detection indices,
+    on/off ratio, current compliance, and compliance confidence.
     """
     conn.execute(
         """UPDATE files SET
             v_set = ?, v_reset = ?, i_set = ?, i_reset = ?,
+            v_set_idx = ?, v_reset_idx = ?,
             on_off_ratio = ?,
             current_compliance = ?, compliance_confidence = ?
            WHERE protocol = ? AND step = ? AND filename = ?""",
         (
             v_set, v_reset, i_set, i_reset,
+            v_set_idx, v_reset_idx,
             on_off_ratio,
             current_compliance, compliance_confidence,
             protocol, step, filename,
