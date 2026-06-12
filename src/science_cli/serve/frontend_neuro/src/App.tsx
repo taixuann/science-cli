@@ -430,7 +430,7 @@ export default function App() {
         });
       });
     }
-    if (sweeps?.length) {
+    if (sweeps?.length && cycleFilter === 'single') {
       for (let i = 0; i < sweeps.length; i++) {
         const s = sweeps[i];
         if (s.v_set_idx != null && s.v_set_idx >= 0 && s.v_set_idx < s.voltage.length) {
@@ -440,7 +440,7 @@ export default function App() {
             x: [v], y: [cur],
             type: 'scatter', mode: 'markers',
             name: `V_set (${s.label})`,
-            marker: { symbol: 'triangle-down', size: 12, color: '#ef4444', line: { color: '#fff', width: 1 } },
+            marker: { symbol: 'circle', size: 11, color: '#ef4444', line: { color: '#fff', width: 1.5 } },
             showlegend: false,
             hovertemplate: `V_set: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
           });
@@ -452,7 +452,7 @@ export default function App() {
             x: [v], y: [cur],
             type: 'scatter', mode: 'markers',
             name: `V_reset (${s.label})`,
-            marker: { symbol: 'triangle-up', size: 12, color: '#6366f1', line: { color: '#fff', width: 1 } },
+            marker: { symbol: 'circle', size: 11, color: '#6366f1', line: { color: '#fff', width: 1.5 } },
             showlegend: false,
             hovertemplate: `V_reset: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
           });
