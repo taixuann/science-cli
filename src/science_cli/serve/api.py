@@ -661,13 +661,12 @@ def get_device_iv(
                     # Compute LRS/HRS resistances dynamically at v_read=0.1 V
                     ratio_data = compute_on_off_ratio(voltage, current)
                     
-                    # Find detection indices from raw arrays
+                    # Find detection indices from stored v_set/v_reset values
                     v_set_val = f["v_set"] or 0.0
                     v_reset_val = f["v_reset"] or 0.0
-                    _, _, v_set_idx, v_reset_idx = _estimate_switching(
-                        voltage.tolist() if hasattr(voltage, "tolist") else list(voltage),
-                        current.tolist() if hasattr(current, "tolist") else list(current),
-                    )
+                    vlist = voltage.tolist() if hasattr(voltage, "tolist") else list(voltage)
+                    v_set_idx = _find_vset_idx(vlist, v_set_val)
+                    v_reset_idx = _find_vset_idx(vlist, v_reset_val)
                     
                     sweeps.append({
                         "label": f"Sweep #{f['sweep_order'] if f['sweep_order'] is not None else idx + 1:02d}",
@@ -856,31 +855,67 @@ def _iv_from_csv_direct(
 
 
 def _estimate_switching(voltage, current):
+    """Quick fallback: find inflection point via d(log|I|)/dV maximum.
+
+    For the DB path, use _find_vset_idx() instead (closest index to stored v_set).
+    """
     v_set = 0.0
     v_reset = 0.0
     v_set_idx = None
     v_reset_idx = None
     try:
         n = len(voltage)
-        for i in range(1, n):
-            if voltage[i] > 0 and current[i] > 0:
-                d = abs(current[i] - current[i - 1])
-                if d > 0 and current[i] > 0:
-                    ratio_up = abs(current[i] / max(abs(current[i - 1]), 1e-12))
-                    if ratio_up > 10 and voltage[i] > 0.5:
-                        v_set = round(voltage[i], 2)
-                        v_set_idx = i
-                        break
-        for i in range(1, n):
-            if voltage[i] < 0:
-                ratio_down = abs(current[i] / max(abs(current[i - 1]), 1e-12))
-                if ratio_down > 5 and voltage[i] < -0.5:
-                    v_reset = round(voltage[i], 2)
-                    v_reset_idx = i
-                    break
+        if n < 5:
+            return v_set, v_reset, v_set_idx, v_reset_idx
+        import numpy as np
+        best_deriv = 0.0
+        best_idx = None
+        for i in range(3, n):
+            if voltage[i] <= 0.01:
+                continue
+            dv = abs(voltage[i] - voltage[i - 1])
+            if dv < 1e-9:
+                continue
+            dlogI = abs(
+                np.log10(max(abs(current[i]), 1e-15))
+                - np.log10(max(abs(current[i - 1]), 1e-15))
+            )
+            deriv = dlogI / dv
+            if deriv > best_deriv and current[i] > current[i - 1]:
+                best_deriv = deriv
+                best_idx = i
+        if best_idx is not None and best_deriv > 0.3:
+            v_set = round(voltage[best_idx], 3)
+            v_set_idx = best_idx
+        import numpy as np
+        for i in range(3, n):
+            if voltage[i] >= 0:
+                continue
+            dv = abs(voltage[i] - voltage[i - 1])
+            if dv < 1e-9:
+                continue
+            dlogI = abs(
+                np.log10(max(abs(current[i]), 1e-15))
+                - np.log10(max(abs(current[i - 1]), 1e-15))
+            )
+            deriv = dlogI / dv
+            if deriv > 0.3 and current[i] < current[i - 1]:
+                v_reset = round(voltage[i], 3)
+                v_reset_idx = i
+                break
     except Exception:
         pass
     return v_set, v_reset, v_set_idx, v_reset_idx
+
+
+def _find_vset_idx(voltage, target_v):
+    """Find nearest array index to target_v (for DB path where v_set is known)."""
+    if target_v == 0 or not voltage:
+        return None
+    import numpy as np
+    arr = np.asarray(voltage)
+    idx = int(np.argmin(np.abs(arr - target_v)))
+    return idx if idx >= 0 else None
 
 
 def get_histograms(
