@@ -661,12 +661,23 @@ def get_device_iv(
                     # Compute LRS/HRS resistances dynamically at v_read=0.1 V
                     ratio_data = compute_on_off_ratio(voltage, current)
                     
+                    # Find detection indices from raw arrays
+                    v_set_val = f["v_set"] or 0.0
+                    v_reset_val = f["v_reset"] or 0.0
+                    _, _, v_set_idx, v_reset_idx = _estimate_switching(
+                        voltage.tolist() if hasattr(voltage, "tolist") else list(voltage),
+                        current.tolist() if hasattr(current, "tolist") else list(current),
+                    )
+                    
                     sweeps.append({
                         "label": f"Sweep #{f['sweep_order'] if f['sweep_order'] is not None else idx + 1:02d}",
                         "voltage": voltage.tolist() if hasattr(voltage, "tolist") else list(voltage),
                         "current": current.tolist() if hasattr(current, "tolist") else list(current),
-                        "v_set": f["v_set"] or 0.0,
-                        "v_reset": f["v_reset"] or 0.0,
+                        "v_set": v_set_val,
+                        "v_reset": v_reset_val,
+                        "v_set_idx": v_set_idx,
+                        "v_reset_idx": v_reset_idx,
+                        "filename": filename,
                         "r_on": ratio_data.get("r_on") or 0.0,
                         "r_off": ratio_data.get("r_off") or 0.0,
                     })
@@ -806,7 +817,7 @@ def _iv_from_csv_direct(
                         continue
 
                 if voltages:
-                    v_set, v_reset = _estimate_switching(voltages, currents)
+                    v_set, v_reset, v_set_idx, v_reset_idx = _estimate_switching(voltages, currents)
                     from science_cli.library.memristor.switching import compute_on_off_ratio
                     ratio_data = compute_on_off_ratio(np.array(voltages), np.array(currents))
                     sweeps.append({
@@ -815,6 +826,9 @@ def _iv_from_csv_direct(
                         "current": currents,
                         "v_set": v_set,
                         "v_reset": v_reset,
+                        "v_set_idx": v_set_idx,
+                        "v_reset_idx": v_reset_idx,
+                        "filename": f.name,
                         "r_on": ratio_data.get("r_on") or 0.0,
                         "r_off": ratio_data.get("r_off") or 0.0,
                     })
@@ -844,6 +858,8 @@ def _iv_from_csv_direct(
 def _estimate_switching(voltage, current):
     v_set = 0.0
     v_reset = 0.0
+    v_set_idx = None
+    v_reset_idx = None
     try:
         n = len(voltage)
         for i in range(1, n):
@@ -853,16 +869,18 @@ def _estimate_switching(voltage, current):
                     ratio_up = abs(current[i] / max(abs(current[i - 1]), 1e-12))
                     if ratio_up > 10 and voltage[i] > 0.5:
                         v_set = round(voltage[i], 2)
+                        v_set_idx = i
                         break
         for i in range(1, n):
             if voltage[i] < 0:
                 ratio_down = abs(current[i] / max(abs(current[i - 1]), 1e-12))
                 if ratio_down > 5 and voltage[i] < -0.5:
                     v_reset = round(voltage[i], 2)
+                    v_reset_idx = i
                     break
     except Exception:
         pass
-    return v_set, v_reset
+    return v_set, v_reset, v_set_idx, v_reset_idx
 
 
 def get_histograms(

@@ -5,9 +5,10 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.8.0] - 2026-06-09
+## [3.9.0] - 2026-06-12
 
 ### Added
+- **Neurophase IV plot: V_set/V_reset detection markers** — Red (V_set) and blue (V_reset) triangle markers on IV curve traces, showing exactly where switching was detected. Only V_set shown for volatile devices (no V_reset). Filename shown in sidebar.
 - **`afm open`** — Interactive AFM analysis: open .ibw files in Gwyddion, record thickness, roughness (Sa/Sq), and material; skips if empty input, saves to afm_analysis.yaml in the step directory
 
 ## [3.2.0] - 2026-06-02

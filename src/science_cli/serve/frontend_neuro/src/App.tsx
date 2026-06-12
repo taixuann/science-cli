@@ -18,6 +18,9 @@ interface IVSweep {
   voltage: number[];
   current: number[];
   v_set: number; v_reset: number;
+  v_set_idx?: number | null;
+  v_reset_idx?: number | null;
+  filename?: string;
 }
 interface IVResponse {
   cell_id: string; row: number; col: number;
@@ -137,44 +140,42 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProtocol) return;
+    let active = true;
+
     if ((window as any).STANDALONE_DB_DATA) {
       const db = (window as any).STANDALONE_DB_DATA.dashboards?.[activeProtocol];
-      const matKey = selectedMaterial || "All";
-      const data = db?.[matKey] || db?.["All"] || (db ? db[Object.keys(db)[0]] : null);
-      setDashboardData(data);
-      if (data?.materials?.length && !selectedMaterial) {
-        setSelectedMaterial(data.materials[0]);
+      const materialsList = db ? Object.keys(db).filter(k => k !== "All") : [];
+      let matKey = selectedMaterial;
+      if (materialsList.length > 0 && (!selectedMaterial || !materialsList.includes(selectedMaterial))) {
+        matKey = materialsList[0];
+        setSelectedMaterial(matKey);
       }
+      const data = db?.[matKey || "All"] || db?.["All"] || (db ? db[Object.keys(db)[0]] : null);
+      setDashboardData(data);
       setLoading(false);
       return;
     }
+
     setLoading(true);
     fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
       .then(r => r.json())
       .then(data => {
+        if (!active) return;
         setDashboardData(data);
-        if (data?.materials?.length && !selectedMaterial) {
+        if (data?.materials?.length && (!selectedMaterial || !data.materials.includes(selectedMaterial))) {
           setSelectedMaterial(data.materials[0]);
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
-  }, [activeProtocol]);
+      .catch(() => {
+        if (active) setLoading(false);
+      });
 
-  useEffect(() => {
-    if (!activeProtocol || !selectedMaterial) return;
-    if ((window as any).STANDALONE_DB_DATA) {
-      const db = (window as any).STANDALONE_DB_DATA.dashboards?.[activeProtocol];
-      const data = db?.[selectedMaterial] || db?.["All"];
-      if (data) setDashboardData(data);
-      return;
-    }
-    // When the material filter changes, reload the dashboard metrics for that material
-    fetch(`${BASE}/api/protocol/${encodeURIComponent(activeProtocol)}/dashboard?material=${encodeURIComponent(selectedMaterial)}`)
-      .then(r => r.json())
-      .then(data => { setDashboardData(data); })
-      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [activeProtocol, selectedMaterial]);
+
 
   useEffect(() => {
     const cellId = `R${selectedCell.row + 1}C${selectedCell.col + 1}`;
@@ -382,13 +383,38 @@ export default function App() {
       }
     } else if (cycleFilter === 'single') {
       const idx = Math.min(Math.max(0, singleCycleVal - 1), sweeps.length - 1);
+      const sweep = sweeps[idx];
+      const nPoints = sweep.voltage.length;
       traces.push({
-        x: sweeps[idx].voltage, y: mapY(sweeps[idx]),
+        x: sweep.voltage, y: mapY(sweep),
         type: 'scatter', mode: 'lines+markers',
         name: 'Cycle ' + (idx + 1),
-        line: { color: '#10b981', width: 2 },
-        marker: { size: 3, color: '#10b981' },
-        hovertemplate: 'Cycle ' + (idx + 1) + '<br>V: %{x:.3f} V<br>I: %{y:.3e} A<extra></extra>',
+        line: { color: theme === 'light' ? 'rgba(148, 163, 184, 0.45)' : 'rgba(255, 255, 255, 0.15)', width: 1.2 },
+        marker: {
+          size: 4.5,
+          color: Array.from({ length: nPoints }, (_, i) => i),
+          colorscale: [
+            [0, '#6366f1'],     // Indigo (Start of sweep)
+            [0.25, '#3b82f6'],  // Blue
+            [0.5, '#10b981'],   // Emerald (Middle of sweep)
+            [0.75, '#f59e0b'],  // Amber
+            [1, '#ef4444']      // Red (End of sweep)
+          ],
+          showscale: true,
+          colorbar: {
+            title: {
+              text: 'Sweep Progress',
+              font: { size: 9, color: t.graphText, family: 'ui-monospace, monospace' }
+            },
+            thickness: 10,
+            len: 0.6,
+            y: 0.5,
+            tickvals: [0, nPoints - 1],
+            ticktext: ['Start', 'End'],
+            tickfont: { size: 8, color: t.graphText, family: 'ui-monospace, monospace' }
+          }
+        },
+        hovertemplate: 'Cycle ' + (idx + 1) + '<br>Progress: %{marker.color}/' + nPoints + '<br>V: %{x:.3f} V<br>I: %{y:.3e} A<extra></extra>',
       });
     } else if (cycleFilter === 'custom') {
       const parts = customFilterText.split(',').map(p => parseInt(p.trim())).filter(n => !isNaN(n) && n >= 1);
@@ -403,6 +429,35 @@ export default function App() {
           hovertemplate: 'Cycle ' + c + '<br>V: %{x:.3f} V<br>I: %{y:.3e} A<extra></extra>',
         });
       });
+    }
+    if (sweeps?.length) {
+      for (let i = 0; i < sweeps.length; i++) {
+        const s = sweeps[i];
+        if (s.v_set_idx != null && s.v_set_idx >= 0 && s.v_set_idx < s.voltage.length) {
+          const v = s.voltage[s.v_set_idx];
+          const cur = currentScale === 'linear_signed' ? s.current[s.v_set_idx] : Math.abs(s.current[s.v_set_idx]);
+          traces.push({
+            x: [v], y: [cur],
+            type: 'scatter', mode: 'markers',
+            name: `V_set (${s.label})`,
+            marker: { symbol: 'triangle-down', size: 12, color: '#ef4444', line: { color: '#fff', width: 1 } },
+            showlegend: false,
+            hovertemplate: `V_set: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
+          });
+        }
+        if (s.v_reset_idx != null && s.v_reset_idx >= 0 && s.v_reset_idx < s.voltage.length) {
+          const v = s.voltage[s.v_reset_idx];
+          const cur = currentScale === 'linear_signed' ? s.current[s.v_reset_idx] : Math.abs(s.current[s.v_reset_idx]);
+          traces.push({
+            x: [v], y: [cur],
+            type: 'scatter', mode: 'markers',
+            name: `V_reset (${s.label})`,
+            marker: { symbol: 'triangle-up', size: 12, color: '#6366f1', line: { color: '#fff', width: 1 } },
+            showlegend: false,
+            hovertemplate: `V_reset: ${v.toFixed(3)} V<br>I: ${cur.toExponential(2)} A<extra></extra>`,
+          });
+        }
+      }
     }
     return traces;
   }, [ivData, activeCellData, currentScale, cycleFilter, singleCycleVal, customFilterText, generateHysteresisPoints]);
@@ -586,7 +641,10 @@ export default function App() {
                   const idx = parseInt(e.target.value);
                   setActiveProjectIdx(idx);
                   const name = protocolNames[idx];
-                  if (name) setActiveProtocol(name);
+                  if (name) {
+                    setActiveProtocol(name);
+                    setSelectedMaterial("");
+                  }
                   setSelectedCell({ row: 0, col: 0 });
                 }}
                 className={'w-full p-2.5 text-xs font-semibold rounded-lg border shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer appearance-none pr-8 ' + (theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-white/5 border-white/10 text-white')}
@@ -1015,6 +1073,12 @@ export default function App() {
                     <span className={'text-[10px] font-mono ' + (theme === 'light' ? 'text-slate-600' : 'text-slate-400')}>Sweep Cycles</span>
                     <span className={'text-[11px] font-mono font-bold ' + (theme === 'light' ? 'text-slate-800' : 'text-white')}>{ivData?.sweeps?.length ?? 0}</span>
                   </div>
+                  {ivData?.sweeps?.[0]?.filename && (
+                    <div className="flex items-center justify-between">
+                      <span className={'text-[10px] font-mono ' + (theme === 'light' ? 'text-slate-600' : 'text-slate-400')}>File</span>
+                      <span className={'text-[9px] font-mono font-bold truncate max-w-[130px] text-right ' + (theme === 'light' ? 'text-slate-800' : 'text-white')}>{ivData.sweeps[0].filename}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className={'text-[10px] font-mono ' + (theme === 'light' ? 'text-slate-600' : 'text-slate-400')}>C_switching</span>
                     <span className={'text-[11px] font-mono font-bold ' + (theme === 'light' ? 'text-slate-800' : 'text-white')}>{activeCellData.cellType.includes("Stuck") ? "0%" : "100%"}</span>
