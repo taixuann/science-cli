@@ -1,0 +1,13 @@
+name: 1_iv-test
+description: "IV test on memristor devices"
+device:
+  rows: 6
+  cols: 6
+  label: "6x6 PDA Crossbar"
+  cell_area_um2: 2500
+  device_type: memristor
+steps:
+  - name: iv-sweep
+    technique: iv-sweep
+  - name: iv-breakdown
+    technique: iv-breakdown

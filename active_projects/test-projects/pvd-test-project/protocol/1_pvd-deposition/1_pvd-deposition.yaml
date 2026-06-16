@@ -1,0 +1,7 @@
+name: 1_pvd-deposition
+description: "PVD deposition test"
+steps:
+  - name: pvd-layer
+    technique: pvd-layer
+  - name: pvd-rate
+    technique: pvd-rate

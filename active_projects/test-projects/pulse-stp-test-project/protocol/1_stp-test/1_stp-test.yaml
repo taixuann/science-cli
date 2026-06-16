@@ -1,0 +1,11 @@
+name: 1_stp-test
+description: "STP decay and PPF test"
+device:
+  rows: 6
+  cols: 6
+  label: "6x6 PDA Crossbar"
+steps:
+  - name: pulse-stp
+    technique: pulse-stp
+  - name: pulse-ppf
+    technique: pulse-ppf

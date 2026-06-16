@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script type="module" crossorigin src="/assets/index-B7LEr9BI.js?v=3.9.0"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BFkj0b6y.css">
+  <style>
+    /* Gallery container vertical scroll - prevent full page scroll */
+    #root > div {
+      max-height: 100vh !important;
+      height: 100vh !important;
+      overflow-y: auto !important;
+    }
+
+    /* PDF embeds scale to fill width */
+    object[type="application/pdf"],
+    embed[src*=".pdf"],
+    iframe[src*=".pdf"] {
+      width: 100% !important;
+      height: 80vh !important;
+    }
+
+    /* Gallery item images */
+    img[alt*="plot"],
+    img[src*="protocol/"] {
+      width: 100% !important;
+      height: auto !important;
+      object-fit: contain !important;
+    }
+
+    /* Lightbox / fullscreen viewer images */
+    [role="dialog"] img,
+    .fixed img {
+      max-height: 90vh !important;
+      width: auto !important;
+      object-fit: contain !important;
+    }
+  </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+name: 1_pulse-test
+description: "Pulse endurance and retention test"
+device:
+  rows: 6
+  cols: 6
+  label: "6x6 PDA Crossbar"
+  cell_area_um2: 2500
+steps:
+  - name: mem-endurance
+    technique: mem-endurance
+  - name: mem-retention
+    technique: mem-retention

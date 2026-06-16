@@ -1,0 +1,3 @@
+Layer,Material,Thickness (nm),Rate (nm/s),Temperature (C),Pressure (mTorr)
+1,Ta,50,0.5,300,5.0
+2,Pt,50,0.3,300,5.0

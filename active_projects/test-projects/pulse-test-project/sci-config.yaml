@@ -1,0 +1,36 @@
+techniques:
+  mem-endurance:
+    patterns: ["endurance", "_endurance", "mem-endurance", "pulse-endurance"]
+    header_marker: "Cycle"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          cycle: "Cycle"
+          r_on: "R_on (Ω)"
+          r_off: "R_off (Ω)"
+  mem-retention:
+    patterns: ["retention", "_retention", "mem-retention", "pulse-retention"]
+    header_marker: "Time"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          time: "Time (s)"
+          resistance: "Resistance (Ω)"
+defaults:
+  mem-endurance: keithley-2400
+  mem-retention: keithley-2400
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}_{matrix}_{technique}_{suffix}"
+      regex: '^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+?)(?:_(?P<suffix>\d+))?\.\w+$'
+      extract:
+        matrix: "r(?P<row>\d+)c(?P<col>\d+)"

@@ -1,0 +1,40 @@
+techniques:
+  pvd-layer:
+    patterns: ["dep", "_dep", "pvd-layer", "layer"]
+    header_marker: "Layer"
+    devices:
+      default:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          layer: "Layer"
+          material: "Material"
+          thickness: "Thickness (nm)"
+          rate: "Rate (nm/s)"
+          temperature: "Temperature (C)"
+          pressure: "Pressure (mTorr)"
+  pvd-rate:
+    patterns: ["rate", "_rate", "pvd-rate"]
+    header_marker: "Time"
+    devices:
+      default:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          time: "Time (s)"
+          rate: "Rate (nm/s)"
+          temperature: "Temperature (C)"
+defaults:
+  pvd-layer: default
+  pvd-rate: default
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}_{matrix}_{technique}_{suffix}"
+      regex: '^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+?)(?:_(?P<suffix>\d+))?\.\w+$'
+      extract:
+        matrix: "r(?P<row>\d+)c(?P<col>\d+)"

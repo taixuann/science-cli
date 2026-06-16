@@ -1,0 +1,52 @@
+# Standard blocklist (repo is isolated — no allowlist needed)
+# Only deny what should be excluded
+
+# Ignore all hidden files/dirs except .github (CI)
+.*
+!.github/
+!.gitignore
+
+# Ignore AGENTS.md, RULES.md, SCHEMA.md, issues.md, generated PLAN files, test artifacts
+AGENTS.md
+**/AGENTS.md
+issues.md
+RULES.md
+**/RULES.md
+SCHEMA.md
+**/SCHEMA.md
+/PLAN-*.md
+tests/
+test_*.py
+theme-previews/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# User state (session, repl history)
+session.json
+repl_history
+*/session.json
+*/repl_history

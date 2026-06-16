@@ -1,0 +1,6 @@
+{
+  "name": "Memristor Diagnostics Portal",
+  "description": "Sleek hardware analytics portal with real-time IV acquisition plotting, extraction matrix tables, and interactive thermal snapshots.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

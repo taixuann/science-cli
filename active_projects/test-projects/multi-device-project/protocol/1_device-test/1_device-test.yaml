@@ -1,0 +1,10 @@
+name: 1_device-test
+description: "Multi-device technique test"
+device:
+  rows: 4
+  cols: 4
+steps:
+  - name: iv-sweep
+    technique: iv-sweep
+  - name: mem-endurance
+    technique: mem-endurance

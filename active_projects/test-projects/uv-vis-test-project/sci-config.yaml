@@ -1,0 +1,35 @@
+techniques:
+  uv-vis-transmission:
+    patterns: ["uvvis", "_uvvis", "uv-vis", "transmission", "uv-vis-transmission"]
+    header_marker: "Wavelength"
+    devices:
+      default:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          wavelength: "Wavelength nm."
+          transmission: "T%"
+  uv-vis-absorbance:
+    patterns: ["abs", "_abs", "absorbance", "uv-vis-absorbance"]
+    header_marker: "Wavelength"
+    devices:
+      default:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          wavelength: "Wavelength nm."
+          absorbance: "Abs"
+defaults:
+  uv-vis-transmission: default
+  uv-vis-absorbance: default
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}_{matrix}_{technique}_{suffix}"
+      regex: '^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+?)(?:_(?P<suffix>\d+))?\.\w+$'
+      extract:
+        matrix: "r(?P<row>\d+)c(?P<col>\d+)"

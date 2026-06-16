@@ -1,0 +1,35 @@
+techniques:
+  iv-sweep:
+    patterns: ["_IV.", ".iv$", "iv_", "iv-", "_sweep", "sweep_"]
+    header_marker: "Voltage"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          voltage: "Voltage (V)"
+          current: "Current (A)"
+  iv-breakdown:
+    patterns: ["_bd.", "bd_", "breakdown", "_breakdown"]
+    header_marker: "Voltage"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          voltage: "Voltage (V)"
+          current: "Current (A)"
+defaults:
+  iv-sweep: keithley-2400
+  iv-breakdown: keithley-2400
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}_{matrix}_{technique}_{suffix}"
+      regex: '^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+?)(?:_(?P<suffix>\d+))?\.\w+$'
+      extract:
+        matrix: "r(?P<row>\d+)c(?P<col>\d+)"

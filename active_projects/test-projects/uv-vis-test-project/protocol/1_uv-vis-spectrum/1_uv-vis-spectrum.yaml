@@ -1,0 +1,7 @@
+name: 1_uv-vis-spectrum
+description: "UV-Vis spectrum test"
+steps:
+  - name: uv-vis-transmission
+    technique: uv-vis-transmission
+  - name: uv-vis-absorbance
+    technique: uv-vis-absorbance

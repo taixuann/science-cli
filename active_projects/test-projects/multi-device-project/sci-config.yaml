@@ -1,0 +1,44 @@
+techniques:
+  iv-sweep:
+    patterns: ["_IV.", ".iv$", "iv_", "iv-", "_sweep", "sweep_"]
+    header_marker: "Voltage"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          voltage: "Voltage (V)"
+          current: "Current (A)"
+      keysight-b1500:
+        delimiter: "\t"
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          voltage: "Voltage"
+          current: "Current"
+  mem-endurance:
+    patterns: ["endurance", "_endurance", "mem-endurance", "pulse-endurance"]
+    header_marker: "Cycle"
+    devices:
+      keithley-2400:
+        delimiter: ","
+        decimal: "."
+        header_lines: 0
+        encoding: "utf-8"
+        columns:
+          cycle: "Cycle"
+          r_on: "R_on (Ω)"
+          r_off: "R_off (Ω)"
+defaults:
+  iv-sweep: keithley-2400
+  mem-endurance: keithley-2400
+file_naming:
+  patterns:
+    - id: rNcN
+      template: "{date_code}_{material}_{matrix}_{technique}_{suffix}"
+      regex: '^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+?)(?:_(?P<suffix>\d+))?\.\w+$'
+      extract:
+        matrix: "r(?P<row>\d+)c(?P<col>\d+)"
