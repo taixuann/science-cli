@@ -185,7 +185,10 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
                        show_protocol: bool = True, width_proto: int = 20,
                        width_step: int = 22,
                        metadata: dict | None = None,
-                       width_meta: int = 20) -> str:
+                       width_meta: int = 20,
+                       study_name: str | None = None,
+                       status: str | None = None,
+                       status_badge: str = "") -> str:
     """Build a fixed-width fzf display line.
 
     When ``show_protocol=True``: ``<protocol:20> <step:22> <filename>``.
@@ -195,6 +198,14 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     key-value pair in the dict, e.g.::
 
         <step:22> <filename:30> <technique:20> <instrument:20>
+
+    When ``study_name`` matches a key in ``STUDY_COLUMN_REGISTRY``,
+    only the registered columns are shown (in registry order) with
+    compact ``width_meta=12``.  Unknown studies fall back to showing
+    all metadata keys in dict order.
+
+    When ``status_badge`` is non-empty, it is prepended (with 1 space)
+    before the protocol/step columns.
 
     Parameters
     ----------
@@ -215,22 +226,43 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
         subsequent columns (e.g. ``{"technique": "ec-cv", "instrument": "keithley-2400"}``).
     width_meta : int
         Fixed width for each metadata column (default 20).
+    study_name : str or None
+        Study name (e.g. ``"pulse:pulse-stp-decay"``). When provided
+        and registered, filters metadata to the study's column set.
+    status : str or None
+        Legacy status tag — ignored if ``status_badge`` is set.
+    status_badge : str
+        Prepend this badge string (e.g. ``"★"``) before the line.
     """
     protocol = protocol or ""
     step = step or ""
     filename = filename or ""
+
+    # Resolve metadata columns for this study
+    effective_meta = metadata
+    effective_width = width_meta
+    if study_name and metadata:
+        from science_cli.core.fzf_columns import STUDY_COLUMN_REGISTRY
+        if study_name in STUDY_COLUMN_REGISTRY:
+            cols = STUDY_COLUMN_REGISTRY[study_name]
+            effective_meta = {k: metadata[k] for k in cols if k in metadata}
+            effective_width = 12  # compact for narrow pulse values
+
     if show_protocol and protocol:
         base = f"{protocol:<{width_proto}} {step:<{width_step}} {filename}"
     else:
         base = f"{step:<{width_step}} {filename}"
 
-    if metadata:
+    if effective_meta:
         meta_parts = []
-        for v in metadata.values():
+        for v in effective_meta.values():
             val = str(v or "")
-            meta_parts.append(f"{val:<{width_meta}}")
+            meta_parts.append(f"{val:<{effective_width}}")
         if meta_parts:
             base = base + " " + " ".join(meta_parts)
+
+    if status_badge:
+        base = f"{status_badge} {base}"
 
     return base
 

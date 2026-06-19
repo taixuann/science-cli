@@ -72,6 +72,7 @@ def cmd_list(args):
     """List pulse files from protocol.yaml with metadata."""
     from science_cli.core.protocol import get_pulse_steps_with_metadata
     from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+    from science_cli.core.fzf_columns import STUDY_COLUMN_REGISTRY
 
     project_root = _resolve_project_root()
     if project_root is None:
@@ -85,9 +86,21 @@ def cmd_list(args):
         console.print("[yellow]No pulse steps found in protocol.yaml[/yellow]")
         return
 
-    # Build fzf display lines with metadata columns
+    # Pick the metadata column set: study_filter wins, else the most common
+    # study across steps, else a generic pulse fallback.
+    pulse_fallback_keys = [
+        "v_set_v", "v_read_v", "set_width_us", "read_width_us", "repeat_pattern",
+    ]
+    if study_filter and study_filter in STUDY_COLUMN_REGISTRY:
+        meta_keys = STUDY_COLUMN_REGISTRY[study_filter]
+    else:
+        from collections import Counter
+        study_counts = Counter(s.get("study", "") for s in steps)
+        most_common = study_counts.most_common(1)[0][0] if study_counts else ""
+        meta_keys = STUDY_COLUMN_REGISTRY.get(most_common, pulse_fallback_keys)
+
+    # Build fzf display lines with study-aware metadata columns
     display_lines = []
-    meta_keys = ["v_set_v", "v_read_v", "set_width_us", "read_width_us", "repeat_pattern"]
     header = build_fzf_display(
         protocol="", step="STEP", filename="FILES",
         show_protocol=False,

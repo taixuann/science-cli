@@ -416,15 +416,16 @@ def _plot_interactive(extra_args: list | None = None) -> None:
     from science_cli.core.fzf_utils import fzf_select
     from science_cli.core.paths import ProjectPaths
     paths = ProjectPaths(proj)
-    file_step_map: dict[str, tuple[str, str]] = {}
+    file_step_map: dict[str, tuple[str, str, str]] = {}
     for py in paths.list_protocol_yamls():
         pname = py.stem
         with open(py) as f:
             proto_data = __import__("yaml").safe_load(f) or {}
         for s in proto_data.get("steps", []):
+            study = s.get("study", "")
             for entry in s.get("files", []):
                 fname = entry["file"] if isinstance(entry, dict) else entry
-                file_step_map[fname] = (pname, s["name"])
+                file_step_map[fname] = (pname, s["name"], study)
 
     from science_cli.core.session import load_session
     sess = load_session()
@@ -445,16 +446,27 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         show_proto = True
 
     from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf_columns import status_badge_for_file, get_step_columns
+    from science_cli.cli.commands.results_status import load_status
+    status = load_status(proj)
     display_items: list[str] = []
     display_to_name: dict[str, str] = {}
     for f in display_files:
         name = f.name
         if name in file_step_map:
-            proto, step = file_step_map[name]
+            proto, step, study = file_step_map[name]
             technique = _detect_technique(name)
             instrument = _resolve_device(technique, str(f))
-            metadata = {"technique": technique, "instrument": instrument}
-            display = build_fzf_display(proto, step, name, show_protocol=show_proto, metadata=metadata)
+            # Try to load study-specific metadata from protocol.yaml
+            metadata = get_step_columns(proj, step, study)
+            if not metadata:
+                metadata = {"technique": technique, "instrument": instrument}
+            rel_key = f"{proto}/{step}/{name}"
+            badge = status_badge_for_file(rel_key, status)
+            display = build_fzf_display(
+                proto, step, name, show_protocol=show_proto,
+                metadata=metadata, study_name=study, status_badge=badge,
+            )
             display_to_name[display.strip()] = name
             display_items.append(display)
         else:
@@ -476,7 +488,7 @@ def _plot_interactive(extra_args: list | None = None) -> None:
     for f in selected:
         step_info = ""
         if f in file_step_map:
-            proto, step = file_step_map[f]
+            proto, step, _ = file_step_map[f]
             step_info = f"  [dim]→ {proto}/{step}[/dim]"
         rprint(f"  [dim]• {f}[/dim]{step_info}")
     rprint("")

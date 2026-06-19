@@ -719,3 +719,8 @@ def get_pulse_steps_with_metadata(
         })
 
     return results
+
+
+# NOTE: get_step_columns() is defined in `science_cli.core.fzf_columns` to
+# avoid a circular dependency between protocol.py and fzf_utils/fzf_columns.
+# Callers should import from `science_cli.core.fzf_columns`.

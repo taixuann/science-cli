@@ -5,6 +5,29 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.19.0] - 2026-06-19
+
+### Added
+- **Per-study fzf columns** — `science_cli.core.fzf_columns.STUDY_COLUMN_REGISTRY` maps each study name to its fzf metadata columns. Pulse studies show pattern-waveform fields (V_set/V_read/set_width/read_width/rise/fall), IV-bipolar shows sweep pattern + compliance + step + delay, EC shows electrochem-specific keys, Raman/UV-Vis show optical keys.
+- **`status_badge_for_file(file_key, status_dict)`** — single-char badge (★/✓/✗) for fzf display, replacing the longer `[HIGHLIGHT]` text labels. Honors all status tags (keep/highlight/discard/star) with no-badge for `clear`/missing.
+- **`get_step_columns(project_root, step_name, study_name)`** — reads step metadata from `protocol.yaml` and returns only the registry's column keys in registry order.
+
+### Changed
+- **`build_fzf_display()`** now accepts `study_name` and `status_badge` kwargs. When `study_name` matches a registry entry, only the registered columns are shown (compact `width_meta=12`). All existing call sites remain backward compatible.
+- **`sci plot`** and **`sci analyze`** (default fzf path) now show per-study metadata columns + status badge in their file selection UI.
+- **`sci results`**, **`sci pulse list`** — same treatment.
+
+### Removed
+- Duplicate `get_step_columns` from `protocol.py` (canonical home is now `fzf_columns.py`).
+
+### Fixed
+- 3 status test mocks updated to match the new `show_protocol=False` display format with badge prefixes.
+
+### Tests
+- New `tests/test_core/test_fzf_columns.py` — 21 tests covering registry shape (5 studies + 4 EC sub-tests), status badges (6 tag cases), `get_step_columns` (4 cases incl. unknown step, no study filter, registry filter), and `build_fzf_display` study-aware behavior (6 cases incl. backward compat, badge prepend, registry column filter, unregistered study fallback).
+- 3 status tests in `test_status.py` updated.
+- **547 passed**, 4 pre-existing baseline failures (unrelated: config defaults, migration script, electrochem device-type, library resolution).
+
 ## [3.18.0] - 2026-06-19
 
 ### Added

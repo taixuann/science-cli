@@ -212,7 +212,10 @@ def analyze_handler(args: list) -> None:
         return
 
     # Default to fzf file selection, then analyze
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    from science_cli.core.fzf_columns import status_badge_for_file, get_step_columns
+    from science_cli.core.paths import ProjectPaths
+    from science_cli.cli.commands.results_status import load_status
     from science_cli.core.project import get_current_project_path
     proj = get_current_project_path()
     if not proj:
@@ -229,13 +232,48 @@ def analyze_handler(args: list) -> None:
         console.print("[yellow]No files in data/raw/[/yellow]")
         return
 
-    item_names = [f.name for f in files]
-    selected = fzf_select(item_names, prompt="Select a file to analyze:", multi=False)
+    # Build study-aware file → (protocol, step, study) map from protocol YAMLs
+    paths = ProjectPaths(proj)
+    file_step_map: dict[str, tuple[str, str, str]] = {}
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        with open(py) as f:
+            proto_data = yaml.safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            study = s.get("study", "")
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                file_step_map[fname] = (pname, s["name"], study)
+
+    # Build display lines with per-study columns + status badge
+    status = load_status(proj)
+    display_items: list[str] = []
+    display_to_path: dict[str, str] = {}
+    for f in files:
+        name = f.name
+        if name in file_step_map:
+            proto, step, study = file_step_map[name]
+            metadata = get_step_columns(proj, step, study)
+            rel_key = f"{proto}/{step}/{name}"
+            badge = status_badge_for_file(rel_key, status)
+            display = build_fzf_display(
+                proto, step, name,
+                metadata=metadata, study_name=study, status_badge=badge,
+            )
+            display_to_path[display.strip()] = str(f)
+            display_items.append(display)
+        else:
+            display_to_path[name] = str(f)
+            display_items.append(name)
+
+    selected = fzf_select(
+        display_items, prompt="Select a file to analyze:", multi=False
+    )
     if not selected:
         console.print("[yellow]No file selected.[/yellow]")
         return
 
-    filepath = str(raw_dir / selected[0])
+    filepath = display_to_path.get(selected[0].strip(), str(raw_dir / selected[0]))
     _analyze_direct([filepath], args)
 
 
@@ -705,8 +743,41 @@ def _analyze_with_technique(
         console.print("[yellow]No files in data/raw/[/yellow]")
         return
 
-    item_names = [f.name for f in files]
-    selected = fzf_select(item_names, prompt=f"Select file for {technique} analysis:", multi=False)
+    # Build study-aware display lines
+    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf_columns import get_step_columns
+    from science_cli.core.paths import ProjectPaths
+    paths = ProjectPaths(proj)
+    file_step_map: dict[str, tuple[str, str, str]] = {}
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        with open(py) as f:
+            proto_data = yaml.safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            step_study = s.get("study", "")
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                file_step_map[fname] = (pname, s["name"], step_study)
+
+    display_items: list[str] = []
+    display_to_name: dict[str, str] = {}
+    for f in files:
+        name = f.name
+        if name in file_step_map:
+            proto, step, file_study = file_step_map[name]
+            use_study = study_name or file_study
+            metadata = get_step_columns(proj, step, use_study)
+            display = build_fzf_display(
+                proto, step, name,
+                metadata=metadata, study_name=use_study,
+            )
+            display_to_name[display.strip()] = name
+            display_items.append(display)
+        else:
+            display_to_name[name] = name
+            display_items.append(name)
+
+    selected = fzf_select(display_items, prompt=f"Select file for {technique} analysis:", multi=False)
     if not selected:
         return
 

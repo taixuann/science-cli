@@ -1,20 +1,37 @@
 """results command — list saved figures/analysis by protocol and step."""
 
 import subprocess
-from collections import defaultdict
 from pathlib import Path
 
 from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.cli.commands.results_status import (
-    STATUS_BADGES,
     STATUS_TAGS,
     load_status,
     save_status,
 )
+from science_cli.core.fzf_columns import status_badge_for_file
 
 console = Console()
+
+
+def _build_file_step_map(proj: Path) -> dict[str, tuple[str, str, str]]:
+    """Build filename → (protocol, step, study) mapping from protocol YAMLs."""
+    from science_cli.core.paths import ProjectPaths
+    mapping: dict[str, tuple[str, str, str]] = {}
+    paths = ProjectPaths(proj)
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        import yaml
+        with open(py) as f:
+            proto_data = yaml.safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            study = s.get("study", "")
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                mapping[fname] = (pname, s["name"], study)
+    return mapping
 
 
 def results_handler(args: list) -> None:
@@ -70,14 +87,32 @@ def results_handler(args: list) -> None:
         console.print("[yellow]No result files found.[/yellow]")
         return
     from science_cli.core.fzf_utils import build_fzf_display, fzf_select
-    display_lines = [
-        build_fzf_display(pname, sd_name, pf.name, width_proto=22, width_step=18)
-        for pname, sd_name, pf in result_files
-    ]
+    from science_cli.core.project import get_current_project_path as _proj
+    status = load_status(_proj())
+    file_step_map = _build_file_step_map(_proj()) if _proj() else {}
+    display_lines = []
+    for pname, sd_name, pf in result_files:
+        rel_key = f"{pname}/{sd_name}/{pf.name}"
+        badge = status_badge_for_file(rel_key, status)
+        _, _, study = file_step_map.get(pf.name, ("", "", ""))
+        display_lines.append(
+            build_fzf_display(
+                pname, sd_name, pf.name,
+                width_proto=22, width_step=18,
+                study_name=study, status_badge=badge,
+            )
+        )
     selected = fzf_select(display_lines, prompt="Select result to open:", multi=False)
     if selected:
         for pname, sd_name, pf in result_files:
-            if build_fzf_display(pname, sd_name, pf.name, width_proto=22, width_step=18) == selected[0]:
+            rel_key = f"{pname}/{sd_name}/{pf.name}"
+            badge = status_badge_for_file(rel_key, status)
+            _, _, study = file_step_map.get(pf.name, ("", "", ""))
+            if build_fzf_display(
+                pname, sd_name, pf.name,
+                width_proto=22, width_step=18,
+                study_name=study, status_badge=badge,
+            ) == selected[0]:
                 subprocess.run(["open", str(pf)], check=False)
                 console.print(f"[dim]Opened: {pf.name}[/dim]")
                 break
@@ -99,7 +134,7 @@ def _results_status(args: list) -> None:
     """Assign status tag to result files via fzf multi-select."""
     from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
 
     # Parse --status <tag> from args
     tag = None
@@ -139,15 +174,21 @@ def _results_status(args: list) -> None:
         return
 
     status = load_status(proj)
+    file_step_map = _build_file_step_map(proj)
 
     # Build fzf display lines with status indicator
     display_lines = []
     for pname, sd_name, pf in result_files:
         rel_key = f"{pname}/{sd_name}/{pf.name}"
-        file_tag = status.get(rel_key, "")
-        badge = STATUS_BADGES.get(file_tag, "")
-        prefix = f"{badge} " if badge else ""
-        display_lines.append(f"{prefix}{pf.name:<45} {pname:<22} {sd_name}")
+        badge = status_badge_for_file(rel_key, status)
+        _, _, study = file_step_map.get(pf.name, ("", "", ""))
+        display_lines.append(
+            build_fzf_display(
+                pname, sd_name, pf.name,
+                show_protocol=False,
+                study_name=study, status_badge=badge,
+            )
+        )
 
     selected = fzf_select(
         display_lines, prompt="Set status on results (multi):", multi=True
@@ -159,7 +200,13 @@ def _results_status(args: list) -> None:
     for line in selected:
         for pname, sd_name, pf in result_files:
             rel_key = f"{pname}/{sd_name}/{pf.name}"
-            if pf.name in line and pname in line and sd_name in line:
+            _, _, study = file_step_map.get(pf.name, ("", "", ""))
+            badge = status_badge_for_file(rel_key, status)
+            if build_fzf_display(
+                pname, sd_name, pf.name,
+                show_protocol=False,
+                study_name=study, status_badge=badge,
+            ).strip() == line.strip():
                 if tag == "clear":
                     status.pop(rel_key, None)
                 elif tag:
@@ -212,14 +259,19 @@ def _results_move(args: list) -> None:
         return
 
     status = load_status(proj)
+    file_step_map = _build_file_step_map(proj)
 
     display_lines = []
     for pname, sd_name, pf in result_files:
         rel_key = f"{pname}/{sd_name}/{pf.name}"
-        file_tag = status.get(rel_key, "")
-        badge = STATUS_BADGES.get(file_tag, "")
-        prefix = f"{badge} " if badge else ""
-        display_lines.append(prefix + build_fzf_display(pname, sd_name, pf.name))
+        badge = status_badge_for_file(rel_key, status)
+        _, _, study = file_step_map.get(pf.name, ("", "", ""))
+        display_lines.append(
+            build_fzf_display(
+                pname, sd_name, pf.name,
+                study_name=study, status_badge=badge,
+            )
+        )
 
     selected = fzf_select(display_lines, prompt="Select results to symlink:", multi=True)
     if not selected:
@@ -228,14 +280,14 @@ def _results_move(args: list) -> None:
     to_select = []
     for line in selected:
         line = line.strip()
-        # Strip status badge prefix if present
-        clean = line
-        for badge_str in STATUS_BADGES.values():
-            if badge_str and line.startswith(badge_str + " "):
-                clean = line[len(badge_str) + 1:].strip()
-                break
         for pname, sd_name, pf in result_files:
-            if build_fzf_display(pname, sd_name, pf.name) == clean:
+            rel_key = f"{pname}/{sd_name}/{pf.name}"
+            badge = status_badge_for_file(rel_key, status)
+            _, _, study = file_step_map.get(pf.name, ("", "", ""))
+            if build_fzf_display(
+                pname, sd_name, pf.name,
+                study_name=study, status_badge=badge,
+            ).strip() == line:
                 to_select.append((pname, sd_name, pf))
                 break
 
