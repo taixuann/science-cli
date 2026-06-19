@@ -120,9 +120,10 @@ def _detect_device_type(
     # 3. Reverse lookup: which device types include this study?
     if study_name:
         try:
-            from science_cli.core.config_defaults import _DEVICE_TYPES
+            from science_cli.core.config import load_global_config
+            device_types = load_global_config().get("device_types", {})
             matching: list[str] = []
-            for dt_slug, dt_cfg in _DEVICE_TYPES.items():
+            for dt_slug, dt_cfg in device_types.items():
                 if study_name in dt_cfg.get("studies", []):
                     matching.append(dt_slug)
             # Only return if exactly one device type matches
@@ -197,6 +198,10 @@ TECHNIQUE_HINTS = {
     "mem-endurance": {
         "plot_style": "--type line|scatter | --color | --linewidth",
         "figure": "-n endurance.pdf | --xlabel Cycle # | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
+    },
+    "pulse-endurance": {
+        "plot_style": "--marker o | --markersize 10 | --color | --linewidth",
+        "figure": "-n endurance.pdf | --xlabel Cycle (log) | --ylabel Resistance (Ω) | --zoom x1,x2,y1,y2",
     },
     "mem-retention": {
         "plot_style": "--type line | --color | --linewidth",
@@ -440,7 +445,8 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         show_proto = True
 
     from science_cli.core.fzf_utils import build_fzf_display
-    display_items = []
+    display_items: list[str] = []
+    display_to_name: dict[str, str] = {}
     for f in display_files:
         name = f.name
         if name in file_step_map:
@@ -448,8 +454,11 @@ def _plot_interactive(extra_args: list | None = None) -> None:
             technique = _detect_technique(name)
             instrument = _resolve_device(technique, str(f))
             metadata = {"technique": technique, "instrument": instrument}
-            display_items.append(build_fzf_display(proto, step, name, show_protocol=show_proto, metadata=metadata))
+            display = build_fzf_display(proto, step, name, show_protocol=show_proto, metadata=metadata)
+            display_to_name[display.strip()] = name
+            display_items.append(display)
         else:
+            display_to_name[name] = name
             display_items.append(name)
 
     prompt = f"{active_proto} | Select file(s) >" if active_proto else "Select file(s) (Tab to multi-select):"
@@ -461,7 +470,7 @@ def _plot_interactive(extra_args: list | None = None) -> None:
     if not selected:
         return
 
-    selected = [s.split()[-1] for s in selected]
+    selected = [display_to_name.get(s.strip(), s) for s in selected]
 
     rprint(f"\n[bold]Selected {len(selected)} file(s):[/bold]")
     for f in selected:

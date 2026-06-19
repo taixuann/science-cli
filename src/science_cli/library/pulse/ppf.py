@@ -81,9 +81,19 @@ def analyze_ppf_to_yaml(
     step_dir: Path,
     instrument: str = "",
     devices: str = "",
+    metadata: dict | None = None,
+    project_root: Path | None = None,
+    step_name: str | None = None,
 ) -> Path:
-    """Analyze PPF and write YAML analysis file."""
-    from science_cli.core.analysis_output import write_analysis_yaml
+    """Analyze PPF and write YAML analysis file.
+
+    If *project_root* and *step_name* are provided, also writes the
+    extracted metadata back to ``protocol.yaml`` under that step.
+    """
+    from science_cli.core.analysis_output import (
+        merge_analysis_to_metadata,
+        write_analysis_yaml,
+    )
 
     stats = analyze_ppf(intervals_ms, ratios)
 
@@ -106,6 +116,16 @@ def analyze_ppf_to_yaml(
                 "n_intervals": stats.get("n_intervals"),
             },
         }
+
+    # Write metadata back to protocol.yaml if project context provided
+    if project_root and step_name and "error" not in stats:
+        from science_cli.core.protocol import update_step_metadata
+
+        proto_meta = merge_analysis_to_metadata(
+            metadata, output["analysis"], key_prefix=""
+        )
+        if proto_meta:
+            update_step_metadata(project_root, step_name, proto_meta)
 
     return write_analysis_yaml(
         technique="pulse-ppf",

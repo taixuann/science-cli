@@ -48,12 +48,14 @@ def extract_metadata(
         parse_set_voltage,
         parse_sweep_range,
     )
+    from science_cli.core.metadata.waveform import parse_setup_pulses
 
     _parser_registry: dict[str, Callable] = {
         "set_voltage": parse_set_voltage,
         "compliance": parse_compliance,
         "sweep_range": parse_sweep_range,
         "repeat_count": parse_repeat_count,
+        "setup_pulses": parse_setup_pulses,
     }
 
     parsed: dict = {}
@@ -137,9 +139,19 @@ def _analyze_waveform_params(
     raw_lines: list[str],
     inputs: dict | None = None,
 ) -> dict:
-    from science_cli.core.metadata.keysight import analyze_waveform_params
+    from science_cli.core.metadata.waveform import analyze_waveform_params
 
     return analyze_waveform_params(df, raw_lines, inputs or {})
+
+
+def _detect_repeat_pattern(
+    df,
+    raw_lines: list[str],
+    inputs: dict | None = None,
+) -> dict:
+    from science_cli.core.metadata.waveform import detect_repeat_pattern
+
+    return detect_repeat_pattern(df)
 
 
 def _analyze_iv_compliance(
@@ -155,4 +167,5 @@ def _analyze_iv_compliance(
 ANALYSIS_REGISTRY: dict[str, Callable] = {
     "analyze_waveform_params": _analyze_waveform_params,
     "analyze_iv_compliance": _analyze_iv_compliance,
+    "detect_repeat_pattern": _detect_repeat_pattern,
 }

@@ -12,6 +12,33 @@ from pathlib import Path
 import yaml
 
 
+def merge_analysis_to_metadata(
+    base_metadata: dict | None,
+    analysis_dict: dict,
+    key_prefix: str = "",
+) -> dict:
+    """Merge analysis results into base metadata dict for protocol.yaml.
+
+    Args:
+        base_metadata: Existing metadata (e.g., waveform params from analyzer).
+        analysis_dict: The ``analysis`` section of the analysis YAML.
+        key_prefix: Optional prefix to nest analysis keys (e.g., ``"bipolar."``).
+
+    Returns:
+        Flat dict ready to be written as step.metadata in protocol.yaml.
+    """
+    merged = dict(base_metadata) if base_metadata else {}
+    for key, val in analysis_dict.items():
+        if isinstance(val, dict):
+            for k, v in val.items():
+                full_key = f"{key_prefix}{key}.{k}" if key_prefix else f"{key}.{k}"
+                merged[full_key] = v
+        else:
+            full_key = f"{key_prefix}{key}" if key_prefix else key
+            merged[full_key] = val
+    return merged
+
+
 def _get_validator(technique: str):
     """Look up a validator function for *technique* (or *None*)."""
     try:

@@ -5,7 +5,61 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.15.0] - 2026-06-17
+## [3.18.0] - 2026-06-19
+
+### Added
+- **Status tags** (`results --status <tag>`, `serve` API + dashboard click-to-cycle)
+  - Tags: `keep`, `highlight`, `discard`, `star`, `clear` (remove)
+  - Stored in `<project>/results/.status.json` (auto-migrates from legacy `.stars.json`)
+  - Serve API: `GET /api/status`, `POST /api/status` (body: `{file_key, tag}`)
+  - Dashboard: 2-sec polling overlay for badge updates on lazy-loaded gallery items
+- **`pulse:pulse-endurance` re-added** with device-type variants
+  - Volatile: R_decay vs cycle, log-log
+  - Non-volatile: 2-panel R_high + R_low, log-log
+  - X-log scale, big markers, cycle-based coloring
+- **`pulse list`** — lists pulse steps from `protocol.yaml` with metadata columns
+- **`pulse overlay`** — case-study overlay plot
+  - Tolerance-based numeric grouping (default ±5% of median)
+  - Exact string matching for non-numeric
+  - Color per group, legend by variable value
+  - Output to file or display
+- **Auto-write metadata** to `protocol.yaml` after analysis
+  - STP, endurance, IV bipolar, PPF all write waveform + analysis results
+  - New `merge_analysis_to_metadata()` helper in `core/analysis_output.py`
+  - Atomic write via `_atomic_write_yaml()` (temp file + os.replace)
+- **Architecture ref**: device ↔ study relationship documented in `.opencode/artifacts/160626c_device-study-relationship.md`
+  - Device types: `volatile-memristor`, `non-volatile-memristor`
+  - Studies: `pulse:pulse-stp-decay`, `pulse:pulse-endurance`, `pulse:pulse-ppf`, `iv:iv-bipolar-sweep`
+
+### Changed
+- `results.py` refactored: imports from `results_status` module, `--status` flag replaces `--star` (legacy still works)
+- `plot/pulse_endurance.py` rewritten with device-type dispatch
+- `core/protocol.py` extended with metadata write helpers
+- `library/iv/bipolar.py`, `library/pulse/ppf.py` — added `metadata`/`project_root`/`step_name` params
+
+### Tests
+- 26 new tests in `tests/test_core/test_status.py`
+- 13 new tests in `tests/test_plot/test_pulse_endurance.py`
+- 27 new tests in `tests/test_core/test_pulse_overlay.py`
+- Tests for IV bipolar + PPF metadata write (Seq 4)
+
+## [3.15.0] - 2026-06-16
+
+### Added
+- **STP-decay study wiring** for volatile-memristor on keysight-b1500a:
+  - New grammar pattern `rN-cN-stp-decay` for files like `150626_cu-c-pda(q5)-ito_r5-c2_stp-decay_041_important.csv`
+  - `analyze_waveform_params` — extracts V_set, V_read, set pulse width, read pulse width, rise/fall time, and repeat pattern via histogram peak detection on voltage-time data
+  - `detect_repeat_pattern` — detects single vs repeated sweep patterns
+  - `invert_current_sign` — flips Keysight B1500A current sign (convention is negative)
+  - `parse_setup_pulses` — best-effort header scanner for explicit pulse parameters
+  - New module: `science_cli.core.metadata.waveform`
+  - YAML analysis output now includes `waveform` section with pulse parameters
+- 20 new tests in `tests/test_metadata/test_waveform.py`
+
+### Changed
+- `analyze_stp_decay_to_yaml` accepts `metadata` parameter
+
+## [3.16.0] - 2026-06-17
 
 ### Added
 - **Device-type-aware plot dispatch**: `StudyPlotter` now supports `device_variants` dict for per-device-type plot behavior

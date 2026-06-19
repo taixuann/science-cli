@@ -5,7 +5,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from science_cli.core.config_defaults import _LEGACY_TO_STUDY, _STUDIES
+
+def _get_legacy_and_studies() -> tuple[dict, dict]:
+    """Lazy load legacy_to_study and studies from global config (avoids circular import)."""
+    from science_cli.core.config import load_global_config
+    cfg = load_global_config()
+    return cfg.get("legacy_to_study", {}), cfg.get("studies", {})
 
 
 @dataclass
@@ -81,7 +86,8 @@ def resolve_study_plotter(
     if study_name in STUDY_PLOTTERS:
         base = STUDY_PLOTTERS[study_name]
     else:
-        mapped = _LEGACY_TO_STUDY.get(study_name)
+        legacy, _ = _get_legacy_and_studies()
+        mapped = legacy.get(study_name)
         if mapped and mapped in STUDY_PLOTTERS:
             base = STUDY_PLOTTERS[mapped]
     if base is None:
@@ -110,7 +116,7 @@ def list_study_plotters() -> list[str]:
     return list(STUDY_PLOTTERS.keys())
 
 
-# ── Populate STUDY_PLOTTERS from _STUDIES ─────────────────────────────
+# ── Populate STUDY_PLOTTERS from studies dict ──────────────────────────
 
 _IV_SWEEP_FLAGS = [
     {"name": "--gradient", "action": "store_true", "help": "Color sweep points by position along cycle"},
@@ -159,8 +165,9 @@ _OVERLAY_LAYOUTS: dict[str, str] = {
     "ec:ec-eis": "nyquist_bode",
 }
 
-# Populate all studies with fallback plotters
-for technique, technique_studies in _STUDIES.items():
+# Populate all studies with fallback plotters (lazy-loaded from global config)
+_, _studies_for_plotters = _get_legacy_and_studies()
+for technique, technique_studies in _studies_for_plotters.items():
     for study_name, study_cfg in technique_studies.items():
         full_name = f"{technique}:{study_name}"
         if full_name not in STUDY_PLOTTERS:

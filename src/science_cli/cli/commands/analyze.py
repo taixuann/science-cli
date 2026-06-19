@@ -82,9 +82,10 @@ def _detect_device_type_analyze(
     # 2. Reverse lookup: which device types include this study?
     if study_name:
         try:
-            from science_cli.core.config_defaults import _DEVICE_TYPES
+            from science_cli.core.config import load_global_config
+            device_types = load_global_config().get("device_types", {})
             matching: list[str] = []
-            for dt_slug, dt_cfg in _DEVICE_TYPES.items():
+            for dt_slug, dt_cfg in device_types.items():
                 if study_name in dt_cfg.get("studies", []):
                     matching.append(dt_slug)
             if len(matching) == 1:

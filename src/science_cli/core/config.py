@@ -216,15 +216,17 @@ def _get_hardcoded_defaults() -> dict:
     """Return dict with ALL hardcoded defaults from config_defaults.py.
 
     This is Layer 0 — always present, always the lowest priority.
+    Studies, device_types, and legacy_to_study are now empty here;
+    they come from config-devices.yaml (Layer 2).
     """
-    from science_cli.core.config_defaults import _STUDIES, _DEVICE_TYPES, _LEGACY_TO_STUDY, _INSTRUMENTS, _GRAMMAR  # noqa: I001
+    from science_cli.core.config_defaults import _INSTRUMENTS, _GRAMMAR  # noqa: I001
 
     return {
         "projects_root": _DEFAULT_PROJECTS_ROOT,
         "techniques": {},
-        "studies": dict(_STUDIES),
-        "device_types": dict(_DEVICE_TYPES),
-        "legacy_to_study": dict(_LEGACY_TO_STUDY),
+        "studies": {},
+        "device_types": {},
+        "legacy_to_study": {},
         "instruments": dict(_INSTRUMENTS),
         "file_naming": dict(_GRAMMAR.get("file_naming", {})),
         "defaults": {},
@@ -281,19 +283,24 @@ def load_global_config() -> dict:
             merged = _merge_dicts(merged, old_cfg)
             pass  # backward compat
 
-    # Layer 2: config-devices.yaml (studies + device types)
+    # Layer 2: config-devices.yaml (studies + device types + techniques)
     devices_path = base_dir / "config-devices.yaml"
     devices_cfg = _load_yaml(devices_path)
     if devices_cfg:
         merged["studies"] = devices_cfg.get("studies", {})
         merged["device_types"] = devices_cfg.get("device_types", {})
         merged["legacy_to_study"] = devices_cfg.get("legacy_to_study", {})
+        if "techniques" in devices_cfg:
+            merged["techniques"] = devices_cfg["techniques"]
 
     # Layer 3: config-instruments.yaml
     instruments_path = base_dir / "config-instruments.yaml"
     instr_cfg = _load_yaml(instruments_path)
     if instr_cfg:
         merged["instruments"] = instr_cfg.get("instruments", {})
+        # Also merge flat device configs (backward compat with get_global_device_config)
+        if "devices" in instr_cfg:
+            merged["devices"] = instr_cfg["devices"]
 
     # Layer 4: config-grammar.yaml
     grammar_path = base_dir / "config-grammar.yaml"
@@ -415,8 +422,8 @@ def get_technique_patterns(
 
     # Also check studies for matching patterns (new model)
     if not config_patterns:
-        from science_cli.core.config_defaults import _LEGACY_TO_STUDY
-        study_name = _LEGACY_TO_STUDY.get(technique)
+        legacy_to_study = config.get("legacy_to_study", {})
+        study_name = legacy_to_study.get(technique)
         if study_name:
             studies_dict = config.get("studies", {})
             tech_prefix, study_key = _parse_study_qualifier(study_name)
@@ -553,8 +560,8 @@ def get_default_device(
         tech_cfg = _DEFAULT_GLOBAL_TECHNIQUES.get(technique, {})
         dev = tech_cfg.get("default_device", "")
     if not dev:
-        from science_cli.core.config_defaults import _LEGACY_TO_STUDY
-        legacy_study = _LEGACY_TO_STUDY.get(technique)
+        legacy_to_study = config.get("legacy_to_study", {})
+        legacy_study = legacy_to_study.get(technique)
         if legacy_study:
             studies_dict = config.get("studies", {})
             tech_prefix, study_key = _parse_study_qualifier(legacy_study)
@@ -617,10 +624,10 @@ def get_plot_labels(
 ) -> dict[str, str]:
     """Return per-technique plot labels from config, or empty dict.
 
-    Reads from the ``plot.labels.<technique>`` section of the merged config.
+    Reads from the ``templates.plot_labels.<technique>`` section of the merged config.
     """
     config = get_merged_config(project_root)
-    return dict(config.get("plot", {}).get("labels", {}).get(technique, {}))
+    return dict(config.get("templates", {}).get("plot_labels", {}).get(technique, {}))
 
 
 def get_file_naming_patterns(project_root: Path | None = None) -> list[dict]:
@@ -883,8 +890,8 @@ def get_global_technique_config(technique_name: str) -> dict | None:
         cfg.update(user_cfg)
 
     if not cfg:
-        from science_cli.core.config_defaults import _LEGACY_TO_STUDY
-        study_name = _LEGACY_TO_STUDY.get(technique_name)
+        legacy_to_study = global_cfg.get("legacy_to_study", {})
+        study_name = legacy_to_study.get(technique_name)
         if study_name:
             studies_dict = global_cfg.get("studies", {})
             tech_prefix, study_key = _parse_study_qualifier(study_name)
@@ -927,8 +934,8 @@ def resolve_technique_from_grammar(
             legacy_codes = study_cfg.get("legacy_codes", [])
             if grammar_code in legacy_codes or grammar_code == study_name:
                 legacy_name = f"{tech_prefix}:{study_name}"
-                from science_cli.core.config_defaults import _LEGACY_TO_STUDY
-                for old_name, mapped in _LEGACY_TO_STUDY.items():
+                legacy_to_study = global_cfg.get("legacy_to_study", {})
+                for old_name, mapped in legacy_to_study.items():
                     if mapped == legacy_name:
                         return old_name
                 return study_name

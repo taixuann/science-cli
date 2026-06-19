@@ -561,3 +561,161 @@ def _build_file_index(normalized_entries: list[dict]) -> dict[str, int]:
         if fname:
             idx[fname] = i
     return idx
+
+
+# ── Step metadata ──────────────────────────────────────────────────
+
+
+def _atomic_write_yaml(path: Path, data: dict) -> None:
+    """Write YAML atomically: write to temp file, then rename."""
+    import os
+    import tempfile
+
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent, suffix=".yaml.tmp", prefix=".tmp_"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False,
+                      allow_unicode=True, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def update_step_metadata(
+    project_root: Path, step_name: str, metadata: dict
+) -> bool:
+    """Update the ``metadata`` field of a step in ``protocol.yaml``.
+
+    Reads ``protocol.yaml`` from *project_root*, finds the step by name,
+    merges *metadata* into the step's ``metadata:`` dict (creating it if
+    absent), and writes the file back atomically.
+
+    Parameters
+    ----------
+    project_root:
+        Path to the project directory containing ``protocol.yaml``.
+    step_name:
+        Name of the step to update (matched by ``step["name"]``).
+    metadata:
+        Dict of key-value pairs to merge into the step's metadata.
+
+    Returns
+    -------
+    bool
+        ``True`` if the step was found and updated, ``False`` otherwise.
+    """
+    protocol_path = project_root / "protocol.yaml"
+    if not protocol_path.exists():
+        return False
+
+    try:
+        data = yaml.safe_load(protocol_path.read_text()) or {}
+    except Exception:
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    steps = data.get("steps", [])
+    if not isinstance(steps, list):
+        return False
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("name") == step_name:
+            step.setdefault("metadata", {}).update(metadata)
+            _atomic_write_yaml(protocol_path, data)
+            return True
+
+    return False
+
+
+def read_step_metadata(project_root: Path, step_name: str) -> dict:
+    """Read the ``metadata`` field of a step from ``protocol.yaml``.
+
+    Parameters
+    ----------
+    project_root:
+        Path to the project directory containing ``protocol.yaml``.
+    step_name:
+        Name of the step to read.
+
+    Returns
+    -------
+    dict
+        The step's metadata dict, or empty dict if not found.
+    """
+    protocol_path = project_root / "protocol.yaml"
+    if not protocol_path.exists():
+        return {}
+
+    try:
+        data = yaml.safe_load(protocol_path.read_text()) or {}
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    for step in data.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        if step.get("name") == step_name:
+            return step.get("metadata", {})
+
+    return {}
+
+
+def get_pulse_steps_with_metadata(
+    project_root: Path, study_filter: str = "",
+) -> list[dict]:
+    """List pulse steps from protocol.yaml, enriched with metadata.
+
+    Parameters
+    ----------
+    project_root:
+        Path to the project directory containing ``protocol.yaml``.
+    study_filter:
+        Optional study prefix filter (e.g. ``"pulse:pulse-stp-decay"``).
+
+    Returns
+    -------
+    list[dict]
+        List of dicts with keys: ``name``, ``study``, ``files``, ``metadata``.
+    """
+    protocol_path = project_root / "protocol.yaml"
+    if not protocol_path.exists():
+        return []
+
+    try:
+        data = yaml.safe_load(protocol_path.read_text()) or {}
+    except Exception:
+        return []
+
+    if not isinstance(data, dict):
+        return []
+
+    results: list[dict] = []
+    for step in data.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        study = step.get("study", "")
+        if not study.startswith("pulse"):
+            continue
+        if study_filter and study != study_filter:
+            continue
+        results.append({
+            "name": step.get("name", ""),
+            "study": study,
+            "files": step.get("files", []),
+            "metadata": step.get("metadata", {}),
+        })
+
+    return results

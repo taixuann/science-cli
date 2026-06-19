@@ -94,6 +94,10 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
                 self._api_dashboard(m.group(1), metric, material)
                 return
 
+            if path == "/api/status":
+                self._api_status_get()
+                return
+
             if path == "/" or path == "":
                 self.path = "/index.html"
                 return super().do_GET()
@@ -129,6 +133,21 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
             self._send_error(500, "Internal server error")
             traceback.print_exc()
             logger.exception("Request handler error")
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = urllib.parse.unquote(parsed.path)
+
+        try:
+            if path == "/api/status":
+                self._api_status_post()
+                return
+
+            self._send_error(404, "Not found")
+        except Exception:
+            self._send_error(500, "Internal server error")
+            traceback.print_exc()
+            logger.exception("POST handler error")
 
     def do_OPTIONS(self):
         if self.dev_mode:
@@ -206,6 +225,37 @@ class SciServeHandler(http.server.SimpleHTTPRequestHandler):
         from science_cli.serve.api import get_project_data
         data = get_project_data(proj)
         self._send_json(data)
+
+    def _api_status_get(self):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_json({})
+        from science_cli.serve.api import get_status
+        data = get_status(proj)
+        self._send_json(data)
+
+    def _api_status_post(self):
+        proj = self._get_project_path()
+        if not proj:
+            return self._send_error(404, "no project open")
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
+        try:
+            payload = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            return self._send_error(400, "Invalid JSON body")
+
+        file_key = payload.get("file_key", "")
+        tag = payload.get("tag", "")
+        if not file_key or not tag:
+            return self._send_error(400, "Missing file_key or tag")
+
+        from science_cli.serve.api import set_status
+        result = set_status(proj, file_key, tag)
+        if "error" in result:
+            return self._send_error(400, result["error"])
+        self._send_json(result)
 
     def _api_gallery(self):
         proj = self._get_project_path()

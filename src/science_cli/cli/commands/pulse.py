@@ -28,6 +28,12 @@ def pulse_handler(args):
         if parsed.subcommand == "ls":
             from science_cli.library.pulse.device_cli import cmd_ls
             cmd_ls(parsed)
+        elif parsed.subcommand == "list":
+            from science_cli.library.pulse.device_cli import cmd_list
+            cmd_list(parsed)
+        elif parsed.subcommand == "overlay":
+            from science_cli.library.pulse.device_cli import cmd_overlay
+            cmd_overlay(parsed)
         elif parsed.subcommand == "endurance":
             from science_cli.library.pulse.device_cli import cmd_endurance
             cmd_endurance(parsed)

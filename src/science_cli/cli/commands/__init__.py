@@ -42,7 +42,7 @@ COMMAND_TREE = {
     "plot":    {"handler": plot_handler, "desc": "Plot data — fzf-based, auto-detects technique (group 3)"},
     "analyze": {"handler": analyze_handler, "desc": "Analyze data — fzf-based, technique-aware (group 3)"},
     "iv": {"handler": iv_handler, "desc": "IV sweep — list, info, plot, analyze, sync, dashboard (group 3)"},
-    "pulse": {"handler": pulse_handler, "desc": "Pulse measurements — endurance, retention, switching, STP, PPF (group 3)"},
+    "pulse": {"handler": pulse_handler, "desc": "Pulse measurements — list, overlay, endurance, retention, switching, STP, PPF (group 3)"},
     "pvd": {"handler": pvd_handler, "desc": "PVD deposition records — list, info, add, edit, analyze (group 3)"},
     "instrument": {"handler": instrument_handler, "desc": "Instrument registry — ls, info, register, edit, rm (group 3)"},
     "ins": {"handler": instrument_handler, "desc": "Alias for 'instrument' (group 3)"},

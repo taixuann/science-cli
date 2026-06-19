@@ -13,7 +13,7 @@ def analyze_stp_decay(time, current):
     
     Args:
         time: Time array (ms).
-        current: Current array (A).
+        current: Current array (A). Accepts pre-inverted (positive) values.
     
     Returns:
         dict with decay parameters, fit quality, and model selection.
@@ -145,9 +145,19 @@ def analyze_stp_decay_to_yaml(
     step_dir: Path,
     instrument: str = "",
     devices: str = "",
+    metadata: dict | None = None,
+    project_root: Path | None = None,
+    step_name: str = "",
 ) -> Path:
-    """Analyze STP decay and write YAML analysis file."""
-    from science_cli.core.analysis_output import write_analysis_yaml
+    """Analyze STP decay and write YAML analysis file.
+
+    If *project_root* and *step_name* are provided, also writes the
+    extracted pulse metadata back to ``protocol.yaml`` under that step.
+    """
+    from science_cli.core.analysis_output import (
+        merge_analysis_to_metadata,
+        write_analysis_yaml,
+    )
 
     stats = analyze_stp_decay(time, current)
 
@@ -172,6 +182,27 @@ def analyze_stp_decay_to_yaml(
                 },
             },
         }
+
+    if metadata:
+        pulse_fields = {
+            k: _to_native(v)
+            for k, v in metadata.items()
+            if k in ("v_set_v", "v_read_v", "set_width_us", "read_width_us",
+                     "repeat_pattern", "rise_us", "fall_us")
+            and v is not None
+        }
+        if pulse_fields:
+            output["analysis"]["waveform"] = pulse_fields
+
+    # Write metadata back to protocol.yaml if project context provided
+    if project_root and step_name and metadata:
+        from science_cli.core.protocol import update_step_metadata
+
+        proto_meta = merge_analysis_to_metadata(
+            metadata, output["analysis"], key_prefix=""
+        )
+        if proto_meta:
+            update_step_metadata(project_root, step_name, proto_meta)
 
     return write_analysis_yaml(
         technique="pulse-stp",

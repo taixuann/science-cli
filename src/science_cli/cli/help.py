@@ -35,7 +35,7 @@ COMMAND_DESCRIPTIONS = {
     "raman":   "Raman spectroscopy — list, inspect, plot, analyze",
     "uv-vis":  "UV-Vis spectroscopy — list, inspect, plot, analyze",
     "iv":      "IV sweep — list, info, plot, analyze, sync, dashboard",
-    "pulse":   "Pulse measurements — endurance, retention, STP, PPF",
+    "pulse":   "Pulse measurements — list, overlay, endurance, retention, STP, PPF",
     "pvd":     "PVD deposition — list, info, add, edit, analyze",
     "instrument": "[DEPRECATED] Instrument registry — use 'ls -m instrument', 'edit -m instrument' instead",
     "ins":     "[DEPRECATED] Alias for 'instrument'",
@@ -227,15 +227,21 @@ COMMAND_HELP: Dict[str, dict] = {
         ],
     },
     "results": {
-        "usage": "results [--move]",
+        "usage": "results [--move] [--status <tag>]",
         "desc": "Browse saved figures by protocol and step via fzf (Group 2).",
         "subcommands": {
             "results":                    {"desc": "Interactive browse by protocol/step", "usage": "results"},
             "results --move":             {"desc": "Select and symlink results to project/results/", "usage": "results --move"},
+            "results --star":             {"desc": "[Legacy] Toggle star via fzf (alias for status cycle)", "usage": "results --star"},
+            "results --status <tag>":     {"desc": "Assign status tag via fzf (keep|highlight|discard|star|clear)", "usage": "results --status highlight"},
         },
         "examples": [
             "results",
             "results --move",
+            "results --star",
+            "results --status highlight",
+            "results --status discard",
+            "results --status clear",
         ],
     },
     "serve": {

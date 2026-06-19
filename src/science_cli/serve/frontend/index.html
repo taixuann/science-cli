@@ -41,5 +41,115 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Status badge overlay for gallery items -->
+    <script>
+    (function() {
+      const STATUS_TAGS = ['keep', 'highlight', 'discard', 'star'];
+      const BADGES = {
+        keep: '[KEEP]',
+        highlight: '[HIGHLIGHT]',
+        discard: '[DISCARD]',
+        star: '\u2B50'
+      };
+      const BADGE_COLORS = {
+        keep: '#4ade80',
+        highlight: '#facc15',
+        discard: '#f87171',
+        star: '#facc15'
+      };
+      let statusCache = {};
+
+      // Load status from API
+      async function loadStatus() {
+        try {
+          const resp = await fetch('/api/status');
+          if (resp.ok) statusCache = await resp.json();
+        } catch(e) { /* no project or server */ }
+      }
+
+      // Get file_key from a gallery item's image src or link
+      function getFileKey(el) {
+        // Look for an img or a link with protocol path
+        const img = el.querySelector('img[src*="protocol/"]');
+        if (img) {
+          const src = img.getAttribute('src');
+          // Extract protocol/step/results/filename from src
+          const m = src.match(/protocol\/([^/]+)\/([^/]+)\/results\/([^/?]+)/);
+          if (m) return `${m[1]}/${m[2]}/${m[3]}`;
+        }
+        // Fallback: look for data attributes
+        return el.dataset.statusKey || null;
+      }
+
+      // Cycle status: keep -> highlight -> discard -> (clear) -> keep
+      function cycleStatus(current) {
+        const idx = STATUS_TAGS.indexOf(current || '');
+        if (idx < 0) return STATUS_TAGS[0]; // empty -> keep
+        if (idx >= STATUS_TAGS.length - 1) return ''; // last -> clear
+        return STATUS_TAGS[idx + 1];
+      }
+
+      // Apply badge to a gallery item
+      function applyBadge(el) {
+        const key = getFileKey(el);
+        if (!key) return;
+        const tag = statusCache[key];
+        // Remove existing badge
+        const existing = el.querySelector('.sci-status-badge');
+        if (existing) existing.remove();
+        if (!tag) return;
+        const badge = document.createElement('div');
+        badge.className = 'sci-status-badge';
+        badge.textContent = BADGES[tag] || tag;
+        badge.style.cssText = `
+          position: absolute; top: 6px; left: 6px; z-index: 10;
+          background: ${BADGE_COLORS[tag] || '#999'};
+          color: #000; padding: 2px 6px; border-radius: 4px;
+          font-size: 11px; font-weight: 600; cursor: pointer;
+          pointer-events: auto; user-select: none;
+        `;
+        el.style.position = 'relative';
+        el.appendChild(badge);
+
+        // Click handler to cycle status
+        badge.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const newTag = cycleStatus(tag);
+          try {
+            const resp = await fetch('/api/status', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ file_key: key, tag: newTag })
+            });
+            if (resp.ok) {
+              if (newTag) statusCache[key] = newTag;
+              else delete statusCache[key];
+              applyBadge(el);
+            }
+          } catch(err) { console.error('Status update failed:', err); }
+        });
+      }
+
+      // Observe DOM for new gallery items
+      function enhanceAll() {
+        document.querySelectorAll('[class*="gallery"], [class*="grid"] > div, [class*="card"]').forEach(el => {
+          if (el.dataset.statusEnhanced) return;
+          const key = getFileKey(el);
+          if (key) {
+            el.dataset.statusEnhanced = '1';
+            applyBadge(el);
+          }
+        });
+      }
+
+      // Init: load status then enhance
+      loadStatus().then(() => {
+        enhanceAll();
+        // Re-enhance periodically for lazy-loaded content
+        setInterval(enhanceAll, 2000);
+      });
+    })();
+    </script>
   </body>
 </html>

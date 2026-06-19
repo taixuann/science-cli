@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import numpy as np
-from science_cli.library.pulse.models import EnduranceData
 
 
 def analyze_endurance(r_on, r_off, cycles):
@@ -94,8 +93,15 @@ def analyze_endurance_to_yaml(
     step_dir: Path,
     instrument: str = "",
     devices: str = "",
+    metadata: dict | None = None,
+    project_root: Path | None = None,
+    step_name: str = "",
 ) -> Path:
-    """Analyze endurance and write YAML analysis file."""
+    """Analyze endurance and write YAML analysis file.
+
+    If *project_root* and *step_name* are provided, also writes the
+    extracted pulse metadata back to ``protocol.yaml`` under that step.
+    """
     from science_cli.core.analysis_output import write_analysis_yaml
 
     stats = analyze_endurance(r_on, r_off, cycles)
@@ -114,6 +120,18 @@ def analyze_endurance_to_yaml(
             "per_cycle_sampling": len(r_on) if hasattr(r_on, "__len__") else None,
         },
     }
+
+    # Write metadata back to protocol.yaml if project context provided
+    if project_root and step_name and metadata:
+        from science_cli.core.analysis_output import merge_analysis_to_metadata
+        from science_cli.core.protocol import update_step_metadata
+
+        proto_meta = merge_analysis_to_metadata(
+            metadata, output["analysis"], key_prefix=""
+        )
+        if proto_meta:
+            update_step_metadata(project_root, step_name, proto_meta)
+
     return write_analysis_yaml(
         technique="pulse-endurance",
         step_dir=step_dir,

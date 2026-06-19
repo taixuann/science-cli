@@ -1,0 +1,102 @@
+templates:
+  plot_labels:
+    iv-sweep:
+      xlabel: Voltage (V)
+      ylabel: Current (A)
+    iv-breakdown:
+      xlabel: Voltage (V)
+      ylabel: Current (A)
+    iv-leakage:
+      xlabel: Voltage (V)
+      ylabel: "Current density (A/cm\xB2)"
+    ec-cv:
+      xlabel: Potential (V)
+      ylabel: Current (A)
+    ec-ca:
+      xlabel: Time (s)
+      ylabel: I (A)
+    ec-eis:
+      xlabel: "Z' (\u03A9)"
+      ylabel: "-Z'' (\u03A9)"
+    raman:
+      xlabel: "Raman shift (cm\u207B\xB9)"
+      ylabel: Intensity (counts)
+    uv-vis:
+      xlabel: Wavelength (nm)
+      ylabel: Transmission (%)
+  publication-nature:
+    font: Helvetica
+    fontsize: 7
+    dpi: 300
+    figure_format: pdf
+    rcparams:
+      font.family: sans-serif
+      font.sans-serif:
+      - Helvetica
+      axes.linewidth: 0.5
+      axes.labelsize: 7
+      xtick.labelsize: 6
+      ytick.labelsize: 6
+      legend.fontsize: 6
+      lines.linewidth: 1.0
+  publication-acs:
+    font: Helvetica
+    fontsize: 8
+    dpi: 600
+    figure_format: pdf
+    rcparams:
+      font.family: sans-serif
+      font.sans-serif:
+      - Helvetica
+      axes.linewidth: 0.5
+      axes.labelsize: 8
+      xtick.labelsize: 7
+      ytick.labelsize: 7
+      legend.fontsize: 7
+      lines.linewidth: 1.0
+  matcha:
+    font: sans-serif
+    fontsize: 11
+    dpi: 150
+    figure_format: png
+    rcparams:
+      axes.facecolor: '#f5f5f0'
+      axes.edgecolor: '#4a4a4a'
+      grid.color: '#d4d4d4'
+      grid.alpha: 0.6
+  tufte:
+    font: serif
+    fontsize: 10
+    dpi: 200
+    figure_format: pdf
+    rcparams:
+      font.family: serif
+      axes.linewidth: 0.3
+      axes.spines.top: false
+      axes.spines.right: false
+  dark:
+    font: sans-serif
+    fontsize: 10
+    dpi: 150
+    figure_format: png
+    rcparams:
+      axes.facecolor: '#1a1a1a'
+      axes.edgecolor: '#e0e0e0'
+      text.color: '#e0e0e0'
+      axes.labelcolor: '#e0e0e0'
+      xtick.color: '#e0e0e0'
+      ytick.color: '#e0e0e0'
+      figure.facecolor: '#121212'
+      grid.color: '#333333'
+  poster:
+    font: sans-serif
+    fontsize: 14
+    dpi: 300
+    figure_format: png
+    rcparams:
+      axes.linewidth: 1.5
+      axes.labelsize: 14
+      xtick.labelsize: 12
+      ytick.labelsize: 12
+      legend.fontsize: 12
+      lines.linewidth: 2.0

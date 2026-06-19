@@ -1,18 +1,30 @@
 """Study domain model — detection, resolution, and rendering.
 
 Pure domain model — no circular imports with core/config.py.
-Imports from core/config_defaults.py only (config data, no runtime deps).
+Uses lazy loaders to pull data from the global config at call time.
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from science_cli.core.config_defaults import (
-    _DEVICE_TYPES,
-    _LEGACY_TO_STUDY,
-    _STUDIES,
-)
+
+def _studies_dict() -> dict:
+    """Lazy load studies dict from global config (avoids circular import)."""
+    from science_cli.core.config import load_global_config
+    return load_global_config().get("studies", {})
+
+
+def _device_types_dict() -> dict:
+    """Lazy load device_types dict from global config (avoids circular import)."""
+    from science_cli.core.config import load_global_config
+    return load_global_config().get("device_types", {})
+
+
+def _legacy_dict() -> dict:
+    """Lazy load legacy_to_study dict from global config (avoids circular import)."""
+    from science_cli.core.config import load_global_config
+    return load_global_config().get("legacy_to_study", {})
 
 
 @dataclass
@@ -60,7 +72,7 @@ def detect_study_from_filename(
     Returns:
         Study name in ``"technique:study-name"`` format, or None if no match.
     """
-    studies = studies_dict if studies_dict is not None else _STUDIES
+    studies = studies_dict if studies_dict is not None else _studies_dict()
 
     entries: list[tuple[str, str, str]] = []
     for technique, technique_studies in studies.items():
@@ -106,8 +118,8 @@ def resolve_library_from_study(
     Returns:
         Library name (e.g. ``"iv"``, ``"pulse"``, ``"ec"``).
     """
-    if device_type is not None and device_type in _DEVICE_TYPES:
-        lib = _DEVICE_TYPES[device_type].get("library")
+    if device_type is not None and device_type in _device_types_dict():
+        lib = _device_types_dict()[device_type].get("library")
         if lib:
             return lib
 
@@ -127,7 +139,7 @@ def resolve_legacy_technique(technique_name: str) -> str | None:
     Returns:
         Study name in ``"technique:study-name"`` format, or None.
     """
-    return _LEGACY_TO_STUDY.get(technique_name)
+    return _legacy_dict().get(technique_name)
 
 
 # ── Accessors ──────────────────────────────────────────────────────────
@@ -147,7 +159,7 @@ def get_study_config(
     Returns:
         Study config dict with ``technique`` and ``name`` added, or None.
     """
-    studies = studies_dict if studies_dict is not None else _STUDIES
+    studies = studies_dict if studies_dict is not None else _studies_dict()
     technique, name = parse_study_name(study_name)
 
     if not technique or technique not in studies:
@@ -169,10 +181,10 @@ def get_studies_for_device_type(device_type: str) -> list[str]:
     Returns:
         List of study names in ``"technique:study-name"`` format.
     """
-    if device_type not in _DEVICE_TYPES:
+    if device_type not in _device_types_dict():
         return []
 
-    return list(_DEVICE_TYPES[device_type].get("studies", []))
+    return list(_device_types_dict()[device_type].get("studies", []))
 
 
 def get_studies_for_instrument(instrument: str) -> list[str]:
@@ -185,7 +197,7 @@ def get_studies_for_instrument(instrument: str) -> list[str]:
         List of study names in ``"technique:study-name"`` format.
     """
     result: list[str] = []
-    for technique, technique_studies in _STUDIES.items():
+    for technique, technique_studies in _studies_dict().items():
         for study_name, study_cfg in technique_studies.items():
             instruments = study_cfg.get("instruments", {})
             if instrument in instruments:
@@ -203,10 +215,10 @@ def get_instruments_for_study(study_name: str) -> list[str]:
         List of instrument names.
     """
     technique, name = parse_study_name(study_name)
-    if not technique or technique not in _STUDIES:
+    if not technique or technique not in _studies_dict():
         return []
 
-    study_cfg = _STUDIES[technique].get(name, {})
+    study_cfg = _studies_dict()[technique].get(name, {})
     return list(study_cfg.get("instruments", {}).keys())
 
 
@@ -223,7 +235,7 @@ def list_studies(technique_filter: str | None = None) -> list[str]:
         Sorted list of study names in ``"technique:study-name"`` format.
     """
     result: list[str] = []
-    for technique, technique_studies in _STUDIES.items():
+    for technique, technique_studies in _studies_dict().items():
         if technique_filter is not None and technique != technique_filter:
             continue
         for study_name in technique_studies:
@@ -237,7 +249,7 @@ def list_techniques_from_studies() -> list[str]:
     Returns:
         Sorted list of technique prefixes.
     """
-    return sorted(_STUDIES.keys())
+    return sorted(_studies_dict().keys())
 
 
 # ── Rendering ──────────────────────────────────────────────────────────
@@ -259,7 +271,7 @@ def render_study_table(
     from rich.console import Console
     from rich.table import Table
 
-    studies_dict = studies if studies is not None else _STUDIES
+    studies_dict = studies if studies is not None else _studies_dict()
     console = console if console is not None else Console()
 
     table = Table(title="Available Studies", border_style="cyan")
@@ -359,4 +371,4 @@ def load_studies_from_config(config_dir: Path | None = None) -> dict:
         if data and isinstance(data, dict) and "studies" in data:
             return data["studies"]
 
-    return dict(_STUDIES)
+    return dict(_studies_dict())

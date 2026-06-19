@@ -6,7 +6,8 @@ Each function returns a YAML string for one config file:
     - generate_config_grammar_yaml()  → config-grammar.yaml (filename naming grammar)
     - generate_config_template_yaml() → config-template.yaml (theme templates)
 
-All data is extracted from existing hardcoded defaults to keep backward compat.
+Data for studies/device_types/legacy_to_study now lives in config-devices.yaml.
+Generation functions read from existing config files when available.
 """
 
 from pathlib import Path
@@ -14,310 +15,6 @@ from pathlib import Path
 import yaml
 
 _DEFAULT_PROJECTS_ROOT = str(Path.home() / "workspace" / "projects" / "active_projects")
-
-
-# ── config-devices.yaml data ──────────────────────────────────────────
-
-
-_STUDIES: dict = {
-    "iv": {
-        "iv-bipolar-sweep": {
-            "label": "Bipolar IV Sweep 0\u2192+V\u2192-V\u21920",
-            "patterns": ["iv-sweep", "_IV", "iv-bipolar", "sweep_"],
-            "legacy_codes": ["iv", "iv-sweep", "iv_dc"],
-            "instruments": {
-                "keithley-2400": {
-                    "delimiter": "\t",
-                    "header_lines": 23,
-                    "columns": {"voltage": "Untitled", "current": "Untitled 1", "time": "Untitled 2"},
-                    "metadata": {
-                        "compliance": {
-                            "method": "parse",
-                            "parser": "compliance",
-                            "description": "Compliance current (A)",
-                        },
-                        "sweep_range": {
-                            "method": "parse",
-                            "parser": "sweep_range",
-                            "description": "Sweep voltage range start/stop (V)",
-                        },
-                    },
-                },
-                "keysight-b1500a": {
-                    "delimiter": ",",
-                    "header_lines": 245,
-                    "columns": {"voltage": "V1", "current": "I2"},
-                    "metadata": {
-                        "set_voltage": {
-                            "method": "parse",
-                            "parser": "set_voltage",
-                            "description": "Sweep max voltage from SetupTitle (V)",
-                        },
-                        "compliance": {
-                            "method": "parse",
-                            "parser": "compliance",
-                            "description": "Compliance current from Primary.Compliance (A)",
-                        },
-                        "sweep_range": {
-                            "method": "parse",
-                            "parser": "sweep_range",
-                            "description": "Sweep voltage range start/stop (V)",
-                        },
-                        "repeat_count": {
-                            "method": "parse",
-                            "parser": "repeat_count",
-                            "description": "Measurement repeat count",
-                        },
-                        "compliance_analysis": {
-                            "method": "analyze",
-                            "function": "analyze_iv_compliance",
-                            "inputs": ["voltage", "current"],
-                            "outputs": ["in_compliance", "compliance_current", "compliance_voltage"],
-                            "description": "Compliance detection from IV data",
-                        },
-                    },
-                },
-            },
-        },
-        "iv-breakdown": {
-            "label": "Breakdown \u2014 ramped voltage to breakdown",
-            "patterns": ["breakdown", "_bd", "_Vbd", "bd_"],
-            "legacy_codes": ["bd", "breakdown"],
-            "instruments": {},
-        },
-        "iv-leakage": {
-            "label": "Leakage \u2014 low-bias leakage current",
-            "patterns": ["leakage", "_leak", "leak_"],
-            "legacy_codes": ["leak", "leakage"],
-            "instruments": {},
-        },
-    },
-    "pulse": {
-        "pulse-stp-decay": {
-            "label": "STP Decay \u2014 set pulse + current decay read",
-            "patterns": ["stp", "_STP", "stp_decay", "short-term"],
-            "legacy_codes": ["stp", "pulse-stp", "short-term-plasticity"],
-            "instruments": {
-                "keysight-b1500a": {
-                    "delimiter": ",",
-                    "header_lines": 147,
-                    "columns": {"time": "Time", "voltage": "MeasResult1_value",
-                                "current": "MeasResult2_value"},
-                    "metadata": {
-                        "compliance": {
-                            "method": "parse",
-                            "parser": "compliance",
-                            "description": "Compliance current from Primary.Compliance (A)",
-                        },
-                        "repeat_count": {
-                            "method": "parse",
-                            "parser": "repeat_count",
-                            "description": "Measurement repeat count",
-                        },
-                        "waveform_params": {
-                            "method": "analyze",
-                            "function": "analyze_waveform_params",
-                            "inputs": ["waveform_time", "waveform_voltage"],
-                            "outputs": ["rise_us", "fall_us", "set_width_us", "read_width_us"],
-                            "description": "Extracted pulse parameters from waveform definition",
-                        },
-                    },
-                },
-            },
-        },
-        "pulse-ppf": {
-            "label": "Paired-Pulse Facilitation \u2014 double set with \u0394t",
-            "patterns": ["ppf", "_PPF", "paired-pulse"],
-            "legacy_codes": ["ppf", "pulse-ppf", "paired-pulse"],
-            "instruments": {
-                "keysight-b1500a": {
-                    "delimiter": ",",
-                    "header_lines": 147,
-                    "columns": {"time": "Time", "voltage": "MeasResult1_value",
-                                "current": "MeasResult2_value"},
-                },
-            },
-        },
-        "pulse-endurance": {
-            "label": "Pulse Endurance Cycling",
-            "patterns": ["endurance", "_endurance", "endurance_"],
-            "legacy_codes": ["endurance", "pulse-endurance"],
-            "instruments": {
-                "keysight-b1500a": {
-                    "delimiter": ",",
-                    "header_lines": 147,
-                    "columns": {"time": "Time", "voltage": "MeasResult1_value",
-                                "current": "MeasResult2_value"},
-                },
-            },
-        },
-        "pulse-retention": {
-            "label": "Pulse Retention Time",
-            "patterns": ["retention", "_retention", "retention_"],
-            "legacy_codes": ["retention", "pulse-retention"],
-            "instruments": {},
-        },
-    },
-    "raman": {
-        "raman-spectrum": {
-            "label": "Raman Spectroscopy",
-            "patterns": ["_raman", "_sers", "raman-sers", "_SERS"],
-            "legacy_codes": ["raman", "sers", "raman-sers"],
-            "instruments": {
-                "horiba-usth": {
-                    "delimiter": "\t",
-                    "decimal": ",",
-                    "header_lines": 45,
-                    "encoding": "latin1",
-                    "names": ["shift", "intensity"],
-                },
-            },
-        },
-    },
-    "uv-vis": {
-        "uv-vis-spectrum": {
-            "label": "UV-Vis Transmittance",
-            "patterns": ["_uv-vis", "_uvvis", "uv-vis", "uvvis"],
-            "legacy_codes": ["uv-vis", "uvvis", "uv_vis"],
-            "instruments": {
-                "spectrometer-iop": {
-                    "delimiter": ",",
-                    "header_lines": 1,
-                    "encoding": "latin1",
-                    "columns": {"wavelength": "Wavelength nm.", "transmittance": "T%"},
-                },
-            },
-        },
-    },
-    "ec": {
-        "ec-cv": {
-            "label": "Cyclic Voltammetry",
-            "patterns": ["_CV.", ".cv", "cv_", "cv-"],
-            "legacy_codes": [],
-            "instruments": {
-                "autolab-usth": {
-                    "delimiter": ";",
-                    "decimal": ".",
-                    "header_lines": 0,
-                    "encoding": "utf-8",
-                    "columns": {
-                        "current": "WE(1).Current (A)",
-                        "potential": "WE(1).Potential (V)",
-                        "scan": "Scan",
-                        "time": "Time (s)",
-                        "index": "Index",
-                        "corrected_time": "Corrected time (s)",
-                        "frequency": "Frequency (Hz)",
-                        "z_real": "Z' (\u03A9)",
-                        "z_imag": "-Z'' (\u03A9)",
-                        "magnitude": "Z (\u03A9)",
-                        "phase": "-Phase (\u00B0)",
-                    },
-                },
-            },
-        },
-        "ec-ca": {
-            "label": "Chronoamperometry",
-            "patterns": ["_CA.", ".ca", "ca_", "ca-"],
-            "legacy_codes": [],
-            "instruments": {
-                "autolab-usth": {
-                    "delimiter": ";",
-                    "decimal": ".",
-                    "header_lines": 0,
-                    "encoding": "utf-8",
-                    "columns": {
-                        "current": "WE(1).Current (A)",
-                        "potential": "WE(1).Potential (V)",
-                        "scan": "Scan",
-                        "time": "Time (s)",
-                        "index": "Index",
-                        "corrected_time": "Corrected time (s)",
-                        "frequency": "Frequency (Hz)",
-                        "z_real": "Z' (\u03A9)",
-                        "z_imag": "-Z'' (\u03A9)",
-                        "magnitude": "Z (\u03A9)",
-                        "phase": "-Phase (\u00B0)",
-                    },
-                },
-            },
-        },
-        "ec-eis": {
-            "label": "Electrochemical Impedance Spectroscopy",
-            "patterns": [".mpt", "_EIS.", ".eis", "_impedance", ".z"],
-            "legacy_codes": [],
-            "instruments": {
-                "autolab-usth": {
-                    "delimiter": ";",
-                    "decimal": ".",
-                    "header_lines": 0,
-                    "encoding": "utf-8",
-                    "columns": {
-                        "current": "WE(1).Current (A)",
-                        "potential": "WE(1).Potential (V)",
-                        "scan": "Scan",
-                        "time": "Time (s)",
-                        "index": "Index",
-                        "corrected_time": "Corrected time (s)",
-                        "frequency": "Frequency (Hz)",
-                        "z_real": "Z' (\u03A9)",
-                        "z_imag": "-Z'' (\u03A9)",
-                        "magnitude": "Z (\u03A9)",
-                        "phase": "-Phase (\u00B0)",
-                    },
-                },
-            },
-        },
-    },
-    "afm": {
-        "afm-topography": {
-            "label": "AFM/SPM Surface Topography",
-            "patterns": [".gwy", ".spm", ".ibw", ".jpk", ".stp", ".top"],
-            "legacy_codes": [],
-            "instruments": {},
-        },
-    },
-}
-
-_DEVICE_TYPES: dict = {
-    "volatile-memristor": {
-        "label": "Volatile Memristor",
-        "description": "One-directional switching with volatile decay",
-        "studies": ["iv:iv-bipolar-sweep", "pulse:pulse-endurance",
-                    "pulse:pulse-stp-decay", "pulse:pulse-ppf"],
-        "analysis_mode": "volatile",
-        "library": "iv",
-    },
-    "non-volatile-memristor": {
-        "label": "Non-Volatile Memristor",
-        "description": "Bidirectional switching with retention",
-        "studies": ["iv:iv-bipolar-sweep", "pulse:pulse-endurance",
-                    "pulse:pulse-retention"],
-        "analysis_mode": "bipolar",
-        "library": "iv",
-    },
-}
-
-_LEGACY_TO_STUDY: dict[str, str] = {
-    "iv-sweep": "iv:iv-bipolar-sweep",
-    "iv-breakdown": "iv:iv-breakdown",
-    "iv-leakage": "iv:iv-leakage",
-    "pulse-stp": "pulse:pulse-stp-decay",
-    "pulse-ppf": "pulse:pulse-ppf",
-    "pulse-endurance": "pulse:pulse-endurance",
-    "pulse-retention": "pulse:pulse-retention",
-    "raman": "raman:raman-spectrum",
-    "uv-vis": "uv-vis:uv-vis-spectrum",
-    "ec-cv": "ec:ec-cv",
-    "ec-ca": "ec:ec-ca",
-    "ec-eis": "ec:ec-eis",
-    "afm-gwy": "afm:afm-topography",
-    "afm-spm": "afm:afm-topography",
-    "afm-ibw": "afm:afm-topography",
-    "afm-jpk": "afm:afm-topography",
-    "afm-stp": "afm:afm-topography",
-    "afm-top": "afm:afm-topography",
-}
 
 
 # ── config-instruments.yaml data ─────────────────────────────────────
@@ -392,6 +89,15 @@ _GRAMMAR_PATTERNS: list[dict] = [
         "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<study>[^_]+)"
                  r"(?:_(?P<suffix>\d+))?\.\w+$",
         "fields": ["date_code", "material", "study", "suffix"],
+    },
+    {
+        "id": "rN-cN-stp-decay",
+        "template": "{date_code}_{material}_r{row}-c{col}_stp-decay_{suffix}{tag?}.{ext}",
+        "description": "STP decay: 150626_cu-c-pda(q5)-ito_r5-c2_stp-decay_041_important.csv",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)"
+                 r"_(?P<matrix>r\d+-c\d+)_(?P<study>stp-decay)"
+                 r"_(?P<suffix>\d+)(?:_(?P<tag>[^_]+))?\.(?P<ext>\w+)$",
+        "fields": ["date_code", "material", "matrix", "study", "suffix", "tag", "ext"],
     },
 ]
 
@@ -507,12 +213,39 @@ def _yaml_dump(data: dict, sort_keys: bool = False) -> str:
                      allow_unicode=True, width=120)
 
 
+def _load_yaml(path: Path) -> dict:
+    """Load a YAML file, returning {} if it doesn't exist or is unreadable."""
+    if not path.exists():
+        return {}
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
+    except (yaml.YAMLError, OSError):
+        return {}
+
+
+def _config_dir() -> Path:
+    """Return the global config directory."""
+    return Path.home() / ".config" / "science-cli" / "config"
+
+
 def generate_config_devices_yaml() -> str:
-    """Generate config-devices.yaml — studies + device types + legacy mapping."""
+    """Generate config-devices.yaml — studies + device types + legacy mapping.
+
+    Reads from existing config-devices.yaml if available, otherwise generates
+    a template with empty sections.
+    """
+    path = _config_dir() / "config-devices.yaml"
+    existing = _load_yaml(path)
+    if existing:
+        return _yaml_dump(existing)
+    # Fallback: generate template with empty sections
     return _yaml_dump({
-        "studies": _STUDIES,
-        "device_types": _DEVICE_TYPES,
-        "legacy_to_study": _LEGACY_TO_STUDY,
+        "studies": {},
+        "device_types": {},
+        "legacy_to_study": {},
+        "techniques": {},
     })
 
 
@@ -520,6 +253,7 @@ def generate_config_instruments_yaml() -> str:
     """Generate config-instruments.yaml — instrument model registry."""
     return _yaml_dump({
         "instruments": _INSTRUMENTS,
+        "devices": {},
     })
 
 

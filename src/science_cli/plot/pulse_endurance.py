@@ -1,116 +1,224 @@
-"""Pulse endurance plotting — cycles vs resistance."""
+"""Pulse endurance plotting — cycles vs resistance, with device-type variants.
+
+Device-type dispatch:
+    volatile-memristor:  R_decay vs cycle (single panel, log x)
+    non-volatile-memristor: R_high / R_low vs cycle (2 panels, log x)
+"""
 from pathlib import Path
 
 
-def _plot_endurance(filepath: str, flags: dict) -> None:
-    """Plot endurance cycling data: cycles vs resistance.
+# ── Helpers ──────────────────────────────────────────────────────────
 
-    Generic base implementation — used directly for unknown/unspecified
-    device types, and called internally by device-type-specific variants.
-    """
+def _load_endurance_data(filepath: str, technique: str = "pulse-endurance"):
+    from science_cli.core.data_loader import load_data_file
+    return load_data_file(filepath, technique=technique)
+
+
+def _resolve_columns(df, info):
+    """Return (cycle, resistance, xlabel, ylabel) or (None,)*4 on failure."""
+    import numpy as np
+
+    def _find(col_names):
+        for c in col_names:
+            if c in df.columns:
+                return c
+        return None
+
+    xcol = _find(["Time", "time", "Cycle", "cycle", "index"]) or (df.columns[0] if len(df.columns) > 0 else None)
+    ycol = _find(["MeasResult2_value", "current", "Current", "I"]) or (df.columns[1] if len(df.columns) > 1 else None)
+    if xcol is None or ycol is None:
+        return None, None, None, None
+
+    x, y = df[xcol].values, df[ycol].values
+    try:
+        cycle = np.arange(1, len(x) + 1, dtype=float) if len(x) > 1 and x.dtype.kind == "f" else x.astype(float)
+    except (ValueError, TypeError):
+        cycle = np.arange(1, len(x) + 1, dtype=float)
+
+    vcol = _find(["MeasResult1_value", "voltage", "Voltage", "V"])
+    if vcol is not None:
+        try:
+            v, i_arr = df[vcol].values.astype(float), y.astype(float)
+            mask = np.abs(i_arr) > 1e-15
+            r = np.full_like(i_arr, np.nan)
+            r[mask] = np.abs(v[mask] / i_arr[mask])
+        except (ValueError, TypeError):
+            r = y.astype(float)
+    else:
+        r = y.astype(float)
+
+    return cycle, r, "Cycle", "Resistance (Ω)"
+
+
+def _save_fig(fig, filepath: str, flags: dict, suffix: str = "") -> None:
+    import matplotlib as plt_mod
+    from science_cli.cli.commands.plot import _get_results_dir
+    out_dir = _get_results_dir(filepath)
+    stem = Path(filepath).stem
+    out_name = flags.get("n") or flags.get("name", f"endurance{suffix}_{stem}.pdf")
+    if not Path(out_name).suffix:
+        out_name += ".pdf"
+    save_path = out_dir / out_name
+    dpi = int(flags.get("dpi", plt_mod.rcParams.get("savefig.dpi", 600)))
+    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+    plt_mod.pyplot.close(fig)
+    from rich.console import Console
+    Console().print(f"[bold green]✓[/bold green] Endurance saved: {save_path}")
+
+
+def _load_and_resolve(filepath, console_msg: str):
+    """Load data and resolve columns. Returns (df, info, cycle, r, xlabel, ylabel) or None."""
+    from rich.console import Console
+    try:
+        df, info = _load_endurance_data(filepath)
+    except Exception as e:
+        Console().print(f"[red]Failed to load endurance data: {e}[/red]")
+        return None
+    cycle, r, xlabel, ylabel = _resolve_columns(df, info)
+    if cycle is None:
+        Console().print(f"[red]{console_msg}[/red]")
+        return None
+    return df, info, cycle, r, xlabel, ylabel
+
+
+def _apply_common_style(ax, flags: dict, cycle, r, xlabel, ylabel, label: str = ""):
+    """Apply endurance defaults: big markers, log x."""
+    marker = flags.get("marker", "o")
+    markersize = float(flags.get("markersize", 10))
+    lw = float(flags.get("linewidth", 1.0))
+    kw = dict(marker=marker, markersize=markersize, linewidth=lw, alpha=0.85)
+    if label:
+        kw["label"] = label
+    ax.plot(cycle, r, **kw)
+    ax.set_xscale("log")
+    ax.set_xlabel(flags.get("xlabel", xlabel))
+    ax.set_ylabel(flags.get("ylabel", ylabel))
+
+
+# ── Base plotter (generic / unknown device type) ────────────────────
+
+def _plot_endurance(filepath: str, flags: dict) -> None:
+    """Plot endurance cycling data: cycles vs resistance."""
     import matplotlib as mpl
     mpl.use("Agg")
     import matplotlib.pyplot as plt
-    from rich.console import Console
-
-    from science_cli.cli.commands.plot import _get_results_dir, _resolve_xy_columns
-    from science_cli.core.data_loader import load_data_file
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import apply_figure_kw, parse_figsize
     from science_cli.theme import apply_theme
-
-    console = Console()
     apply_theme(get_active_theme())
-    try:
-        df, info = load_data_file(filepath, technique="pulse-endurance")
-    except Exception as e:
-        console.print(f"[red]Failed to load endurance data: {e}[/red]")
+
+    data = _load_and_resolve(filepath, "Could not determine x/y columns for endurance.")
+    if data is None:
         return
+    _, _, cycle, r, xlabel, ylabel = data
 
     figsize = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
     fig, ax = plt.subplots(figsize=figsize)
-    x, y, xlabel, ylabel = _resolve_xy_columns(df, info, "mem-endurance")
-    if len(x) == 0 or len(y) == 0:
-        console.print("[red]Could not determine x/y columns.[/red]")
-        return
-    if not flags.get("xlabel") and xlabel:
-        flags["xlabel"] = xlabel
-    if not flags.get("ylabel") and ylabel:
-        flags["ylabel"] = ylabel
-
-    plot_type = flags.get("type", "line")
-    if plot_type == "scatter":
-        ax.scatter(x, y, s=float(flags.get("markersize", 4))**2, alpha=0.8)
-    else:
-        ax.plot(x, y, linewidth=float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 1.0))))
-
+    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel)
     apply_figure_kw(ax, flags, Path(filepath).stem)
-    out_dir = _get_results_dir(filepath)
-    stem = Path(filepath).stem
-    out_name = flags.get("n") or flags.get("name", f"endurance_{stem}.pdf")
-    if not Path(out_name).suffix:
-        out_name = str(Path(out_name)) + ".pdf"
-    save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
-    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
-    console.print(f"[bold green]✓[/bold green] Endurance saved: {save_path}")
+    _save_fig(fig, filepath, flags)
 
 
-# ── Device-type-specific endurance variants ──────────────────────────
-#
-# These are STUBS for now — they delegate to ``_plot_endurance()``.
-# Future implementations will add device-type-specific analysis:
-#
-#   volatile-memristor:
-#       ON/OFF ratio detection, STP-like decay behavior between
-#       read pulses, lower threshold for read-disturb effects.
-#
-#   non-volatile-memristor:
-#       R_high/R_low separation tracking, retention stability
-#       between program/erase, window margin (R_high_min − R_low_max).
-
+# ── Volatile memristor: R_decay vs cycle ────────────────────────────
 
 def _plot_endurance_volatile(filepath: str, flags: dict) -> None:
-    """Plot endurance for volatile memristors.
+    """Volatile endurance — R_decay vs cycle (log x, log y, big markers)."""
+    import matplotlib as mpl
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    from science_cli.core.session import get_active_theme
+    from science_cli.plot.base import apply_figure_kw, parse_figsize
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
 
-    Currently delegates to the generic ``_plot_endurance()``.
-    Future: add ON/OFF ratio, STP decay tracking, read-disturb analysis.
-    """
-    _plot_endurance(filepath, flags)
+    data = _load_and_resolve(filepath, "Could not determine columns for volatile endurance.")
+    if data is None:
+        return
+    _, _, cycle, r, xlabel, ylabel = data
 
+    figsize = parse_figsize(flags) or (4.0, 3.0)
+    fig, ax = plt.subplots(figsize=figsize)
+    color = flags.get("color", "#2176AE")
+    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel, label="R_decay")
+    ax.lines[0].set_color(color)
+    ax.set_yscale("log")
+    ax.set_title("Volatile Memristor — Endurance")
+    ax.legend()
+    ax.grid(True, alpha=0.2)
+    apply_figure_kw(ax, flags, Path(filepath).stem)
+    _save_fig(fig, filepath, flags, suffix="_volatile")
+
+
+# ── Non-volatile memristor: R_high / R_low vs cycle ────────────────
 
 def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
-    """Plot endurance for non-volatile memristors.
+    """NV endurance — 2 panels: R_high + R_low (log x, big markers)."""
+    import matplotlib as mpl
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from science_cli.core.session import get_active_theme
+    from science_cli.plot.base import parse_figsize
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
 
-    Currently delegates to the generic ``_plot_endurance()``.
-    Future: add HRS/LRS separation, window margin, retention tracking.
-    """
-    _plot_endurance(filepath, flags)
+    data = _load_and_resolve(filepath, "Could not determine columns for NV endurance.")
+    if data is None:
+        return
+    _, _, cycle, r, xlabel, ylabel = data
+
+    figsize = parse_figsize(flags) or (7.0, 3.0)
+    fig, (ax_hi, ax_lo) = plt.subplots(1, 2, figsize=figsize)
+    marker = flags.get("marker", "o")
+    markersize = float(flags.get("markersize", 10))
+    lw = float(flags.get("linewidth", 1.2))
+
+    # Split data: first half → R_high, second half → R_low
+    # (actual separation comes from analyzer in Seq 4)
+    r_clean = r[~np.isnan(r)] if np.issubdtype(r.dtype, np.floating) else r
+    if len(r_clean) == 0:
+        from rich.console import Console
+        Console().print("[red]All resistance values are NaN.[/red]")
+        return
+    mid = max(len(r_clean) // 2, 1)
+    r_hi, r_lo = r_clean[:mid], r_clean[mid:]
+    cyc_hi = np.arange(1, len(r_hi) + 1, dtype=float)
+    cyc_lo = np.arange(1, len(r_lo) + 1, dtype=float)
+
+    color_hi = flags.get("color-hi", "#D64045")
+    color_lo = flags.get("color-lo", "#1B998B")
+    xlbl = flags.get("xlabel", xlabel)
+
+    for ax, cy, rv, cl, title, ylbl in [
+        (ax_hi, cyc_hi, r_hi, color_hi, "High Resistance State", "R_high (Ω)"),
+        (ax_lo, cyc_lo, r_lo, color_lo, "Low Resistance State", "R_low (Ω)"),
+    ]:
+        ax.plot(cy, rv, marker=marker, markersize=markersize, color=cl,
+                linewidth=lw, alpha=0.85, label=title.split()[0] + " " + title.split()[-1])
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(xlbl)
+        ax.set_ylabel(ylbl)
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True, alpha=0.2)
+
+    fig.suptitle("Non-Volatile Memristor — Endurance", fontsize=11)
+    fig.tight_layout()
+    _save_fig(fig, filepath, flags, suffix="_nv")
 
 
-def _overlay_endurance(filepath: str, flags: dict) -> None:
-    """Overlay endurance curves from multiple files."""
-    _overlay_generic([filepath], flags, technique="mem-endurance")
+# Alias for backward compat
+_plot_endurance_nv = _plot_endurance_nonvolatile
 
 
-def _overlay_generic(files: list, flags: dict, technique: str = "") -> None:
-    """Generic overlay for endurance variant stubs."""
+# ── Overlay functions ───────────────────────────────────────────────
+
+def _overlay_generic_endurance(files: list, flags: dict) -> None:
     from science_cli.cli.commands.plot import _generic_overlay
-    _generic_overlay(files, flags, technique)
+    _generic_overlay(files, flags, technique="mem-endurance")
 
 
-def _overlay_endurance_volatile(files: list, flags: dict) -> None:
-    """Overlay endurance curves for volatile memristor context.
-
-    Currently delegates to the generic overlay.
-    """
-    _overlay_generic(files, flags, technique="mem-endurance")
-
-
-def _overlay_endurance_nonvolatile(files: list, flags: dict) -> None:
-    """Overlay endurance curves for non-volatile memristor context.
-
-    Currently delegates to the generic overlay.
-    """
-    _overlay_generic(files, flags, technique="mem-endurance")
+_overlay_endurance = _overlay_generic_endurance
+_overlay_endurance_volatile = _overlay_generic_endurance
+_overlay_endurance_nonvolatile = _overlay_generic_endurance

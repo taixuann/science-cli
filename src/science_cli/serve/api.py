@@ -1,6 +1,8 @@
 """Data providers for the sci serve REST API.
 
-All functions are **read-only** — no files are written to the project.
+Most functions are **read-only** — no files are written to the project.
+The exceptions are `get_status` / `set_status` which manage
+`project/results/.status.json` (per-file status tags).
 Caches (analysis_data.json, SQLite) are read if available; otherwise
 lightweight filesystem scans are used."""
 
@@ -1351,3 +1353,49 @@ def get_gallery_data(
             "materials": sorted(materials_set),
         },
     }
+
+
+# ── Status tag API ──────────────────────────────────────────
+
+
+def get_status(project_path: Path) -> dict[str, str]:
+    """Return the status dict (file_key → tag) for a project."""
+    from science_cli.cli.commands.results_status import load_status
+    return load_status(project_path)
+
+
+def set_status(project_path: Path, file_key: str, tag: str) -> dict:
+    """Set or clear the status tag for a single file_key.
+
+    Parameters
+    ----------
+    project_path : Path
+        Project root.
+    file_key : str
+        Key in the form ``protocol/step_dir/filename``.
+    tag : str
+        One of ``keep``, ``highlight``, ``discard``, ``star``, or ``clear``
+        to remove the status.
+
+    Returns
+    -------
+    dict
+        ``{"ok": True, "file_key": ..., "tag": ...}`` on success,
+        or ``{"error": ...}`` on failure.
+    """
+    from science_cli.cli.commands.results_status import (
+        STATUS_TAGS,
+        load_status,
+        save_status,
+    )
+
+    if tag not in (*STATUS_TAGS, "clear"):
+        return {"error": f"Invalid tag '{tag}'. Allowed: {', '.join(STATUS_TAGS)}, clear"}
+
+    status = load_status(project_path)
+    if tag == "clear":
+        status.pop(file_key, None)
+    else:
+        status[file_key] = tag
+    save_status(project_path, status)
+    return {"ok": True, "file_key": file_key, "tag": tag}

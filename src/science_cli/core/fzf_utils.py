@@ -155,8 +155,10 @@ def _run_fzf(
 
     selected = [line.strip() for line in result.split("\n") if line.strip()]
 
-    item_set = set(items)
-    filtered = [s for s in selected if s in item_set]
+    # Strip both sides: fzf strips trailing whitespace from returned lines,
+    # but items may have padding trailing spaces (e.g. build_fzf_display).
+    stripped_items = {item.strip() for item in items}
+    filtered = [s for s in selected if s in stripped_items]
 
     return filtered if filtered else selected[:1] if selected else []
 

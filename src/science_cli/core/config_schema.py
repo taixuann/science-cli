@@ -26,7 +26,7 @@ _TEMPLATE_REQUIRED_TOP_FIELDS = {"font", "fontsize", "dpi", "figure_format"}
 
 _ALLOWED_DEVICES_TOP_KEYS = {"studies", "device_types", "legacy_to_study"}
 
-_ALLOWED_INSTRUMENTS_TOP_KEYS = {"instruments"}
+_ALLOWED_INSTRUMENTS_TOP_KEYS = {"instruments", "techniques", "devices"}
 
 _ALLOWED_GRAMMAR_TOP_KEYS = {"file_naming"}
 

@@ -180,9 +180,10 @@ def _config_patterns() -> dict[str, list[str]]:
         # Study patterns are substring-based; convert to escaped regex patterns
         # so they work with the existing re.search() detection.
         try:
-            from science_cli.core.config_defaults import _LEGACY_TO_STUDY
+            from science_cli.core.config import load_global_config
+            legacy_to_study = load_global_config().get("legacy_to_study", {})
             study_to_tech: dict[str, list[str]] = {}
-            for tk, sn in _LEGACY_TO_STUDY.items():
+            for tk, sn in legacy_to_study.items():
                 study_to_tech.setdefault(sn, []).append(tk)
             for study_name in list_studies():
                 tech_keys = study_to_tech.get(study_name, [])

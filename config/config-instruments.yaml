@@ -1,1 +1,110 @@
-instruments: {}
+instruments:
+  keysight-b1500a:
+    label: Keysight B1500A Semiconductor Parameter Analyzer
+    location: gtiit-china
+    type: semiconductor-device-analyzer
+    techniques:
+    - iv-sweep
+    - iv-breakdown
+    - iv-leakage
+    - pulse-endurance
+    - pulse-stp
+    - pulse-ppf
+    config:
+      delimiter: ','
+      decimal: .
+      header_lines: 246
+      encoding: utf-8
+  keithley-2400:
+    label: Keithley 2400 SourceMeter
+    location: usth-hanoi
+    type: sourcemeter
+    techniques:
+    - iv-sweep
+    - iv-breakdown
+    - iv-leakage
+    - pulse-endurance
+    config:
+      delimiter: "\t"
+      decimal: .
+      header_lines: 23
+      encoding: utf-8
+  autolab-usth:
+    label: Autolab USTH (CV deposition)
+    location: usth-hanoi
+    type: potentiostat
+    techniques:
+    - ec-cv
+    - ec-ca
+    - ec-eis
+    config: {}
+  horiba-usth:
+    label: Horiba LabRAM HR Evolution (USTH)
+    location: usth-hanoi
+    type: raman-spectrometer
+    techniques:
+    - raman
+    config:
+      delimiter: "\t"
+      decimal: ','
+      header_lines: 45
+      encoding: latin1
+  spectrometer-iop:
+    label: "UV-Vis Spectrometer (IOP Hanoi) \u2014 vs-770st"
+    location: iop-hanoi
+    type: uv-vis-spectrometer
+    techniques:
+    - uv-vis
+    config:
+      delimiter: ','
+      decimal: .
+      header_lines: 1
+      encoding: latin1
+devices:
+  autolab-usth:
+    label: Autolab USTH (CV deposition)
+    delimiter: ;
+    decimal: .
+    header_lines: 0
+    encoding: utf-8
+    columns:
+      current: WE(1).Current (A)
+      potential: WE(1).Potential (V)
+      scan: Scan
+      time: Time (s)
+      index: Index
+      corrected_time: Corrected time (s)
+      frequency: Frequency (Hz)
+      z_real: "Z' (\u03A9)"
+      z_imag: "-Z'' (\u03A9)"
+      magnitude: "Z (\u03A9)"
+      phase: "-Phase (\xB0)"
+  keithley-clarius:
+    label: Keithley Clarius (IV sweep)
+    delimiter: ','
+    decimal: .
+    header_lines: 1
+    encoding: utf-8-sig
+    columns:
+      voltage: BV
+      current: BI
+      time: Time
+  keithley-2400:
+    label: Keithley 2400 SourceMeter
+    delimiter: "\t"
+    decimal: .
+    header_lines: 21
+    encoding: utf-8
+    columns:
+      voltage: Untitled
+      current: Untitled 1
+      time: Untitled 2
+  horiba-usth:
+    label: Horiba LabRAM HR Evolution (USTH)
+    delimiter: "\t"
+    decimal: ','
+    header_lines: 45
+    encoding: latin1
+    names:
+    - shift
+    - intensity

@@ -50,7 +50,7 @@ def bipolar_summary(analysis: dict) -> str:
     """Human-readable bipolar analysis summary."""
     lines = [
         f"Bipolar Junction Analysis: {analysis.get('n_events', 0)} switching events",
-        f"  Mode: bipolar (V_set + V_reset)",
+        "  Mode: bipolar (V_set + V_reset)",
     ]
     if "v_set_mean" in analysis:
         lines.append(f"  V_set: {analysis['v_set_mean']:.3f} \u00b1 {analysis['v_set_std']:.3f} V")
@@ -71,9 +71,19 @@ def analyze_bipolar_to_yaml(
     hysteresis_areas=None,
     instrument: str = "",
     devices: str = "",
+    metadata: dict | None = None,
+    project_root: Path | None = None,
+    step_name: str | None = None,
 ) -> Path:
-    """Analyze bipolar IV data and write YAML analysis file."""
-    from science_cli.core.analysis_output import write_analysis_yaml
+    """Analyze bipolar IV data and write YAML analysis file.
+
+    If *project_root* and *step_name* are provided, also writes the
+    extracted metadata back to ``protocol.yaml`` under that step.
+    """
+    from science_cli.core.analysis_output import (
+        merge_analysis_to_metadata,
+        write_analysis_yaml,
+    )
 
     stats = analyze_bipolar(
         v_set_values=v_set_values,
@@ -96,6 +106,17 @@ def analyze_bipolar_to_yaml(
             "n_events": stats.get("n_events"),
         },
     }
+
+    # Write metadata back to protocol.yaml if project context provided
+    if project_root and step_name:
+        from science_cli.core.protocol import update_step_metadata
+
+        proto_meta = merge_analysis_to_metadata(
+            metadata, output["analysis"], key_prefix=""
+        )
+        if proto_meta:
+            update_step_metadata(project_root, step_name, proto_meta)
+
     return write_analysis_yaml(
         technique="iv-sweep",
         step_dir=step_dir,
