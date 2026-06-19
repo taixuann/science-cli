@@ -298,9 +298,6 @@ def load_global_config() -> dict:
     instr_cfg = _load_yaml(instruments_path)
     if instr_cfg:
         merged["instruments"] = instr_cfg.get("instruments", {})
-        # Also merge flat device configs (backward compat with get_global_device_config)
-        if "devices" in instr_cfg:
-            merged["devices"] = instr_cfg["devices"]
 
     # Layer 4: config-grammar.yaml
     grammar_path = base_dir / "config-grammar.yaml"
@@ -521,7 +518,7 @@ def get_device_config(
     instruments_section = global_cfg.get("instruments", {})
     instr_cfg = instruments_section.get(device_name)
     if instr_cfg and isinstance(instr_cfg, dict):
-        instr_device_cfg = instr_cfg.get("config", {})
+        instr_device_cfg = instr_cfg.get("parsing", {})
         if instr_device_cfg:
             for k, v in instr_device_cfg.items():
                 device_cfg.setdefault(k, v)
@@ -715,7 +712,7 @@ def get_global_device_config(device_name: str) -> dict | None:
     instruments_section = global_cfg.get("instruments", {})
     instr_cfg = instruments_section.get(device_name)
     if instr_cfg and isinstance(instr_cfg, dict):
-        instr_device_cfg = instr_cfg.get("config", {})
+        instr_device_cfg = instr_cfg.get("parsing", {})
         if instr_device_cfg:
             cfg.update(instr_device_cfg)
 
@@ -1279,15 +1276,77 @@ def detect_study_from_filename(filename: str) -> str | None:
     return _studies.detect_study_from_filename(filename, cfg.get("studies", {}))
 
 
+def _merge_instrument_parsing(
+    study_name: str, study_instruments: dict
+) -> dict:
+    """Enrich each study instrument with canonical parsing from instruments registry.
+
+    For each instrument in the study's instruments dict:
+      - delimiter, decimal, encoding, columns/names come from
+        ``instruments.<inst>.parsing`` (the canonical source)
+      - header_lines comes from the study-level override if present,
+        otherwise falls back to ``parsing.header_lines_default``
+      - metadata comes from the study level (unchanged)
+
+    Args:
+        study_name: For logging/debug context (unused currently).
+        study_instruments: The ``instruments`` dict from a study config.
+
+    Returns:
+        New dict with the same keys, each enriched with parsing fields.
+    """
+    cfg = load_global_config()
+    instruments_registry = cfg.get("instruments", {})
+    enriched: dict = {}
+
+    for inst_name, inst_cfg in study_instruments.items():
+        merged = dict(inst_cfg)  # start with study-level (metadata, header_lines)
+
+        instr_model = instruments_registry.get(inst_name, {})
+        parsing = instr_model.get("parsing", {})
+
+        if parsing:
+            # Apply canonical parsing fields (instrument-level is source of truth)
+            for key in ("delimiter", "decimal", "encoding", "columns", "names"):
+                if key in parsing:
+                    merged[key] = parsing[key]
+
+            # header_lines: study override wins, else fall back to default
+            if "header_lines" not in merged:
+                default_hl = parsing.get("header_lines_default")
+                if default_hl is not None:
+                    merged["header_lines"] = default_hl
+
+        enriched[inst_name] = merged
+
+    return enriched
+
+
 def get_study_config(study_name: str) -> dict | None:
     """Return config for a named study, merging technique defaults.
+
+    Instruments are enriched with canonical parsing data from the
+    instruments registry (delimiter, decimal, encoding, columns/names)
+    via ``_merge_instrument_parsing``.  Study-level ``header_lines``
+    overrides the instrument default when present.
 
     Args:
         study_name: Study name in ``"technique:study-name"`` format.
     """
     from science_cli.core import studies as _studies
     cfg = load_global_config()
-    return _studies.get_study_config(study_name, cfg.get("studies", {}))
+    study_cfg = _studies.get_study_config(study_name, cfg.get("studies", {}))
+    if study_cfg is None:
+        return None
+
+    # Enrich instruments with canonical parsing data
+    instruments = study_cfg.get("instruments", {})
+    if instruments:
+        study_cfg["instruments"] = _merge_instrument_parsing(
+            study_name, instruments
+        )
+
+    return study_cfg
 
 
 def get_studies_for_device_type(device_type: str) -> list[str]:

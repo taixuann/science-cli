@@ -16,7 +16,7 @@ _REQUIRED_DEVICE_TYPE_FIELDS = {"label", "description", "studies",
 _VALID_ANALYSIS_MODES = {"volatile", "bipolar", "linear", "general"}
 
 _REQUIRED_INSTRUMENT_FIELDS = {"label", "location", "type",
-                               "techniques", "config"}
+                               "techniques", "parsing"}
 
 _REQUIRED_GRAMMAR_PATTERN_FIELDS = {"id", "template", "description",
                                     "regex", "fields"}
@@ -24,7 +24,7 @@ _REQUIRED_GRAMMAR_PATTERN_FIELDS = {"id", "template", "description",
 _TEMPLATE_KEYS = {"templates"}
 _TEMPLATE_REQUIRED_TOP_FIELDS = {"font", "fontsize", "dpi", "figure_format"}
 
-_ALLOWED_DEVICES_TOP_KEYS = {"studies", "device_types", "legacy_to_study"}
+_ALLOWED_DEVICES_TOP_KEYS = {"studies", "device_types", "legacy_to_study", "techniques"}
 
 _ALLOWED_INSTRUMENTS_TOP_KEYS = {"instruments", "techniques", "devices"}
 
@@ -137,9 +137,9 @@ def validate_instruments_config(data: dict) -> list[str]:
         techniques = ins_cfg.get("techniques")
         if techniques is not None:
             errors.extend(_check_type(techniques, list, f"{ins_path}.techniques"))
-        config = ins_cfg.get("config")
-        if config is not None:
-            errors.extend(_check_type(config, dict, f"{ins_path}.config"))
+        parsing = ins_cfg.get("parsing")
+        if parsing is not None:
+            errors.extend(_check_type(parsing, dict, f"{ins_path}.parsing"))
 
     return errors
 

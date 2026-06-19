@@ -27,35 +27,52 @@ _INSTRUMENTS: dict[str, dict] = {
         "type": "semiconductor-device-analyzer",
         "techniques": ["iv-sweep", "iv-breakdown", "iv-leakage",
                        "pulse-endurance", "pulse-stp", "pulse-ppf"],
-        "config": {"delimiter": ",", "decimal": ".", "header_lines": 246, "encoding": "utf-8"},
+        "parsing": {
+            "delimiter": ",", "decimal": ".", "header_lines_default": 246,
+            "encoding": "utf-8",
+            "columns": {"voltage": "V1", "current": "I2"},
+        },
     },
     "keithley-2400": {
         "label": "Keithley 2400 SourceMeter",
         "location": "usth-hanoi",
         "type": "sourcemeter",
         "techniques": ["iv-sweep", "iv-breakdown", "iv-leakage", "pulse-endurance"],
-        "config": {"delimiter": "\t", "decimal": ".", "header_lines": 23, "encoding": "utf-8"},
+        "parsing": {
+            "delimiter": "\t", "decimal": ".", "header_lines_default": 23,
+            "encoding": "utf-8",
+            "columns": {"voltage": "Untitled", "current": "Untitled 1",
+                        "time": "Untitled 2"},
+        },
     },
     "autolab-usth": {
         "label": "Autolab USTH (CV deposition)",
         "location": "usth-hanoi",
         "type": "potentiostat",
         "techniques": ["ec-cv", "ec-ca", "ec-eis"],
-        "config": {},
+        "parsing": {},
     },
     "horiba-usth": {
         "label": "Horiba LabRAM HR Evolution (USTH)",
         "location": "usth-hanoi",
         "type": "raman-spectrometer",
         "techniques": ["raman"],
-        "config": {"delimiter": "\t", "decimal": ",", "header_lines": 45, "encoding": "latin1"},
+        "parsing": {
+            "delimiter": "\t", "decimal": ",", "header_lines_default": 45,
+            "encoding": "latin1",
+            "names": ["shift", "intensity"],
+        },
     },
     "spectrometer-iop": {
         "label": "UV-Vis Spectrometer (IOP Hanoi) — vs-770st",
         "location": "iop-hanoi",
         "type": "uv-vis-spectrometer",
         "techniques": ["uv-vis"],
-        "config": {"delimiter": ",", "decimal": ".", "header_lines": 1, "encoding": "latin1"},
+        "parsing": {
+            "delimiter": ",", "decimal": ".", "header_lines_default": 1,
+            "encoding": "latin1",
+            "columns": {"wavelength": "Wavelength nm.", "transmittance": "T%"},
+        },
     },
 }
 
@@ -253,7 +270,6 @@ def generate_config_instruments_yaml() -> str:
     """Generate config-instruments.yaml — instrument model registry."""
     return _yaml_dump({
         "instruments": _INSTRUMENTS,
-        "devices": {},
     })
 
 
