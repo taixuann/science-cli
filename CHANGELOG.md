@@ -5,6 +5,21 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.22.0] - 2026-06-20
+
+### Added
+- Universal filename grammar: `DDMMYY-HHMMSS_device-id_study_remarks_flags_count.csv`
+- `core/grammar.py` with `parse_filename()` — right-to-left disambiguation parsing
+- `Protocol.device` (top-level) + `ProtocolStep.instrument` (per-step) in protocol.yaml
+- `sci add` auto-populates study, remarks, flags, count from parsed filename
+- 7 global FZF columns: Step | DateTime | Device-ID | Study | Remarks | Flags | Count
+  - Always shown before per-study metadata columns
+  - Legacy files fall back to filename display
+
+### Changed
+- protocol.yaml: device moved to protocol level, instrument per step
+- FZF display: structured columns replace raw filename (when convention is followed)
+
 ## [3.21.0] - 2026-06-20
 
 ### Added
