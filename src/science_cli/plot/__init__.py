@@ -19,19 +19,6 @@ from science_cli.plot.base import (  # noqa: F401
     setup_backend,
 )
 
-# ── EC CA ────────────────────────────────────────────────────────────────────
-from science_cli.plot.ca import (  # noqa: F401
-    plot_ca_cottrell,
-    plot_ca_decay,
-)
-
-# ── EC CV ────────────────────────────────────────────────────────────────────
-from science_cli.plot.cv import (  # noqa: F401
-    plot_cv_curve,
-    plot_cv_overlay,
-    plot_cv_with_peaks,
-)
-
 # ── EC EIS ───────────────────────────────────────────────────────────────────
 from science_cli.plot.eis import (  # noqa: F401
     plot_eis_bode,
@@ -39,8 +26,4 @@ from science_cli.plot.eis import (  # noqa: F401
     plot_eis_nyquist,
 )
 
-# ── Overlays ─────────────────────────────────────────────────────────────────
-from science_cli.plot.overlays import (  # noqa: F401
-    plot_overlay,
-)
 from science_cli.theme import apply_theme  # noqa: F401
