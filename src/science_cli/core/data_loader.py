@@ -215,7 +215,16 @@ def _load_with_device_config(
         raman_meta = extract_raman_metadata(path)
 
     # Metadata extraction pipeline
-    metadata_config = device_cfg.get("metadata", {})
+    # Resolve metadata config via (study, instrument) pair when study known,
+    # falling back to device_cfg's metadata section otherwise.
+    if study_name:
+        try:
+            from science_cli.core.config import get_metadata_config_for
+            metadata_config = get_metadata_config_for(study_name, device, None)
+        except ImportError:
+            metadata_config = device_cfg.get("metadata", {})
+    else:
+        metadata_config = device_cfg.get("metadata", {})
     parsed_meta = {}
     analysis_meta = {}
     if metadata_config:

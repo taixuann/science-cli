@@ -187,6 +187,7 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
                        metadata: dict | None = None,
                        width_meta: int = 20,
                        study_name: str | None = None,
+                       device_type: str | None = None,
                        status: str | None = None,
                        status_badge: str = "") -> str:
     """Build a fixed-width fzf display line.
@@ -203,6 +204,9 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     only the registered columns are shown (in registry order) with
     compact ``width_meta=12``.  Unknown studies fall back to showing
     all metadata keys in dict order.
+
+    When ``device_type`` is provided, device-specific column overrides
+    are used if registered (e.g. volatile vs non-volatile endurance).
 
     When ``status_badge`` is non-empty, it is prepended (with 1 space)
     before the protocol/step columns.
@@ -229,6 +233,9 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     study_name : str or None
         Study name (e.g. ``"pulse:pulse-stp-decay"``). When provided
         and registered, filters metadata to the study's column set.
+    device_type : str or None
+        Device type (e.g. ``"volatile-memristor"``). When provided with
+        ``study_name``, uses device-specific column override if registered.
     status : str or None
         Legacy status tag — ignored if ``status_badge`` is set.
     status_badge : str
@@ -238,13 +245,13 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     step = step or ""
     filename = filename or ""
 
-    # Resolve metadata columns for this study
+    # Resolve metadata columns for this study (with optional device override)
     effective_meta = metadata
     effective_width = width_meta
     if study_name and metadata:
-        from science_cli.core.fzf.columns import STUDY_COLUMN_REGISTRY
-        if study_name in STUDY_COLUMN_REGISTRY:
-            cols = STUDY_COLUMN_REGISTRY[study_name]
+        from science_cli.core.fzf.columns import get_columns_for
+        cols = get_columns_for(study_name, device_type)
+        if cols:
             effective_meta = {k: metadata[k] for k in cols if k in metadata}
             effective_width = 12  # compact for narrow pulse values
 

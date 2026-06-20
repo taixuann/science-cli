@@ -1322,6 +1322,50 @@ def list_technique_devices(technique: str) -> list[str]:
     return sorted(devices)
 
 
+# ── Metadata config resolver ───────────────────────────────────────────
+
+
+def get_metadata_config_for(
+    study_name: str,
+    instrument: str,
+    device_type: str | None = None,
+) -> dict:
+    """Resolve metadata_config for a (study, instrument) pair.
+
+    Resolution order:
+      1. ``studies.<tech>.<study>.metadata_extractors.<instrument>`` (canonical)
+      2. ``instruments.<instrument>.metadata`` (fallback)
+
+    Args:
+        study_name: Study name in ``"technique:study-name"`` format.
+        instrument: Instrument name (e.g. ``"keysight-b1500a"``).
+        device_type: Optional device type for future per-device overrides.
+
+    Returns:
+        The metadata dict (or empty dict if not found).
+    """
+    cfg = load_global_config()
+
+    # Try studies config first (canonical)
+    studies = cfg.get("studies", {})
+    tech_prefix, study_key = _parse_study_qualifier(study_name)
+    if tech_prefix in studies and study_key in studies[tech_prefix]:
+        study_cfg = studies[tech_prefix][study_key]
+        extractors = study_cfg.get("metadata_extractors", {})
+        if instrument in extractors:
+            return dict(extractors[instrument])
+
+    # Fallback to instrument-level metadata
+    instruments = cfg.get("instruments", {})
+    inst_cfg = instruments.get(instrument)
+    if isinstance(inst_cfg, dict):
+        meta = inst_cfg.get("metadata")
+        if isinstance(meta, dict):
+            return dict(meta)
+
+    return {}
+
+
 # ── Study-aware accessors (new model) ──────────────────────────────────
 
 
