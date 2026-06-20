@@ -862,6 +862,19 @@ def _do_plot(
 ) -> None:
     from science_cli.core.data_loader import load_data_file
 
+    # Route through study plotter when available (handles NaN, sort, filter,
+    # current_sign, dual_axis, series colors, etc.)
+    if study_name:
+        try:
+            from science_cli.plot.registry import _init_dedicated_plotters, resolve_study_plotter
+            _init_dedicated_plotters()
+            sp = resolve_study_plotter(study_name)
+            if sp and sp.plot_fn:
+                sp.plot_fn(filepath, flags, study_name=study_name)
+                return
+        except (ImportError, Exception):
+            pass
+
     try:
         load_kwargs = {}
         if study_name:
