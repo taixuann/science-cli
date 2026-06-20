@@ -3,13 +3,6 @@ instruments:
     label: Keysight B1500A Semiconductor Parameter Analyzer
     location: gtiit-china
     type: semiconductor-device-analyzer
-    techniques:
-    - iv-sweep
-    - iv-breakdown
-    - iv-leakage
-    - pulse-endurance
-    - pulse-stp
-    - pulse-ppf
     parsing:
       delimiter: ','
       decimal: .
@@ -39,11 +32,6 @@ instruments:
     label: Keithley 2400 SourceMeter
     location: usth-hanoi
     type: sourcemeter
-    techniques:
-    - iv-sweep
-    - iv-breakdown
-    - iv-leakage
-    - pulse-endurance
     parsing:
       delimiter: "\t"
       decimal: .
@@ -70,10 +58,6 @@ instruments:
     label: Autolab USTH (CV deposition)
     location: usth-hanoi
     type: potentiostat
-    techniques:
-    - ec-cv
-    - ec-ca
-    - ec-eis
     parsing: {}
     filename_patterns:
     - id: cv-deposition
@@ -88,8 +72,6 @@ instruments:
     label: Horiba LabRAM HR Evolution (USTH)
     location: usth-hanoi
     type: raman-spectrometer
-    techniques:
-    - raman
     parsing:
       delimiter: "\t"
       decimal: ','
@@ -107,8 +89,6 @@ instruments:
     label: "UV-Vis Spectrometer (IOP Hanoi) \u2014 vs-770st"
     location: iop-hanoi
     type: uv-vis-spectrometer
-    techniques:
-    - uv-vis
     parsing:
       delimiter: ','
       decimal: .

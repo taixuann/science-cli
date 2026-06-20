@@ -1,7 +1,7 @@
 # config-devices.yaml — Device types and legacy mapping
 #
 # Studies have been moved to config-studies.yaml (Phase 2).
-# This file retains device_types, legacy_to_study, and techniques (Phase 4).
+# This file retains device_types and legacy_to_study (techniques removed in Phase 4).
 
 device_types:
   volatile-memristor:
@@ -42,114 +42,4 @@ legacy_to_study:
   afm-jpk: afm:afm-topography
   afm-stp: afm:afm-topography
   afm-top: afm:afm-topography
-techniques:
-  ec-cv:
-    label: CV Deposition
-    grammar_codes:
-    - cv
-    - CV
-    - cv-deposition
-    default_device: autolab-usth
-    devices:
-      autolab-usth:
-        delimiter: ";"
-        decimal: .
-        header_lines: 0
-        encoding: utf-8
-        columns:
-          current: WE(1).Current (A)
-          potential: WE(1).Potential (V)
-          scan: Scan
-          time: Time (s)
-          index: Index
-          corrected_time: Corrected time (s)
-          frequency: Frequency (Hz)
-          z_real: "Z' (\u03A9)"
-          z_imag: "-Z'' (\u03A9)"
-          magnitude: "Z (\u03A9)"
-          phase: "-Phase (\xB0)"
-  ec-ca:
-    label: CA Doping
-    grammar_codes:
-    - ca
-    - CA
-    - ca-doping
-    default_device: autolab-usth
-    devices:
-      autolab-usth:
-        delimiter: ";"
-        decimal: .
-        header_lines: 0
-        encoding: utf-8
-        columns:
-          current: WE(1).Current (A)
-          potential: WE(1).Potential (V)
-          scan: Scan
-          time: Time (s)
-          index: Index
-          corrected_time: Corrected time (s)
-          frequency: Frequency (Hz)
-          z_real: "Z' (\u03A9)"
-          z_imag: "-Z'' (\u03A9)"
-          magnitude: "Z (\u03A9)"
-          phase: "-Phase (\xB0)"
-  ec-eis:
-    label: EIS
-    patterns:
-    - _EIS_
-    grammar_codes:
-    - eis
-    - EIS
-    - impedance
-    default_device: autolab-usth
-    devices:
-      autolab-usth:
-        delimiter: ";"
-        decimal: .
-        header_lines: 0
-        encoding: utf-8
-        columns:
-          current: WE(1).Current (A)
-          potential: WE(1).Potential (V)
-          scan: Scan
-          time: Time (s)
-          index: Index
-          corrected_time: Corrected time (s)
-          frequency: Frequency (Hz)
-          z_real: "Z' (\u03A9)"
-          z_imag: "-Z'' (\u03A9)"
-          magnitude: "Z (\u03A9)"
-          phase: "-Phase (\xB0)"
-  iv-sweep:
-    label: IV Sweep
-    grammar_codes:
-    - iv
-    - IV
-    - iv-sweep
-    - iv_dc
-    default_device: keithley-2400
-    types:
-      forming:
-        label: Forming
-        step_type: forming
-      set:
-        label: Set
-        step_type: set
-      reset:
-        label: Reset
-        step_type: reset
-  raman:
-    label: Raman Spectroscopy
-    grammar_codes:
-    - raman
-    - sers
-    - raman-sers
-    - SERS
-    default_device: horiba-usth
-  uv-vis:
-    label: UV-Vis Transmittance
-    grammar_codes:
-    - uv-vis
-    - uvvis
-    - uv_vis
-    default_device: spectrometer-iop
+# techniques block removed in Phase 4 (all content was fully redundant)
