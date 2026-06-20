@@ -217,6 +217,15 @@ studies:
           field: voltage
           min: 0.05
         current_sign: -1  # Keysight outputs negative current for bipolar switching
+        series:
+          current:
+            color: "#CC0000"
+            linewidth: 1.0
+            label: "I(t)"
+          voltage:
+            color: "#0055CC"
+            linewidth: 1.0
+            label: "V(t)"
 
     pulse-ppf:
       label: "Paired-Pulse Facilitation"
