@@ -570,7 +570,7 @@ def _ls_instrument(pos: list, flags: dict) -> None:
     study_filter = flags.get("s") or flags.get("study", "")
     name_filter = pos[0] if pos else None
 
-    from science_cli.library.instruments.registry import get_all_instruments, get_instrument
+    from science_cli.core.instruments.registry import get_all_instruments, get_instrument
 
     if name_filter:
         ins = get_instrument(name_filter)

@@ -1793,7 +1793,7 @@ def _analyze_protocol(
     Returns dict with: protocol, total, analyzed, skipped, errors.
     """
     from science_cli.library.memristor.db import query_files, update_file_analysis
-    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.iv.io import read_iv_csv
     from science_cli.library.memristor.switching import extract_iv_parameters
 
     pdir = proj / "protocol" / protocol_name
@@ -2180,15 +2180,16 @@ def parse_cycles_list(cycle_str: str) -> list[int]:
 def cmd_plot(args: argparse.Namespace) -> None:
 
     """Batch-generate IV curve SVGs from devices.yaml."""
-    from science_cli.library.memristor.plotting import (
-        build_fzf_line,
-        build_plot_filename,
-        build_plot_title,
-        collect_iv_files,
-        generate_iv_overlay_svg,
-        generate_iv_svg,
-        read_iv_csv,
-    )
+    # TODO SVG removed — will be handled by plot/single.py
+    # from science_cli.library.memristor.plotting import (
+    #     build_fzf_line,
+    #     build_plot_filename,
+    #     build_plot_title,
+    #     collect_iv_files,
+    #     generate_iv_overlay_svg,
+    #     generate_iv_svg,
+    # )
+    from science_cli.library.iv.io import read_iv_csv
 
     raw_current = getattr(args, "raw", False)
 
@@ -2385,94 +2386,10 @@ def cmd_plot(args: argparse.Namespace) -> None:
     dpi = getattr(args, "dpi", 150)
 
     # ── Multi-Cycle Highlight Plot Mode ──
+    # TODO SVG removed — generate_iv_highlighted_svg deleted with plotting.py
     highlight_str = getattr(args, "highlight", "") or ""
     if highlight_str:
-        from science_cli.library.memristor.plotting import generate_iv_highlighted_svg
-        highlight_cycles = parse_cycles_list(highlight_str)
-        if not highlight_cycles:
-            print("Invalid highlight cycles specified.")
-            return
-
-        unique_cells = sorted(list(set((t["row"], t["col"], t["material_key"]) for t in targets)))
-        if not unique_cells:
-            print("No cells found for plotting.")
-            return
-
-        if len(unique_cells) > 1:
-            from science_cli.core.fzf.display import fzf_select
-            cell_displays = [f"r{row}c{col} ({mat})" for row, col, mat in unique_cells]
-            selected = fzf_select(cell_displays, prompt="Select cell for multi-cycle highlighted plot >", multi=False)
-            if not selected:
-                print("No cell selected.")
-                return
-            selected_display = selected[0]
-            # Parse back
-            selected_cell = None
-            for r, c, m in unique_cells:
-                if f"r{r}c{c} ({m})" == selected_display:
-                    selected_cell = (r, c, m)
-                    break
-            if not selected_cell:
-                return
-            r_val, c_val, m_val = selected_cell
-        else:
-            r_val, c_val, m_val = unique_cells[0]
-
-        # Filter targets to the selected cell
-        cell_targets = [t for t in targets if t["row"] == r_val and t["col"] == c_val]
-        # Sort targets by cycle order
-        cell_targets.sort(key=lambda x: x["order"])
-
-        # Fetch SQLite analysis cache to populate Vset/Vreset in the legend
-        from science_cli.core.project import get_current_project_path
-        from science_cli.library.memristor.db import close_db, open_db, query_files
-        proj = get_current_project_path()
-        analysis_map = {}
-        if proj:
-            try:
-                conn = open_db(proj)
-                db_files = query_files(conn, protocol=pdir.name)
-                close_db(conn)
-                analysis_map = {f["filename"]: f for f in db_files}
-            except Exception as e:
-                print(f"Warning: could not query analysis results from database: {e}")
-
-        all_traces = []
-        for t in cell_targets:
-            fe = t["file_entry"]
-            step_ov = t.get("step")
-            filepath = _resolve_file(pdir, config, fe, step_ov, t)
-            try:
-                voltage, current, info = read_iv_csv(str(filepath))
-            except Exception as exc:
-                print(f"  Error reading {fe.file}: {exc}")
-                continue
-
-            db_record = analysis_map.get(fe.file, {})
-            metadata = {
-                "row": t["row"],
-                "col": t["col"],
-                "material": t["material_key"],
-                "order": t["order"],
-                "sweep_type": fe.sweep_type or "uc",
-                "v_set": db_record.get("v_set"),
-                "v_reset": db_record.get("v_reset"),
-            }
-            all_traces.append((voltage, current, metadata))
-
-        if all_traces:
-            m_safe = m_val.replace("/", "-").replace(" ", "_")
-            output_filename = f"iv_r{r_val}c{c_val}_{m_safe}_multicycle_raw.pdf" if raw_current else f"iv_r{r_val}c{c_val}_{m_safe}_multicycle.pdf"
-            output_path = results_dir / output_filename
-            try:
-                generate_iv_highlighted_svg(all_traces, highlight_cycles, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
-                print(f"\n  ✓ Multi-cycle highlight plot generated: {output_path.name}")
-                print(f"  Highlighted cycles: {highlight_cycles}")
-                print(f"  Output path: {output_path}")
-            except Exception as exc:
-                print(f"  Error generating multi-cycle highlight plot: {exc}")
-        else:
-            print("No trace data successfully read.")
+        print("Highlight mode is not available (SVG plotting removed).")
         return
 
 
@@ -2495,104 +2412,14 @@ def cmd_plot(args: argparse.Namespace) -> None:
 
     if overlay_mode:
         # ── Overlay mode: one plot with all traces ──
-        all_traces = []
-        for t in targets:
-            fe = t["file_entry"]
-            step_ov = t.get("step")
-            filepath = _resolve_file(pdir, config, fe, step_ov, t)
-            try:
-                voltage, current, info = read_iv_csv(str(filepath))
-            except Exception as exc:
-                print(f"  Error reading {fe.file}: {exc}")
-                errors += 1
-                continue
-            title = build_plot_title(
-                order=t["order"],
-                sweep=fe.sweep,
-                sweep_type=t["sweep_type"],
-            )
-            metadata = {
-                "title": title,
-                "sweep": fe.sweep,
-                "sweep_type": fe.sweep_type,
-                "row": t["row"],
-                "col": t["col"],
-                "order": t["order"],
-                "label": fe.file,
-            }
-            all_traces.append((voltage, current, metadata))
-
-        if all_traces:
-            output_path = results_dir / ("overlay_raw.pdf" if raw_current else "overlay.pdf")
-            try:
-                generate_iv_overlay_svg(all_traces, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
-                plotted = len(all_traces)
-                print(f"  ✓ {output_path.name} ({len(all_traces)} traces)")
-            except Exception as exc:
-                print(f"  Error generating overlay: {exc}")
-                errors += 1
+        # TODO SVG removed — generate_iv_overlay_svg deleted with plotting.py
+        print("  Overlay mode not available (SVG plotting removed).")
+        errors += 1
     else:
         # ── Individual mode: one SVG per file ──
-        position_files: dict[tuple[int, int], list[dict]] = {}
-        for t in targets:
-            pos = (t["row"], t["col"])
-            position_files.setdefault(pos, []).append(t)
-        for pos, files in position_files.items():
-            files.sort(key=lambda x: x["order"])
-            for i, f in enumerate(files):
-                f["file_index"] = i
-
-        for t in targets:
-            fe = t["file_entry"]
-            step_ov = t.get("step")
-            filepath = _resolve_file(pdir, config, fe, step_ov, t)
-            try:
-                voltage, current, info = read_iv_csv(str(filepath))
-            except Exception as exc:
-                print(f"  Error reading {fe.file}: {exc}")
-                errors += 1
-                continue
-
-            plot_filename = build_plot_filename(
-                row=t["row"],
-                col=t["col"],
-                material_key=t["material_key"],
-                sweep_type=t["sweep_type"],
-                order=t["order"],
-            )
-            if raw_current:
-                plot_filename = plot_filename.replace(".svg", "_raw.svg")
-            title = build_plot_title(
-                order=t["order"],
-                sweep=fe.sweep,
-                sweep_type=t["sweep_type"],
-            )
-
-            metadata = {
-                "title": title,
-                "sweep": fe.sweep,
-                "sweep_type": fe.sweep_type,
-                "row": t["row"],
-                "col": t["col"],
-                "order": t["order"],
-                "file_index": t.get("file_index", 0),
-                "time": info.get("time"),
-            }
-
-            output_path = results_dir / plot_filename
-            try:
-                generate_iv_svg(voltage, current, metadata, str(output_path), dpi=dpi, raw_current=raw_current, flags=all_flags)
-            except Exception as exc:
-                print(f"  Error plotting {fe.file}: {exc}")
-                errors += 1
-                continue
-
-            fe.extra["plot"] = plot_filename
-            plotted += 1
-            print(f"  ✓ {plot_filename}")
-
-        if plotted > 0:
-            write_devices(pdir, config)
+        # TODO SVG removed — generate_iv_svg, build_plot_filename, build_plot_title deleted with plotting.py
+        print("  Individual plot mode not available (SVG plotting removed).")
+        errors += 1
 
     # Summary
     if overlay_mode and plotted > 0:

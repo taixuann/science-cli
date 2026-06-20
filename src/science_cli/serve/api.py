@@ -638,7 +638,7 @@ def get_device_iv(
         try:
             from science_cli.library.memristor.db import open_db, close_db
             from science_cli.library.memristor.switching import compute_on_off_ratio
-            from science_cli.library.memristor.plotting import read_iv_csv
+            from science_cli.library.iv.io import read_iv_csv
             
             conn = open_db(project_path)
             qfiles = conn.execute(

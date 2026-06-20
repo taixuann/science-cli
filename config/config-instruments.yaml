@@ -11,23 +11,6 @@ instruments:
       columns:
         voltage: V1
         current: I2
-    filename_patterns:
-    - id: rNcN
-      template: '{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}'
-      description: Standard rNcN convention (rectangular crossbar)
-      regex: ^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$
-    - id: bN-tN
-      template: '{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}'
-      description: Bottom/top crossbar convention
-      regex: ^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$
-    - id: rN-cN-iv
-      template: '{date_code}_{material}_iv-sweep_{matrix}_{suffix}.{ext}'
-      description: 'rN-cN convention (1-indexed, hyphen) for iv-sweep data: 120526_cu-c-pda-ito(c)_iv-sweep_r1-c2_001.csv'
-      regex: ^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<technique>[A-Za-z0-9/-]+)_(?P<matrix>r\d+-c\d+)_(?P<suffix>\d+)\.(?P<ext>\w+)$
-    - id: rN-cN-stp-decay
-      template: '{date_code}_{material}_r{row}-c{col}_stp-decay_{suffix}{tag?}.{ext}'
-      description: 'STP decay: 150626_cu-c-pda(q5)-ito_r5-c2_stp-decay_041_important.csv'
-      regex: ^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<matrix>r\d+-c\d+)_(?P<technique>stp-decay)_(?P<suffix>\d+)(?:_(?P<tag>[^_]+))?\.(?P<ext>\w+)$
   keithley-2400:
     label: Keithley 2400 SourceMeter
     location: usth-hanoi
@@ -41,33 +24,11 @@ instruments:
         voltage: Untitled
         current: Untitled 1
         time: Untitled 2
-    filename_patterns:
-    - id: rNcN
-      template: '{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}'
-      description: Standard rNcN convention (rectangular crossbar)
-      regex: ^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$
-    - id: bN-tN
-      template: '{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}'
-      description: Bottom/top crossbar convention
-      regex: ^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$
-    - id: rN-cN-iv
-      template: '{date_code}_{material}_iv-sweep_{matrix}_{suffix}.{ext}'
-      description: 'rN-cN convention (1-indexed, hyphen) for iv-sweep data: 120526_cu-c-pda-ito(c)_iv-sweep_r1-c2_001.csv'
-      regex: ^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<technique>[A-Za-z0-9/-]+)_(?P<matrix>r\d+-c\d+)_(?P<suffix>\d+)\.(?P<ext>\w+)$
   autolab-usth:
     label: Autolab USTH (CV deposition)
     location: usth-hanoi
     type: potentiostat
     parsing: {}
-    filename_patterns:
-    - id: cv-deposition
-      template: '{date_code}_{material}_cv-deposition{suffix?}.{ext}'
-      description: 'CV deposition (Autolab): 110526_material_cv-deposition[_suffix].txt'
-      regex: ^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>cv-deposition)(?:_(?P<suffix>[^_]+))?\.\w+$
-    - id: ca-doping
-      template: '{date_code}_{material}_ca-doping{suffix?}.{ext}'
-      description: 'CA doping (Autolab): 110526_material_ca-doping[_suffix].txt'
-      regex: ^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>ca-doping)(?:_(?P<suffix>[^_]+))?\.\w+$
   horiba-usth:
     label: Horiba LabRAM HR Evolution (USTH)
     location: usth-hanoi
@@ -80,11 +41,6 @@ instruments:
       names:
       - shift
       - intensity
-    filename_patterns:
-    - id: raman-spectrum
-      template: '{date_code}_{material}_raman[-sers]_{suffix}.{ext}'
-      description: 'Raman/SERS spectrum (Horiba USTH): 260526_PDA(q)-ITO_raman-sers_01.txt'
-      regex: ^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>raman(?:-sers)?)(?:_(?P<suffix>\d+))?\.\w+$
   spectrometer-iop:
     label: "UV-Vis Spectrometer (IOP Hanoi) \u2014 vs-770st"
     location: iop-hanoi
@@ -97,8 +53,3 @@ instruments:
       columns:
         wavelength: Wavelength nm.
         transmittance: T%
-    filename_patterns:
-    - id: uv-vis
-      template: '{date_code}_{material}_uv-vis.{ext}'
-      description: 'UV-Vis transmittance (IOP Hanoi): 280526_PDA(q)-ITO_uv-vis.txt'
-      regex: ^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>uv-vis)\.\w+$

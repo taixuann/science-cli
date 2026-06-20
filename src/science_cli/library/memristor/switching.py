@@ -10,7 +10,8 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 import numpy as np
 
 from science_cli.library.memristor.models import SwitchingData
-from science_cli.library.memristor.plotting import _split_at_reversals, read_iv_csv
+from science_cli.library.iv.io import read_iv_csv
+from science_cli.library.iv.metrics import _split_at_reversals
 
 logger = logging.getLogger(__name__)
 

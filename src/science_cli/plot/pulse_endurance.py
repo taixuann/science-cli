@@ -3,10 +3,38 @@
 Device-type dispatch:
     volatile-memristor:  R_decay vs cycle (single panel, log x)
     non-volatile-memristor: R_high / R_low vs cycle (2 panels, log x)
+
+Pre-processed format:
+    When fed a CSV with columns (cycle, r_hrs_ohm, r_lrs_ohm, ratio),
+    the functions plot directly from those columns (no R=V/I computation).
+    This is the output of the pre-processing script (sci-keysight-endurance skill).
 """
 from pathlib import Path
 
+import pandas as pd
+
 from science_cli.core.plot_config import resolve_plot_config
+
+
+# ── Pre-processed format detection ───────────────────────────────────
+
+def _load_preprocessed(filepath: str) -> tuple | None:
+    """Detect and load pre-processed endurance CSV (cycle, r_hrs_ohm, r_lrs_ohm, ratio).
+
+    Returns (cycle, r_hrs, r_lrs, ratio) or None if columns don't match.
+    """
+    try:
+        df = pd.read_csv(filepath)
+    except Exception:
+        return None
+    cols = set(df.columns)
+    if not {"cycle", "r_hrs_ohm", "r_lrs_ohm"}.issubset(cols):
+        return None
+    cycle = df["cycle"].values.astype(float)
+    r_hrs = df["r_hrs_ohm"].values.astype(float)
+    r_lrs = df["r_lrs_ohm"].values.astype(float)
+    ratio = df["ratio"].values.astype(float) if "ratio" in cols else r_hrs / r_lrs
+    return cycle, r_hrs, r_lrs, ratio
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -103,16 +131,40 @@ def _apply_common_style(ax, flags: dict, cycle, r, xlabel, ylabel,
 # ── Base plotter (generic / unknown device type) ────────────────────
 
 def _plot_endurance(filepath: str, flags: dict) -> None:
-    """Plot endurance cycling data: cycles vs resistance."""
+    """Plot endurance cycling data: cycles vs resistance (generic / unknown device)."""
     import matplotlib as mpl
     mpl.use("Agg")
     import matplotlib.pyplot as plt
+    import numpy as np
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import apply_figure_kw, parse_figsize
     from science_cli.theme import apply_theme
     apply_theme(get_active_theme())
 
     plot_cfg = resolve_plot_config("pulse:pulse-endurance")
+
+    # Try pre-processed format (3-panel: HRS + LRS + ratio)
+    pp = _load_preprocessed(filepath)
+    if pp is not None:
+        cycle, r_hrs, r_lrs, ratio = pp
+        figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0] * 2, figsize[1] * 1.8),
+                                        gridspec_kw={"height_ratios": [1.5, 1]})
+        color_hrs = flags.get("color-hrs", plot_cfg.get("series.hrs.color", "#CC0000"))
+        color_lrs = flags.get("color-lrs", plot_cfg.get("series.lrs.color", "#0055CC"))
+        color_r = flags.get("color-ratio", plot_cfg.get("series.ratio.color", "#CC7700"))
+        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
+        ax1.plot(cycle, r_hrs, color=color_hrs, linewidth=lw, alpha=0.85, label="HRS")
+        ax1.plot(cycle, r_lrs, color=color_lrs, linewidth=lw, alpha=0.85, label="LRS")
+        ax1.set_xscale("log"); ax1.set_yscale("log")
+        ax1.set_ylabel("Resistance (Ω)"); ax1.legend(); ax1.grid(True, alpha=0.2)
+        ax2.plot(cycle, ratio, color=color_r, linewidth=lw, alpha=0.85)
+        ax2.set_xscale("log"); ax2.set_yscale("log")
+        ax2.set_xlabel("Cycle"); ax2.set_ylabel("HRS / LRS")
+        fig.suptitle("Endurance", fontsize=11)
+        fig.tight_layout()
+        _save_fig(fig, filepath, flags)
+        return
 
     data = _load_and_resolve(filepath, "Could not determine x/y columns for endurance.")
     if data is None:
@@ -129,10 +181,15 @@ def _plot_endurance(filepath: str, flags: dict) -> None:
 # ── Volatile memristor: R_decay vs cycle ────────────────────────────
 
 def _plot_endurance_volatile(filepath: str, flags: dict) -> None:
-    """Volatile endurance — R_decay vs cycle (log x, log y, big markers)."""
+    """Volatile endurance — R_decay vs cycle (log x, log y, big markers).
+
+    Detects pre-processed CSV format (cycle, r_hrs_ohm, r_lrs_ohm, ratio)
+    and plots both HRS + LRS when available instead of single R_decay.
+    """
     import matplotlib as mpl
     mpl.use("Agg")
     import matplotlib.pyplot as plt
+    import numpy as np
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import apply_figure_kw, parse_figsize
     from science_cli.theme import apply_theme
@@ -142,29 +199,73 @@ def _plot_endurance_volatile(filepath: str, flags: dict) -> None:
         "pulse:pulse-endurance", device_type="volatile-memristor",
     )
 
-    data = _load_and_resolve(filepath, "Could not determine columns for volatile endurance.")
-    if data is None:
-        return
-    _, _, cycle, r, xlabel, ylabel = data
+    # Try pre-processed format first
+    pp = _load_preprocessed(filepath)
+    if pp is not None:
+        cycle, r_hrs, r_lrs, ratio = pp
+        is_preprocessed = True
+    else:
+        data = _load_and_resolve(filepath, "Could not determine columns for volatile endurance.")
+        if data is None:
+            return
+        _, _, cycle, r, xlabel, ylabel = data
+        r_hrs, r_lrs, ratio = r, None, None
+        is_preprocessed = False
 
     figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
-    fig, ax = plt.subplots(figsize=figsize)
-    color = flags.get("color", plot_cfg.get("series.hrs.color", "#2176AE"))
-    label = plot_cfg.get("series.hrs.label", "R_decay")
-    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel, label=label, plot_cfg=plot_cfg)
-    ax.lines[0].set_color(color)
-    ax.set_yscale("log")
-    ax.set_title("Volatile Memristor — Endurance")
-    ax.legend()
-    ax.grid(True, alpha=0.2)
-    apply_figure_kw(ax, flags, Path(filepath).stem)
+
+    if is_preprocessed:
+        # 2-panel: HRS + LRS (top), ratio (bottom)
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0] * 2, figsize[1] * 1.8),
+                                        gridspec_kw={"height_ratios": [1.5, 1]})
+
+        color_hrs = flags.get("color-hrs", plot_cfg.get("series.hrs.color", "#CC0000"))
+        color_lrs = flags.get("color-lrs", plot_cfg.get("series.lrs.color", "#0055CC"))
+        color_ratio = flags.get("color-ratio", plot_cfg.get("series.ratio.color", "#CC7700"))
+
+        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
+
+        ax1.plot(cycle, r_hrs, color=color_hrs, linewidth=lw, alpha=0.85, label="HRS")
+        ax1.plot(cycle, r_lrs, color=color_lrs, linewidth=lw, alpha=0.85, label="LRS")
+        ax1.set_xscale("log")
+        ax1.set_yscale("log")
+        ax1.set_ylabel("Resistance (Ω)")
+        ax1.legend()
+        ax1.grid(True, alpha=0.2)
+
+        ax2.plot(cycle, ratio, color=color_ratio, linewidth=lw, alpha=0.85)
+        ax2.set_xscale("log")
+        ax2.set_yscale("log")
+        ax2.set_xlabel("Cycle")
+        ax2.set_ylabel("HRS / LRS")
+
+        fig.suptitle("Volatile Memristor — Endurance", fontsize=11)
+    else:
+        # Legacy single-panel (R only)
+        fig, ax = plt.subplots(figsize=figsize)
+        color = flags.get("color", plot_cfg.get("series.hrs.color", "#2176AE"))
+        label = plot_cfg.get("series.hrs.label", "R_decay")
+        _apply_common_style(ax, flags, cycle, r_hrs, "Cycle", "Resistance (Ω)",
+                             label=label, plot_cfg=plot_cfg)
+        ax.lines[0].set_color(color)
+        ax.set_yscale("log")
+        ax.set_title("Volatile Memristor — Endurance")
+        ax.legend()
+        ax.grid(True, alpha=0.2)
+        apply_figure_kw(ax, flags, Path(filepath).stem)
+
+    fig.tight_layout()
+    apply_figure_kw(ax if not is_preprocessed else fig.axes[0], flags, Path(filepath).stem)
     _save_fig(fig, filepath, flags, suffix="_volatile")
 
 
 # ── Non-volatile memristor: R_high / R_low vs cycle ────────────────
 
 def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
-    """NV endurance — 2 panels: R_high + R_low (log x, big markers)."""
+    """NV endurance — 2 panels: R_high + R_low (log x, big markers).
+
+    Pre-processed format: plots HRS and LRS directly from columns.
+    """
     import matplotlib as mpl
     mpl.use("Agg")
     import matplotlib.pyplot as plt
@@ -177,6 +278,29 @@ def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
     plot_cfg = resolve_plot_config(
         "pulse:pulse-endurance", device_type="non-volatile-memristor",
     )
+
+    # Try pre-processed format
+    pp = _load_preprocessed(filepath)
+    if pp is not None:
+        cycle, r_hrs, r_lrs, ratio = pp
+        figsize_cfg = plot_cfg.get("figure.figsize", [3.46, 2.75])
+        figsize = parse_figsize(flags) or (figsize_cfg[0] * 2, figsize_cfg[1])
+        fig, (ax_hi, ax_lo) = plt.subplots(1, 2, figsize=figsize)
+        color_hi = flags.get("color-hi", plot_cfg.get("series.hrs.color", "#CC0000"))
+        color_lo = flags.get("color-lo", plot_cfg.get("series.lrs.color", "#0055CC"))
+        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
+        for ax, cy, rv, cl, title, ylbl in [
+            (ax_hi, cycle, r_hrs, color_hi, "High Resistance State", "R_high (Ω)"),
+            (ax_lo, cycle, r_lrs, color_lo, "Low Resistance State", "R_low (Ω)"),
+        ]:
+            ax.plot(cy, rv, color=cl, linewidth=lw, alpha=0.85, label=title.split()[0])
+            ax.set_xscale("log"); ax.set_yscale("log")
+            ax.set_xlabel("Cycle"); ax.set_ylabel(ylbl); ax.set_title(title)
+            ax.legend(); ax.grid(True, alpha=0.2)
+        fig.suptitle("Non-Volatile Memristor — Endurance", fontsize=11)
+        fig.tight_layout()
+        _save_fig(fig, filepath, flags, suffix="_nv")
+        return
 
     data = _load_and_resolve(filepath, "Could not determine columns for NV endurance.")
     if data is None:
@@ -196,7 +320,6 @@ def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
     lrs_alpha = float(plot_cfg.get("series.lrs.alpha", 0.85))
 
     # Split data: first half → R_high, second half → R_low
-    # (actual separation comes from analyzer in Seq 4)
     r_clean = r[~np.isnan(r)] if np.issubdtype(r.dtype, np.floating) else r
     if len(r_clean) == 0:
         from rich.console import Console

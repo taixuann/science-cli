@@ -10,7 +10,7 @@ from rich.table import Table
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
-from science_cli.library.instruments import (
+from science_cli.core.instruments import (
     get_all_instruments,
     get_instrument,
     get_instruments_by_technique,
@@ -18,7 +18,7 @@ from science_cli.library.instruments import (
     remove_instrument,
     edit_instrument,
 )
-from science_cli.library.instruments.types import describe_type, list_types
+from science_cli.core.instruments.types import describe_type, list_types
 
 console = Console()
 

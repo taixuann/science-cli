@@ -39,7 +39,7 @@ def _collect_device_data(config, results_dir: Path) -> dict:
       - total_measured_devices: int
     """
     from science_cli.library.memristor.device import extract_material_batch
-    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.iv.io import read_iv_csv
     from science_cli.library.memristor.switching import extract_iv_parameters
 
     data_dir = results_dir.parent
@@ -150,7 +150,7 @@ def _collect_device_data_from_sqlite(config, results_dir: Path, db_files: list[d
     Falls back to CSV reading for files that don't have analysis values.
     """
     from science_cli.library.memristor.device import extract_material_batch
-    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.iv.io import read_iv_csv
 
     data_dir = results_dir.parent
     per_device: dict[tuple[int, int], dict] = {}
@@ -887,7 +887,7 @@ def collect_cross_protocol_data(project_dir: Path, force: bool = False) -> dict:
         dict with keys: protocols, aggregate, generated_at, file_mtimes.
     """
     from science_cli.library.memristor.device import extract_material_batch, read_devices
-    from science_cli.library.memristor.plotting import read_iv_csv
+    from science_cli.library.iv.io import read_iv_csv
     from science_cli.library.memristor.switching import extract_iv_parameters
 
     results_dir = project_dir / "results"

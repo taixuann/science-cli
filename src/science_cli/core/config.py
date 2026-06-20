@@ -917,13 +917,13 @@ def get_merged_grammar(
 
 def get_instrument(name: str) -> dict | None:
     """Look up an instrument model by name (delegates to instrument registry)."""
-    from science_cli.library.instruments.registry import get_instrument as _get_ins
+    from science_cli.core.instruments.registry import get_instrument as _get_ins
     return _get_ins(name)
 
 
 def get_instruments_by_technique(technique: str) -> list[dict]:
     """List instrument models compatible with a given technique."""
-    from science_cli.library.instruments.registry import get_instruments_by_technique as _get_by_tech  # noqa: I001
+    from science_cli.core.instruments.registry import get_instruments_by_technique as _get_by_tech  # noqa: I001
     return _get_by_tech(technique)
 
 

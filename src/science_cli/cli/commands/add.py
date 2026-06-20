@@ -180,7 +180,7 @@ def _add_protocol(args: list) -> None:
             if i < len(devs):
                 entry["instrument"] = devs[i]
             if i < len(devs) and devs[i] and (i >= len(techs) or not techs[i]):
-                from science_cli.library.instruments.registry import get_instrument_techniques
+                from science_cli.core.instruments.registry import get_instrument_techniques
                 compatible = get_instrument_techniques(devs[i])
                 if compatible:
                     entry["technique"] = compatible[0]
