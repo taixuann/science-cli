@@ -156,6 +156,13 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
     i = i.values.astype(float) * -1
     mask = ~(np.isnan(t) | np.isnan(v) | np.isnan(i))
     t, v, i = t[mask], v[mask], i[mask]
+    
+    # Filter out pre-pulse region (V < 0.05V) to avoid line at origin
+    v_threshold = 0.05
+    sig_mask = v > v_threshold
+    if sig_mask.any():
+        t, v, i = t[sig_mask], v[sig_mask], i[sig_mask]
+    
     t_us = t * 1e6
 
     dt = np.diff(t_us)
