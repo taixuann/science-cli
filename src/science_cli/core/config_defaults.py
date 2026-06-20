@@ -1,12 +1,14 @@
 """Modular YAML config generation — produces 4 standalone config files.
 
 Each function returns a YAML string for one config file:
-    - generate_config_devices_yaml()  → config-devices.yaml (studies + device types)
+    - generate_config_devices_yaml()  → config-devices.yaml (device types + legacy)
+    - generate_config_studies_yaml()  → config-studies.yaml (study definitions)
     - generate_config_instruments_yaml() → config-instruments.yaml (instrument registry)
     - generate_config_grammar_yaml()  → config-grammar.yaml (filename naming grammar)
     - generate_config_template_yaml() → config-template.yaml (theme templates)
 
-Data for studies/device_types/legacy_to_study now lives in config-devices.yaml.
+Data for device_types/legacy_to_study now lives in config-devices.yaml.
+Data for studies now lives in config-studies.yaml.
 Generation functions read from existing config files when available.
 """
 
@@ -72,6 +74,125 @@ _INSTRUMENTS: dict[str, dict] = {
             "delimiter": ",", "decimal": ".", "header_lines_default": 1,
             "encoding": "latin1",
             "columns": {"wavelength": "Wavelength nm.", "transmittance": "T%"},
+        },
+    },
+}
+
+
+# ── config-studies.yaml data ────────────────────────────────────────
+
+_STUDIES: dict[str, dict] = {
+    "iv": {
+        "iv-bipolar-sweep": {
+            "label": "Bipolar IV Sweep 0\u2192+V\u2192-V\u21920",
+            "patterns": ["iv-sweep", "_IV", "iv-bipolar", "sweep_"],
+            "legacy_codes": ["iv", "iv-sweep", "iv_dc"],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "voltage_v", "current_a"]},
+            "instruments": {},
+        },
+        "iv-breakdown": {
+            "label": "Breakdown \u2014 ramped voltage to breakdown",
+            "patterns": ["breakdown", "_bd", "_Vbd", "bd_"],
+            "legacy_codes": ["bd", "breakdown"],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "voltage_v", "current_a"]},
+            "instruments": {},
+        },
+        "iv-leakage": {
+            "label": "Leakage \u2014 low-bias leakage current",
+            "patterns": ["leakage", "_leak", "leak_"],
+            "legacy_codes": ["leak", "leakage"],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "voltage_v", "current_a"]},
+            "instruments": {},
+        },
+    },
+    "pulse": {
+        "pulse-stp-decay": {
+            "label": "STP Decay \u2014 set pulse + current decay read",
+            "patterns": ["stp", "_STP", "stp_decay", "short-term"],
+            "legacy_codes": ["stp", "pulse-stp", "short-term-plasticity"],
+            "data_shape": {"kind": "waveform_2d", "columns": ["time_s", "voltage_v"], "units": ["s", "V"]},
+            "derived_metadata": ["v_set_v", "v_read_v", "set_width_us", "read_width_us", "rise_us", "fall_us", "repeat_pattern"],
+            "device_overrides": {"volatile-memristor": {"add": ["decay_tau_ms", "r_read_ohm"]}},
+            "instruments": {},
+        },
+        "pulse-ppf": {
+            "label": "Paired-Pulse Facilitation \u2014 double set with \u0394t",
+            "patterns": ["ppf", "_PPF", "paired-pulse"],
+            "legacy_codes": ["ppf", "pulse-ppf", "paired-pulse"],
+            "data_shape": {"kind": "waveform_2d", "columns": ["time_s", "voltage_v"], "units": ["s", "V"]},
+            "derived_metadata": ["v_set_v", "v_read_v", "set_width_us", "read_width_us", "rise_us", "fall_us", "repeat_pattern"],
+            "instruments": {},
+        },
+        "pulse-endurance": {
+            "label": "Pulse Endurance Cycling",
+            "patterns": ["endurance", "_endurance", "endurance_"],
+            "legacy_codes": ["endurance", "pulse-endurance"],
+            "data_shape": {"kind": "waveform_2d", "columns": ["time_s", "voltage_v"], "units": ["s", "V"]},
+            "derived_metadata": ["v_set_v", "v_read_v", "set_width_us", "read_width_us", "rise_us", "fall_us", "repeat_pattern"],
+            "device_overrides": {
+                "volatile-memristor": {"add": ["r_decay_ohm"]},
+                "non-volatile-memristor": {"add": ["r_high_ohm", "r_low_ohm"]},
+            },
+            "instruments": {},
+        },
+        "pulse-retention": {
+            "label": "Pulse Retention Time",
+            "patterns": ["retention", "_retention", "retention_"],
+            "legacy_codes": ["retention", "pulse-retention"],
+            "data_shape": {"kind": "waveform_2d", "columns": ["time_s", "voltage_v"], "units": ["s", "V"]},
+            "derived_metadata": ["v_set_v", "v_read_v", "set_width_us", "read_width_us", "rise_us", "fall_us", "repeat_pattern"],
+            "device_overrides": {"non-volatile-memristor": {"add": ["r_read_ohm"]}},
+            "instruments": {},
+        },
+    },
+    "raman": {
+        "raman-spectrum": {
+            "label": "Raman Spectroscopy",
+            "patterns": ["_raman", "_sers", "raman-sers", "_SERS"],
+            "legacy_codes": ["raman", "sers", "raman-sers"],
+            "data_shape": {"kind": "spectrum_2d", "columns": ["wavelength_nm", "intensity"], "units": ["nm", "counts"]},
+            "instruments": {},
+        },
+    },
+    "uv-vis": {
+        "uv-vis-spectrum": {
+            "label": "UV-Vis Transmittance",
+            "patterns": ["_uv-vis", "_uvvis", "uv-vis", "uvvis"],
+            "legacy_codes": ["uv-vis", "uvvis", "uv_vis"],
+            "data_shape": {"kind": "spectrum_2d", "columns": ["wavelength_nm", "absorbance"], "units": ["nm", "au"]},
+            "instruments": {},
+        },
+    },
+    "ec": {
+        "ec-cv": {
+            "label": "Cyclic Voltammetry",
+            "patterns": ["_CV.", ".cv", "cv_", "cv-"],
+            "legacy_codes": [],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "potential_v", "current_a"]},
+            "instruments": {},
+        },
+        "ec-ca": {
+            "label": "Chronoamperometry",
+            "patterns": ["_CA.", ".ca", "ca_", "ca-"],
+            "legacy_codes": [],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "potential_v", "current_a"]},
+            "instruments": {},
+        },
+        "ec-eis": {
+            "label": "Electrochemical Impedance Spectroscopy",
+            "patterns": [".mpt", "_EIS.", ".eis", "_impedance", ".z"],
+            "legacy_codes": [],
+            "data_shape": {"kind": "trace_2d", "columns": ["time_s", "potential_v", "current_a"]},
+            "instruments": {},
+        },
+    },
+    "afm": {
+        "afm-topography": {
+            "label": "AFM/SPM Surface Topography",
+            "patterns": [".gwy", ".spm", ".ibw", ".jpk", ".stp", ".top"],
+            "legacy_codes": [],
+            "data_shape": {"kind": "image_2d", "columns": ["x_um", "y_um", "height_nm"]},
+            "instruments": {},
         },
     },
 }
@@ -248,7 +369,7 @@ def _config_dir() -> Path:
 
 
 def generate_config_devices_yaml() -> str:
-    """Generate config-devices.yaml — studies + device types + legacy mapping.
+    """Generate config-devices.yaml — device types + legacy mapping (no studies).
 
     Reads from existing config-devices.yaml if available, otherwise generates
     a template with empty sections.
@@ -259,11 +380,24 @@ def generate_config_devices_yaml() -> str:
         return _yaml_dump(existing)
     # Fallback: generate template with empty sections
     return _yaml_dump({
-        "studies": {},
         "device_types": {},
         "legacy_to_study": {},
         "techniques": {},
     })
+
+
+def generate_config_studies_yaml() -> str:
+    """Generate config-studies.yaml — canonical study definitions (v6).
+
+    Reads from existing config-studies.yaml if available, otherwise generates
+    from the _STUDIES hardcoded defaults.
+    """
+    path = _config_dir() / "config-studies.yaml"
+    existing = _load_yaml(path)
+    if existing:
+        return _yaml_dump(existing)
+    # Fallback: generate from hardcoded _STUDIES
+    return _yaml_dump({"studies": _STUDIES})
 
 
 def generate_config_instruments_yaml() -> str:

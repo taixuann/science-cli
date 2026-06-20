@@ -153,13 +153,14 @@ def _global_config_path() -> Path:
 
 
 def _modular_config_paths() -> dict[str, Path]:
-    """Return paths to the 4 modular config files.
+    """Return paths to the modular config files.
 
     Returns:
-        dict with keys: devices, instruments, grammar, template
+        dict with keys: devices, studies, instruments, grammar, template
     """
     d = _global_config_dir()
     return {
+        "studies": d / "config-studies.yaml",
         "devices": d / "config-devices.yaml",
         "instruments": d / "config-instruments.yaml",
         "grammar": d / "config-grammar.yaml",
@@ -259,6 +260,7 @@ def load_global_config() -> dict:
     # Collect all config files for cache invalidation
     config_files = [
         base_dir / "config.yaml",
+        base_dir / "config-studies.yaml",
         base_dir / "config-devices.yaml",
         base_dir / "config-instruments.yaml",
         base_dir / "config-grammar.yaml",
@@ -283,15 +285,21 @@ def load_global_config() -> dict:
             merged = _merge_dicts(merged, old_cfg)
             pass  # backward compat
 
-    # Layer 2: config-devices.yaml (studies + device types + techniques)
+    # Layer 2: config-devices.yaml (device types + legacy mapping + techniques)
     devices_path = base_dir / "config-devices.yaml"
     devices_cfg = _load_yaml(devices_path)
     if devices_cfg:
-        merged["studies"] = devices_cfg.get("studies", {})
         merged["device_types"] = devices_cfg.get("device_types", {})
         merged["legacy_to_study"] = devices_cfg.get("legacy_to_study", {})
         if "techniques" in devices_cfg:
             merged["techniques"] = devices_cfg["techniques"]
+
+    # Layer 2b: config-studies.yaml (canonical studies — overrides devices if present)
+    studies_path = base_dir / "config-studies.yaml"
+    if studies_path.exists():
+        studies_cfg = _load_yaml(studies_path)
+        if studies_cfg and "studies" in studies_cfg:
+            merged["studies"] = studies_cfg["studies"]
 
     # Layer 3: config-instruments.yaml
     instruments_path = base_dir / "config-instruments.yaml"

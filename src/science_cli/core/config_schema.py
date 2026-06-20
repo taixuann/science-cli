@@ -1,4 +1,4 @@
-"""YAML schema validators for the 4 modular config files.
+"""YAML schema validators for the modular config files.
 
 Each validator returns a list of error strings (empty = valid).
 """
@@ -24,13 +24,17 @@ _REQUIRED_GRAMMAR_PATTERN_FIELDS = {"id", "template", "description",
 _TEMPLATE_KEYS = {"templates"}
 _TEMPLATE_REQUIRED_TOP_FIELDS = {"font", "fontsize", "dpi", "figure_format"}
 
-_ALLOWED_DEVICES_TOP_KEYS = {"studies", "device_types", "legacy_to_study", "techniques"}
+_ALLOWED_DEVICES_TOP_KEYS = {"device_types", "legacy_to_study", "techniques"}
+
+_ALLOWED_STUDIES_TOP_KEYS = {"studies"}
 
 _ALLOWED_INSTRUMENTS_TOP_KEYS = {"instruments", "techniques", "devices"}
 
 _ALLOWED_GRAMMAR_TOP_KEYS = {"file_naming"}
 
 _ALLOWED_TEMPLATE_TOP_KEYS = {"templates"}
+
+_VALID_DATA_SHAPE_KINDS = {"waveform_2d", "spectrum_2d", "trace_2d", "image_2d"}
 
 
 def _check_type(value: Any, expected_type: type, path: str) -> list[str]:
@@ -51,7 +55,7 @@ def _check_unknown_keys(data: dict, allowed: set, path: str) -> list[str]:
 
 
 def validate_devices_config(data: dict) -> list[str]:
-    """Validate config-devices.yaml structure."""
+    """Validate config-devices.yaml structure (no studies — moved to config-studies.yaml)."""
     errors: list[str] = []
 
     errors.extend(_check_type(data, dict, "root"))
@@ -59,31 +63,6 @@ def validate_devices_config(data: dict) -> list[str]:
         return errors
 
     errors.extend(_check_unknown_keys(data, _ALLOWED_DEVICES_TOP_KEYS, "root"))
-
-    # Validate studies section
-    studies = data.get("studies", {})
-    if not isinstance(studies, dict):
-        errors.append("studies: expected dict")
-    else:
-        for tech_name, tech_studies in studies.items():
-            tech_path = f"studies.{tech_name}"
-            if not isinstance(tech_studies, dict):
-                errors.append(f"{tech_path}: expected dict")
-                continue
-            for study_name, study_cfg in tech_studies.items():
-                study_path = f"{tech_path}.{study_name}"
-                if not isinstance(study_cfg, dict):
-                    errors.append(f"{study_path}: expected dict")
-                    continue
-                errors.extend(_check_missing_keys(study_cfg, _REQUIRED_STUDY_FIELDS,
-                                                  study_path))
-                patterns = study_cfg.get("patterns")
-                if patterns is not None:
-                    errors.extend(_check_type(patterns, list, f"{study_path}.patterns"))
-                legacy_codes = study_cfg.get("legacy_codes")
-                if legacy_codes is not None:
-                    errors.extend(_check_type(legacy_codes, list,
-                                              f"{study_path}.legacy_codes"))
 
     # Validate device_types section
     device_types = data.get("device_types", {})
@@ -108,6 +87,96 @@ def validate_devices_config(data: dict) -> list[str]:
     legacy = data.get("legacy_to_study", {})
     if not isinstance(legacy, dict):
         errors.append("legacy_to_study: expected dict")
+
+    return errors
+
+
+def validate_studies_config(data: dict) -> list[str]:
+    """Validate config-studies.yaml structure.
+
+    Checks:
+        - Top-level ``studies`` key is a dict
+        - Each study has required fields (label, patterns, legacy_codes, instruments)
+        - ``data_shape`` (optional) has ``kind`` in VALID_DATA_SHAPE_KINDS and ``columns`` (list)
+        - ``device_overrides`` (optional) is a dict with ``add``/``exclude`` keys
+        - ``derived_metadata`` (optional) is a list of strings
+    """
+    errors: list[str] = []
+
+    errors.extend(_check_type(data, dict, "root"))
+    if not isinstance(data, dict):
+        return errors
+
+    errors.extend(_check_unknown_keys(data, _ALLOWED_STUDIES_TOP_KEYS, "root"))
+
+    # Validate studies section
+    studies = data.get("studies", {})
+    if not isinstance(studies, dict):
+        errors.append("studies: expected dict")
+        return errors
+
+    for tech_name, tech_studies in studies.items():
+        tech_path = f"studies.{tech_name}"
+        if not isinstance(tech_studies, dict):
+            errors.append(f"{tech_path}: expected dict")
+            continue
+        for study_name, study_cfg in tech_studies.items():
+            study_path = f"{tech_path}.{study_name}"
+            if not isinstance(study_cfg, dict):
+                errors.append(f"{study_path}: expected dict")
+                continue
+            errors.extend(_check_missing_keys(study_cfg, _REQUIRED_STUDY_FIELDS,
+                                              study_path))
+            patterns = study_cfg.get("patterns")
+            if patterns is not None:
+                errors.extend(_check_type(patterns, list, f"{study_path}.patterns"))
+            legacy_codes = study_cfg.get("legacy_codes")
+            if legacy_codes is not None:
+                errors.extend(_check_type(legacy_codes, list,
+                                          f"{study_path}.legacy_codes"))
+
+            # Validate data_shape (optional)
+            data_shape = study_cfg.get("data_shape")
+            if data_shape is not None:
+                if not isinstance(data_shape, dict):
+                    errors.append(f"{study_path}.data_shape: expected dict")
+                else:
+                    kind = data_shape.get("kind")
+                    if kind not in _VALID_DATA_SHAPE_KINDS:
+                        errors.append(
+                            f"{study_path}.data_shape.kind: unknown kind '{kind}' "
+                            f"(expected one of: {sorted(_VALID_DATA_SHAPE_KINDS)})"
+                        )
+                    columns = data_shape.get("columns")
+                    if not isinstance(columns, list):
+                        errors.append(f"{study_path}.data_shape.columns: expected list")
+                    units = data_shape.get("units")
+                    if units is not None and not isinstance(units, list):
+                        errors.append(f"{study_path}.data_shape.units: expected list")
+
+            # Validate device_overrides (optional)
+            device_overrides = study_cfg.get("device_overrides")
+            if device_overrides is not None:
+                if not isinstance(device_overrides, dict):
+                    errors.append(f"{study_path}.device_overrides: expected dict")
+                else:
+                    for dt_key, dt_val in device_overrides.items():
+                        do_path = f"{study_path}.device_overrides.{dt_key}"
+                        if not isinstance(dt_val, dict):
+                            errors.append(f"{do_path}: expected dict")
+                            continue
+                        for op_key in ("add", "exclude"):
+                            if op_key in dt_val:
+                                if not isinstance(dt_val[op_key], list):
+                                    errors.append(f"{do_path}.{op_key}: expected list")
+
+            # Validate derived_metadata (optional)
+            derived = study_cfg.get("derived_metadata")
+            if derived is not None:
+                if not isinstance(derived, list):
+                    errors.append(f"{study_path}.derived_metadata: expected list")
+                elif not all(isinstance(item, str) for item in derived):
+                    errors.append(f"{study_path}.derived_metadata: expected list of strings")
 
     return errors
 
@@ -214,11 +283,15 @@ def validate_all(data: dict) -> list[str]:
     """Run all validators on a merged config dict.
 
     Extracts each section from the merged dict and validates independently.
-    This avoids unknown-key false positives when all 4 configs are combined.
+    This avoids unknown-key false positives when multiple configs are combined.
     """
     errors: list[str] = []
 
-    if any(k in data for k in ("studies", "device_types", "legacy_to_study")):
+    if "studies" in data:
+        studies_section = {"studies": data["studies"]}
+        errors.extend(validate_studies_config(studies_section))
+
+    if any(k in data for k in ("device_types", "legacy_to_study")):
         devices_section = {k: v for k, v in data.items()
                            if k in _ALLOWED_DEVICES_TOP_KEYS}
         if devices_section:
