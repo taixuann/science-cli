@@ -680,9 +680,41 @@ def _plot_direct(files: list, rest_args: list) -> None:
 def _resolve_xy_columns(
     df, info: dict, technique: str = ""
 ) -> tuple:
+    """Resolve x/y columns from DataFrame, trying config-based resolution first.
+
+    Config-based resolution reads ``instrument_config.column_mapping`` from the
+    *info* dict (populated by the device-aware data loader).  Falls back to
+    hardcoded column-name heuristics when no config is available (legacy files
+    loaded without device config).
+
+    Returns:
+        Tuple ``(x_values, y_values, x_label, y_label)`` where labels are
+        column names suitable for axis labelling.
+    """
     import numpy as np
 
     xcol, ycol = "", ""
+
+    # ── Attempt 1: Config-based resolution via instrument_config ─────────
+    instrument_cfg = info.get("instrument_config", {})
+    column_mapping = instrument_cfg.get("column_mapping", {})
+    if column_mapping:
+        x_key = column_mapping.get("x", "")
+        y_key = column_mapping.get("y", "")
+        if x_key and y_key:
+            # After device-aware data loading, column names match the keys
+            # (e.g. ``time``, ``current``) — no further lookup needed.
+            if x_key in df.columns and y_key in df.columns:
+                current_sign = instrument_cfg.get("current_sign", 1)
+                x = df[x_key].values.astype(float)
+                y = df[y_key].values.astype(float)
+                if current_sign != 1 and current_sign is not None:
+                    y = y * current_sign
+
+                mask = ~(np.isnan(x) | np.isnan(y))
+                return x[mask], y[mask], x_key, y_key
+
+    # ── Attempt 2: Hardcoded column-name heuristics ──────────────────────
 
     if technique == "ec-ca":
         for candidate in (
@@ -769,6 +801,7 @@ def _resolve_xy_columns(
         if len(numeric) >= 2:
             xcol, ycol = numeric[0], numeric[1]
 
+    # ── Attempt 3: Generic fallback — first two numeric columns ─────────
     if not xcol or not ycol:
         numeric = [
             c
@@ -910,8 +943,15 @@ def _do_plot(
 
     out_dir = _get_results_dir(filepath)
     stem = Path(filepath).stem
-    if technique:
-        out_name = flags.get("n") or flags.get("name", f"{technique}_{stem}.pdf")
+    # Use study_name for output prefix if available, fall back to technique
+    prefix = ""
+    if study_name:
+        # Extract study name from "technique:study-name" format
+        prefix = study_name.split(":")[-1] if ":" in study_name else study_name
+    elif technique:
+        prefix = technique
+    if prefix:
+        out_name = flags.get("n") or flags.get("name", f"{prefix}_{stem}.pdf")
     else:
         out_name = flags.get("n") or flags.get("name", f"{stem}_plot.pdf")
     if not Path(out_name).suffix:
@@ -926,12 +966,17 @@ def _do_plot(
 
     from science_cli.core.manifest import emit_manifest
     from science_cli.core.project import get_current_project_path
+    # Use study-based technique detection, not the old filename-based one
+    manifest_tech = technique
+    if study_name:
+        from science_cli.core.config import resolve_technique_from_study
+        manifest_tech = resolve_technique_from_study(study_name) or technique
     emit_manifest(
         output_dir=out_dir,
         command=f"plot {filepath}",
         source_files=[filepath],
         output_files=[str(save_path)],
-        technique=_detect_technique(Path(filepath).name),
+        technique=manifest_tech,
         parameters=flags,
         project=get_current_project_path().name if get_current_project_path() else "",
     )
@@ -960,10 +1005,11 @@ def _do_overlap(
     if plotter is not None and plotter.overlay_fn.__name__ != '_fallback_overlay':
         plotter.overlay_fn(files, flags)
         return
-    _generic_overlay(files, flags, technique)
+    _generic_overlay(files, flags, technique, study_name=study_name)
 
 
-def _generic_overlay(files: list, flags: dict, technique: str = "") -> None:
+def _generic_overlay(files: list, flags: dict, technique: str = "",
+                     study_name: str = "") -> None:
     """Generic overlay fallback."""
     import matplotlib as mpl
     mpl.use("Agg")
@@ -1002,7 +1048,15 @@ def _generic_overlay(files: list, flags: dict, technique: str = "") -> None:
     _apply_figure_kw(ax, flags, "overlay")
 
     out_dir = _get_results_dir(files[0])
-    out_name = flags.get("n") or flags.get("name", f"{technique}_overlay.pdf" if technique else "overlay.pdf")
+    # Use study_name for output prefix if available, fall back to technique
+    prefix = ""
+    if study_name:
+        # Extract study name from "technique:study-name" format
+        prefix = study_name.split(":")[-1] if ":" in study_name else study_name
+    elif technique:
+        prefix = technique
+    overlay_name = f"{prefix}_overlay.pdf" if prefix else "overlay.pdf"
+    out_name = flags.get("n") or flags.get("name", overlay_name)
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name

@@ -39,6 +39,13 @@ studies:
               description: Sweep voltage range start/stop (V)
         keysight-b1500a:
           header_lines: 245
+          columns:
+            voltage: V1
+            current: I2
+          column_mapping:
+            x: voltage
+            y: current
+          current_sign: -1  # Keysight outputs negative current for bipolar switching
           metadata:
             set_voltage:
               method: parse
@@ -147,6 +154,10 @@ studies:
             time: Time
             voltage: MeasResult1_value
             current: MeasResult2_value
+          column_mapping:
+            x: time
+            y: current
+          current_sign: -1  # Keysight outputs negative current for bipolar switching
           metadata:
             compliance:
               method: parse
@@ -203,6 +214,10 @@ studies:
             time: Time
             voltage: MeasResult1_value
             current: MeasResult2_value
+          column_mapping:
+            x: time
+            y: current
+          current_sign: -1  # Keysight outputs negative current for bipolar switching
       plot: {}
 
     pulse-endurance:
@@ -250,6 +265,10 @@ studies:
             time: Time
             voltage: MeasResult1_value
             current: MeasResult2_value
+          column_mapping:
+            x: time
+            y: current
+          current_sign: -1  # Keysight outputs negative current for bipolar switching
       plot:
         figure:
           figsize: [3.46, 2.75]
