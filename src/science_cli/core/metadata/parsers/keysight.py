@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import re
 
+import pandas as pd
+
 
 def _find_line(lines: list[str], prefix: str) -> str | None:
     """Find first line containing *prefix* (case-insensitive)."""
