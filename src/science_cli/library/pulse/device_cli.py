@@ -71,8 +71,8 @@ def cmd_endurance(args):
 def cmd_list(args):
     """List pulse files from protocol.yaml with metadata."""
     from science_cli.core.protocol import get_pulse_steps_with_metadata
-    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
-    from science_cli.core.fzf_columns import STUDY_COLUMN_REGISTRY
+    from science_cli.core.fzf.display import build_fzf_display, fzf_select
+    from science_cli.core.fzf.columns import STUDY_COLUMN_REGISTRY
 
     project_root = _resolve_project_root()
     if project_root is None:
@@ -176,7 +176,7 @@ def cmd_overlay(args):
         if not studies:
             console.print("[yellow]No pulse studies found in protocol.yaml[/yellow]")
             return
-        from science_cli.core.fzf_utils import fzf_select
+        from science_cli.core.fzf.display import fzf_select
         selected = fzf_select(studies, prompt="Select study to overlay:")
         if not selected:
             return
@@ -199,7 +199,7 @@ def cmd_overlay(args):
     # Select grouping variable
     group_by = getattr(args, "group_by", "") or ""
     if not group_by:
-        from science_cli.core.fzf_utils import fzf_select
+        from science_cli.core.fzf.display import fzf_select
         sorted_keys = sorted(all_keys)
         selected = fzf_select(sorted_keys, prompt="Group by variable:")
         if not selected:

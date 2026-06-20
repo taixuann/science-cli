@@ -212,8 +212,8 @@ def analyze_handler(args: list) -> None:
         return
 
     # Default to fzf file selection, then analyze
-    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
-    from science_cli.core.fzf_columns import status_badge_for_file, get_step_columns
+    from science_cli.core.fzf.display import fzf_select, build_fzf_display
+    from science_cli.core.fzf.columns import status_badge_for_file, get_step_columns
     from science_cli.core.paths import ProjectPaths
     from science_cli.cli.commands.results_status import load_status
     from science_cli.core.project import get_current_project_path
@@ -726,7 +726,7 @@ def _analyze_with_technique(
     vs non-volatile pulse endurance analysis).
     """
     from science_cli.core.project import get_current_project_path
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
 
     proj = get_current_project_path()
     if not proj:
@@ -744,8 +744,8 @@ def _analyze_with_technique(
         return
 
     # Build study-aware display lines
-    from science_cli.core.fzf_utils import build_fzf_display
-    from science_cli.core.fzf_columns import get_step_columns
+    from science_cli.core.fzf.display import build_fzf_display
+    from science_cli.core.fzf.columns import get_step_columns
     from science_cli.core.paths import ProjectPaths
     paths = ProjectPaths(proj)
     file_step_map: dict[str, tuple[str, str, str]] = {}

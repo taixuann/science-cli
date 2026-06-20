@@ -334,7 +334,7 @@ def _add_data(args: list) -> None:
             proto_name = ""
 
     if not proto_name:
-        from science_cli.core.fzf_utils import fzf_select as fzf_proto
+        from science_cli.core.fzf.display import fzf_select as fzf_proto
         proto_names = [p.stem for p in proto_yamls]
         proto_choice = fzf_proto(proto_names, prompt="Select protocol:", multi=False)
         if not proto_choice:
@@ -362,7 +362,7 @@ def _add_data(args: list) -> None:
             assigned_files[fname] = s["name"]
 
     # Build fzf display items with assignment markers
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
 
     item_names = [f.name for f in files]
 
@@ -374,7 +374,7 @@ def _add_data(args: list) -> None:
             step = assigned_files[name]
             assigned_grouped.setdefault(step, []).append(name)
 
-    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf.display import build_fzf_display
     display_items: list[str] = []
     # Unassigned files (use "-" placeholder step)
     for name in unassigned:

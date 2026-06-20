@@ -1437,7 +1437,7 @@ def build_fzf_line(target: dict, protocol: str = "") -> str:
     Format: ``r{row}c{col}  {material}  {sweep_type}  {file}``
     (protocol is shown in the fzf prompt instead)
     """
-    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf.display import build_fzf_display
     detail = (
         f"r{target['row']}c{target['col']}  "
         f"{target['material_key']:<25s}  "

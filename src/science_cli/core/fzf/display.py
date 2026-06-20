@@ -242,7 +242,7 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     effective_meta = metadata
     effective_width = width_meta
     if study_name and metadata:
-        from science_cli.core.fzf_columns import STUDY_COLUMN_REGISTRY
+        from science_cli.core.fzf.columns import STUDY_COLUMN_REGISTRY
         if study_name in STUDY_COLUMN_REGISTRY:
             cols = STUDY_COLUMN_REGISTRY[study_name]
             effective_meta = {k: metadata[k] for k in cols if k in metadata}

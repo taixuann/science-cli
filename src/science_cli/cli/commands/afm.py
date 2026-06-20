@@ -81,7 +81,7 @@ def _afm_fzf_pick_multi(prompt: str = "Select AFM file(s)") -> list[str]:
         console.print("[yellow]No AFM files found.[/yellow]")
         return []
 
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
     from science_cli.core.paths import ProjectPaths
     from science_cli.core.project import get_current_project_path
     from science_cli.core.session import load_session
@@ -121,7 +121,7 @@ def _afm_fzf_pick_multi(prompt: str = "Select AFM file(s)") -> list[str]:
         display_files = files
         show_proto = True
 
-    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf.display import build_fzf_display
     display_items = []
     for f in display_files:
         name = f.name

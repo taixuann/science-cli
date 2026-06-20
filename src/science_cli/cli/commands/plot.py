@@ -413,7 +413,7 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         console.print("[yellow]No files in data/raw/[/yellow]")
         return
 
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
     from science_cli.core.paths import ProjectPaths
     paths = ProjectPaths(proj)
     file_step_map: dict[str, tuple[str, str, str]] = {}
@@ -445,8 +445,8 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         display_files = files
         show_proto = True
 
-    from science_cli.core.fzf_utils import build_fzf_display
-    from science_cli.core.fzf_columns import status_badge_for_file, get_step_columns
+    from science_cli.core.fzf.display import build_fzf_display
+    from science_cli.core.fzf.columns import status_badge_for_file, get_step_columns
     from science_cli.cli.commands.results_status import load_status
     status = load_status(proj)
     display_items: list[str] = []

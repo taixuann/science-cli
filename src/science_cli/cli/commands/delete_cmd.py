@@ -228,7 +228,7 @@ def _delete_data(args: list) -> None:
 
     to_remove: list[tuple[int, int]] = []  # (step_idx, file_idx)
 
-    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+    from science_cli.core.fzf.display import build_fzf_display, fzf_select
     pname = safe_name  # protocol name is available as safe_name
     items = [build_fzf_display(pname, step_name, fname, show_protocol=False) for step_name, fname, _ in all_entries]
     selected = fzf_select(

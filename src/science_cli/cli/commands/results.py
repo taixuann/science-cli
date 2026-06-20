@@ -11,7 +11,7 @@ from science_cli.cli.commands.results_status import (
     load_status,
     save_status,
 )
-from science_cli.core.fzf_columns import status_badge_for_file
+from science_cli.core.fzf.columns import status_badge_for_file
 
 console = Console()
 
@@ -86,7 +86,7 @@ def results_handler(args: list) -> None:
     if not result_files:
         console.print("[yellow]No result files found.[/yellow]")
         return
-    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+    from science_cli.core.fzf.display import build_fzf_display, fzf_select
     from science_cli.core.project import get_current_project_path as _proj
     status = load_status(_proj())
     file_step_map = _build_file_step_map(_proj()) if _proj() else {}
@@ -134,7 +134,7 @@ def _results_status(args: list) -> None:
     """Assign status tag to result files via fzf multi-select."""
     from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
-    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    from science_cli.core.fzf.display import fzf_select, build_fzf_display
 
     # Parse --status <tag> from args
     tag = None
@@ -232,7 +232,7 @@ def _results_move(args: list) -> None:
     """Select results via fzf and create symlinks in project/results/."""
     from science_cli.core.project import get_current_project_path
     from science_cli.core.paths import ProjectPaths
-    from science_cli.core.fzf_utils import fzf_select, build_fzf_display
+    from science_cli.core.fzf.display import fzf_select, build_fzf_display
 
     proj = get_current_project_path()
     if not proj:

@@ -405,7 +405,7 @@ def _edit_data(args: list) -> None:
             proto_name = ""
 
     if not proto_name:
-        from science_cli.core.fzf_utils import fzf_select
+        from science_cli.core.fzf.display import fzf_select
         proto_names = [p.stem for p in proto_yamls]
         choice = fzf_select(proto_names, prompt="Select protocol:", multi=False)
         if not choice:
@@ -434,7 +434,7 @@ def _edit_data(args: list) -> None:
         return
 
     # fzf multi-select: column format via build_fzf_display
-    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+    from science_cli.core.fzf.display import build_fzf_display, fzf_select
     display_items = [build_fzf_display(proto_name, sn, fn, show_protocol=False) for sn, fn in all_files]
     selected_displays = fzf_select(
         display_items,

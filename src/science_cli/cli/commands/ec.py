@@ -54,7 +54,7 @@ def _ec_fzf_pick_multi(prompt: str = "Select Electrochemistry file(s)") -> list[
         console.print("[yellow]No Electrochemistry files found.[/yellow]")
         return []
 
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
 
     # Build file-to-step mapping from all protocols
     from science_cli.core.paths import ProjectPaths
@@ -98,7 +98,7 @@ def _ec_fzf_pick_multi(prompt: str = "Select Electrochemistry file(s)") -> list[
         show_proto = True
 
     # Build display items with step/protocol info
-    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf.display import build_fzf_display
     display_items = []
     for f in display_files:
         name = f.name

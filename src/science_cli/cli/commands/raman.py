@@ -81,7 +81,7 @@ def _raman_fzf_pick_single(prompt: str = "Select Raman file") -> str | None:
         console.print("[yellow]No Raman files found.[/yellow]")
         return None
 
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
 
     items = []
     for f in files:
@@ -118,7 +118,7 @@ def _raman_fzf_pick_multi(prompt: str = "Select Raman file(s)") -> list[str]:
         console.print("[yellow]No Raman files found.[/yellow]")
         return []
 
-    from science_cli.core.fzf_utils import fzf_select
+    from science_cli.core.fzf.display import fzf_select
 
     # Build file-to-step mapping from all protocols
     from science_cli.core.paths import ProjectPaths
@@ -162,7 +162,7 @@ def _raman_fzf_pick_multi(prompt: str = "Select Raman file(s)") -> list[str]:
         show_proto = True
 
     # Build display items with metadata + step/protocol info
-    from science_cli.core.fzf_utils import build_fzf_display
+    from science_cli.core.fzf.display import build_fzf_display
     display_items = []
     for f in display_files:
         name = f.name

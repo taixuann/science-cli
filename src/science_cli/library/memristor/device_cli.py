@@ -1172,7 +1172,7 @@ def cmd_add_pattern(args: argparse.Namespace) -> None:
 
 def cmd_add_fzf(args: argparse.Namespace) -> None:
     """Interactive fzf file picker — scans all step subdirs recursively."""
-    from science_cli.core.fzf_utils import build_fzf_display, fzf_select
+    from science_cli.core.fzf.display import build_fzf_display, fzf_select
 
     pdir = _resolve_protocol_dir(args)
     if not _validate_protocol_dir(pdir):
@@ -2325,7 +2325,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
     all_flags.update(extra_flags)
 
     if use_fzf:
-        from science_cli.core.fzf_utils import fzf_select
+        from science_cli.core.fzf.display import fzf_select
 
         display_map: dict[str, dict] = {}
         display_lines: list[str] = []
@@ -2399,7 +2399,7 @@ def cmd_plot(args: argparse.Namespace) -> None:
             return
 
         if len(unique_cells) > 1:
-            from science_cli.core.fzf_utils import fzf_select
+            from science_cli.core.fzf.display import fzf_select
             cell_displays = [f"r{row}c{col} ({mat})" for row, col, mat in unique_cells]
             selected = fzf_select(cell_displays, prompt="Select cell for multi-cycle highlighted plot >", multi=False)
             if not selected:
