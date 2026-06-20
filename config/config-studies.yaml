@@ -213,6 +213,8 @@ studies:
           xlabel: "Time (µs)"
           ylabel: "Current (A)"
           ylabel2: "Voltage (V)"
+          ycolor: "#CC0000"     # match current series color
+          y2color: "#0055CC"    # match voltage series color
         filter:
           field: voltage
           min: 0.05

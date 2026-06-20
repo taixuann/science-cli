@@ -108,7 +108,15 @@ def _apply_axis_settings(ax, cfg: dict, ax2=None) -> None:
     if axis_cfg.get("ylabel"):
         ax.set_ylabel(axis_cfg["ylabel"])
     if ax2 and axis_cfg.get("ylabel2"):
-        ax2.set_ylabel(axis_cfg["ylabel2"])
+        ax2.set_ylabel(axis_cfg["ylabel2"], color=axis_cfg.get("y2color"))
+    if axis_cfg.get("ycolor"):
+        ax.tick_params(axis="y", colors=axis_cfg["ycolor"])
+        ax.spines["left"].set_color(axis_cfg["ycolor"])
+        ax.yaxis.label.set_color(axis_cfg["ycolor"])
+    if ax2 and axis_cfg.get("y2color"):
+        ax2.tick_params(axis="y", colors=axis_cfg["y2color"])
+        ax2.spines["right"].set_color(axis_cfg["y2color"])
+        ax2.yaxis.label.set_color(axis_cfg["y2color"])
 
     axes_cfg = cfg.get("axes", {})
     if axes_cfg.get("xscale"):
