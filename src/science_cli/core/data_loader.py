@@ -54,6 +54,25 @@ def load_data_file(
         except ImportError:
             pass
 
+    # Auto-detect instrument from filename when study has multiple instruments
+    # The universal grammar embeds instrument in device_id:
+    #   DDMMYY-HHMMSS_instrument_device-id_study_remarks_flags_count.ext
+    if study_name and not device:
+        try:
+            from science_cli.core.grammar import parse_filename
+            parsed = parse_filename(path.name)
+            if parsed:
+                device_id = parsed.get("device_id", "")
+                from science_cli.core.config import get_study_config
+                study_cfg = get_study_config(study_name)
+                if study_cfg:
+                    for inst_name in study_cfg.get("instruments", {}):
+                        if device_id.lower().startswith(inst_name.lower()):
+                            device = inst_name
+                            break
+        except (ImportError, Exception):
+            pass
+
     # Try device-aware loading if technique + device or study_name provided
     device_cfg = _resolve_device_config(technique, device, study_name)
     if device_cfg:

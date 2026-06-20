@@ -184,12 +184,21 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
     sign = float(cfg.get("current_sign", 1))
 
     # Apply filter (e.g. voltage > 0.05 for stp-decay)
+    # Resolve filter field through column mapping if needed
     filter_cfg = cfg.get("filter")
     if isinstance(filter_cfg, dict):
         field = filter_cfg.get("field")
         min_val = filter_cfg.get("min")
-        if field and min_val is not None and field in df.columns:
-            df = df[df[field].astype(float) > float(min_val)]
+        if field and min_val is not None:
+            field_series = _get_column(df, field)
+            # Fallback: resolve through instrument config's column mapping
+            if field_series is None and _info:
+                inst_cols = _info.get("instrument_config", {}).get("columns", {})
+                if field in inst_cols:
+                    field_series = _get_column(df, inst_cols[field])
+            if field_series is not None:
+                mask = field_series.astype(float) > float(min_val)
+                df = df[mask].copy()
 
     columns = cfg.get("columns", {})
     x_col = columns.get("x")
