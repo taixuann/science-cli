@@ -5,15 +5,17 @@ Config resolution order (lowest → highest priority):
     0. Hardcoded defaults (config_defaults.py data)
     1. Old config.yaml (if exists — backward compat)
     2. config-devices.yaml (studies + device types)
-    3. config-instruments.yaml (instrument registry)
-    4. config-grammar.yaml (filename grammar)
-    5. config-template.yaml (theme templates)
-    6. Per-project config (sci-config.yaml)
-    7. Per-protocol grammar (protocol-level)
+    3. config-instruments.yaml (instrument registry + filename_patterns)
+    4. config-template.yaml (theme templates)
+    5. Per-project config (sci-config.yaml)
+    6. Per-protocol grammar (protocol-level)
 
 All techniques sections (old model) remain backward-compat shims that fall
 back to module-level _DEFAULT_* constants if no old config.yaml provides them.
 New study-based accessors use the ``studies`` key from modular config files.
+
+Grammar patterns now live in per-instrument ``filename_patterns`` blocks in
+config-instruments.yaml (Phase 3). The standalone config-grammar.yaml is deleted.
 """
 
 from __future__ import annotations
@@ -156,14 +158,13 @@ def _modular_config_paths() -> dict[str, Path]:
     """Return paths to the modular config files.
 
     Returns:
-        dict with keys: devices, studies, instruments, grammar, template
+        dict with keys: devices, studies, instruments, template
     """
     d = _global_config_dir()
     return {
         "studies": d / "config-studies.yaml",
         "devices": d / "config-devices.yaml",
         "instruments": d / "config-instruments.yaml",
-        "grammar": d / "config-grammar.yaml",
         "template": d / "config-template.yaml",
     }
 
@@ -219,8 +220,16 @@ def _get_hardcoded_defaults() -> dict:
     This is Layer 0 — always present, always the lowest priority.
     Studies, device_types, and legacy_to_study are now empty here;
     they come from config-devices.yaml (Layer 2).
+
+    Grammar patterns are now aggregated from per-instrument filename_patterns
+    in _INSTRUMENTS (Phase 3).
     """
-    from science_cli.core.config_defaults import _INSTRUMENTS, _GRAMMAR  # noqa: I001
+    from science_cli.core.config_defaults import _INSTRUMENTS  # noqa: I001
+
+    # Build file_naming patterns from per-instrument filename_patterns
+    all_patterns: list[dict] = []
+    for inst_cfg in _INSTRUMENTS.values():
+        all_patterns.extend(inst_cfg.get("filename_patterns", []))
 
     return {
         "projects_root": _DEFAULT_PROJECTS_ROOT,
@@ -229,7 +238,7 @@ def _get_hardcoded_defaults() -> dict:
         "device_types": {},
         "legacy_to_study": {},
         "instruments": dict(_INSTRUMENTS),
-        "file_naming": dict(_GRAMMAR.get("file_naming", {})),
+        "file_naming": {"separator": "_", "patterns": all_patterns},
         "defaults": {},
         "templates": {
             "publication-nature": {"font": "Helvetica", "fontsize": 7, "dpi": 300},
@@ -248,9 +257,12 @@ def load_global_config() -> dict:
         0. Hardcoded defaults
         1. Old config.yaml (if exists — backward compat)
         2. config-devices.yaml (studies + device types)
-        3. config-instruments.yaml (instrument registry)
-        4. config-grammar.yaml (filename grammar)
-        5. config-template.yaml (theme templates)
+        3. config-instruments.yaml (instrument registry + filename_patterns)
+        4. config-template.yaml (theme templates)
+
+    Grammar patterns are aggregated from per-instrument filename_patterns
+    in the instruments section (Phase 3). The standalone config-grammar.yaml
+    is no longer used.
 
     Cached until file mtimes change.
     """
@@ -263,7 +275,6 @@ def load_global_config() -> dict:
         base_dir / "config-studies.yaml",
         base_dir / "config-devices.yaml",
         base_dir / "config-instruments.yaml",
-        base_dir / "config-grammar.yaml",
         base_dir / "config-template.yaml",
     ]
     tech_dir = _technique_configs_dir()
@@ -301,19 +312,22 @@ def load_global_config() -> dict:
         if studies_cfg and "studies" in studies_cfg:
             merged["studies"] = studies_cfg["studies"]
 
-    # Layer 3: config-instruments.yaml
+    # Layer 3: config-instruments.yaml (includes filename_patterns)
     instruments_path = base_dir / "config-instruments.yaml"
     instr_cfg = _load_yaml(instruments_path)
     if instr_cfg:
         merged["instruments"] = instr_cfg.get("instruments", {})
 
-    # Layer 4: config-grammar.yaml
-    grammar_path = base_dir / "config-grammar.yaml"
-    grammar_cfg = _load_yaml(grammar_path)
-    if grammar_cfg:
-        merged["file_naming"] = grammar_cfg.get("file_naming", {})
+    # Rebuild file_naming from instruments (grammar patterns live per-instrument)
+    instruments = merged.get("instruments", {})
+    all_patterns: list[dict] = []
+    for inst_cfg in instruments.values():
+        if isinstance(inst_cfg, dict):
+            all_patterns.extend(inst_cfg.get("filename_patterns", []))
+    if all_patterns:
+        merged["file_naming"] = {"separator": "_", "patterns": all_patterns}
 
-    # Layer 5: config-template.yaml
+    # Layer 4: config-template.yaml
     template_path = base_dir / "config-template.yaml"
     template_cfg = _load_yaml(template_path)
     if template_cfg:
@@ -650,6 +664,9 @@ def get_file_naming_patterns(project_root: Path | None = None) -> list[dict]:
 def get_file_naming_grammar(project_root: Path | None = None) -> dict:
     """Return the file naming grammar configuration.
 
+    Grammar patterns are now aggregated from per-instrument filename_patterns
+    in the instruments section (Phase 3).
+
     Returns dict with keys: separator, patterns (list of pattern dicts).
     Each pattern dict has: template, description, regex, fields.
     Falls back to empty dict with no patterns if not configured.
@@ -660,6 +677,40 @@ def get_file_naming_grammar(project_root: Path | None = None) -> dict:
         "separator": "_",  # HARDCODED — never configurable
         "patterns": naming.get("patterns", []),
     }
+
+
+def get_instrument_grammar(instrument_name: str) -> list[dict]:
+    """Return filename_patterns for a specific instrument.
+
+    Reads from ``instruments.<instrument_name>.filename_patterns`` in the
+    merged config. Returns an empty list if the instrument or patterns
+    are not found.
+
+    Args:
+        instrument_name: Instrument key (e.g. ``"keysight-b1500a"``).
+    """
+    config = get_merged_config()
+    instruments = config.get("instruments", {})
+    inst_cfg = instruments.get(instrument_name, {})
+    if isinstance(inst_cfg, dict):
+        return inst_cfg.get("filename_patterns", [])
+    return []
+
+
+def get_all_instrument_grammars() -> dict[str, list[dict]]:
+    """Return filename_patterns for all instruments.
+
+    Returns a dict mapping instrument name → list of pattern dicts.
+    """
+    config = get_merged_config()
+    instruments = config.get("instruments", {})
+    result: dict[str, list[dict]] = {}
+    for name, inst_cfg in instruments.items():
+        if isinstance(inst_cfg, dict):
+            patterns = inst_cfg.get("filename_patterns", [])
+            if patterns:
+                result[name] = patterns
+    return result
 
 
 def get_device_config_detail(

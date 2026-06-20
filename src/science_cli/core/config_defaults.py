@@ -4,11 +4,11 @@ Each function returns a YAML string for one config file:
     - generate_config_devices_yaml()  → config-devices.yaml (device types + legacy)
     - generate_config_studies_yaml()  → config-studies.yaml (study definitions)
     - generate_config_instruments_yaml() → config-instruments.yaml (instrument registry)
-    - generate_config_grammar_yaml()  → config-grammar.yaml (filename naming grammar)
     - generate_config_template_yaml() → config-template.yaml (theme templates)
 
 Data for device_types/legacy_to_study now lives in config-devices.yaml.
 Data for studies now lives in config-studies.yaml.
+Grammar patterns now live in config-instruments.yaml (per-instrument filename_patterns).
 Generation functions read from existing config files when available.
 """
 
@@ -34,6 +34,32 @@ _INSTRUMENTS: dict[str, dict] = {
             "encoding": "utf-8",
             "columns": {"voltage": "V1", "current": "I2"},
         },
+        "filename_patterns": [
+            {
+                "id": "rNcN",
+                "template": "{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}",
+                "description": "Standard rNcN convention (rectangular crossbar)",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$",
+            },
+            {
+                "id": "bN-tN",
+                "template": "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}",
+                "description": "Bottom/top crossbar convention",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$",
+            },
+            {
+                "id": "rN-cN-iv",
+                "template": "{date_code}_{material}_iv-sweep_{matrix}_{suffix}.{ext}",
+                "description": "rN-cN convention (1-indexed, hyphen) for iv-sweep data",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<technique>[A-Za-z0-9/-]+)_(?P<matrix>r\d+-c\d+)_(?P<suffix>\d+)\.(?P<ext>\w+)$",
+            },
+            {
+                "id": "rN-cN-stp-decay",
+                "template": "{date_code}_{material}_r{row}-c{col}_stp-decay_{suffix}{tag?}.{ext}",
+                "description": "STP decay: 150626_cu-c-pda(q5)-ito_r5-c2_stp-decay_041_important.csv",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<matrix>r\d+-c\d+)_(?P<technique>stp-decay)_(?P<suffix>\d+)(?:_(?P<tag>[^_]+))?\.(?P<ext>\w+)$",
+            },
+        ],
     },
     "keithley-2400": {
         "label": "Keithley 2400 SourceMeter",
@@ -46,6 +72,26 @@ _INSTRUMENTS: dict[str, dict] = {
             "columns": {"voltage": "Untitled", "current": "Untitled 1",
                         "time": "Untitled 2"},
         },
+        "filename_patterns": [
+            {
+                "id": "rNcN",
+                "template": "{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}",
+                "description": "Standard rNcN convention (rectangular crossbar)",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$",
+            },
+            {
+                "id": "bN-tN",
+                "template": "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}",
+                "description": "Bottom/top crossbar convention",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?(?:_(?P<suffix>\d+))?\.\w+$",
+            },
+            {
+                "id": "rN-cN-iv",
+                "template": "{date_code}_{material}_iv-sweep_{matrix}_{suffix}.{ext}",
+                "description": "rN-cN convention (1-indexed, hyphen) for iv-sweep data",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<technique>[A-Za-z0-9/-]+)_(?P<matrix>r\d+-c\d+)_(?P<suffix>\d+)\.(?P<ext>\w+)$",
+            },
+        ],
     },
     "autolab-usth": {
         "label": "Autolab USTH (CV deposition)",
@@ -53,6 +99,20 @@ _INSTRUMENTS: dict[str, dict] = {
         "type": "potentiostat",
         "techniques": ["ec-cv", "ec-ca", "ec-eis"],
         "parsing": {},
+        "filename_patterns": [
+            {
+                "id": "cv-deposition",
+                "template": "{date_code}_{material}_cv-deposition{suffix?}.{ext}",
+                "description": "CV deposition (Autolab): 110526_material_cv-deposition[_suffix].txt",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>cv-deposition)(?:_(?P<suffix>[^_]+))?\.\w+$",
+            },
+            {
+                "id": "ca-doping",
+                "template": "{date_code}_{material}_ca-doping{suffix?}.{ext}",
+                "description": "CA doping (Autolab): 110526_material_ca-doping[_suffix].txt",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>ca-doping)(?:_(?P<suffix>[^_]+))?\.\w+$",
+            },
+        ],
     },
     "horiba-usth": {
         "label": "Horiba LabRAM HR Evolution (USTH)",
@@ -64,6 +124,14 @@ _INSTRUMENTS: dict[str, dict] = {
             "encoding": "latin1",
             "names": ["shift", "intensity"],
         },
+        "filename_patterns": [
+            {
+                "id": "raman-spectrum",
+                "template": "{date_code}_{material}_raman[-sers]_{suffix}.{ext}",
+                "description": "Raman/SERS spectrum (Horiba USTH): 260526_PDA(q)-ITO_raman-sers_01.txt",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>raman(?:-sers)?)(?:_(?P<suffix>\d+))?\.\w+$",
+            },
+        ],
     },
     "spectrometer-iop": {
         "label": "UV-Vis Spectrometer (IOP Hanoi) — vs-770st",
@@ -75,6 +143,14 @@ _INSTRUMENTS: dict[str, dict] = {
             "encoding": "latin1",
             "columns": {"wavelength": "Wavelength nm.", "transmittance": "T%"},
         },
+        "filename_patterns": [
+            {
+                "id": "uv-vis",
+                "template": "{date_code}_{material}_uv-vis.{ext}",
+                "description": "UV-Vis transmittance (IOP Hanoi): 280526_PDA(q)-ITO_uv-vis.txt",
+                "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>uv-vis)\.\w+$",
+            },
+        ],
     },
 }
 
@@ -198,53 +274,71 @@ _STUDIES: dict[str, dict] = {
 }
 
 
-# ── config-grammar.yaml data ─────────────────────────────────────────
-
+# ── Hardcoded grammar fallback patterns ──────────────────────────────
+# Used when no config files exist. These mirror the per-instrument
+# filename_patterns from config-instruments.yaml / _INSTRUMENTS.
+# The real source of truth is now _INSTRUMENTS[inst]["filename_patterns"].
 
 _GRAMMAR_PATTERNS: list[dict] = [
     {
         "id": "rNcN",
-        "template": "{date_code}_{material}{batch?}_{matrix}_{study}_{type?}_{suffix?}",
+        "template": "{date_code}_{material}{batch?}_{matrix}_{technique}_{type?}_{suffix?}",
         "description": "Standard rNcN convention (rectangular crossbar)",
         "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?"
-                 r"_(?P<matrix>r\d+c\d+)_(?P<study>[^_]+)(?:_(?P<type>[^_]+))?"
+                 r"_(?P<matrix>r\d+c\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?"
                  r"(?:_(?P<suffix>\d+))?\.\w+$",
-        "fields": ["date_code", "material", "batch", "matrix", "study", "type", "suffix"],
     },
     {
         "id": "bN-tN",
-        "template": "{date_code}_{material}{batch?}_b{bot}-t{top}_{study}_{type?}_{suffix?}",
+        "template": "{date_code}_{material}{batch?}_b{bot}-t{top}_{technique}_{type?}_{suffix?}",
         "description": "Bottom/top crossbar convention",
         "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+?)(?:_(?P<batch>\d+))?"
-                 r"_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<study>[^_]+)(?:_(?P<type>[^_]+))?"
+                 r"_b(?P<bot>\d+)-t(?P<top>\d+)_(?P<technique>[^_]+)(?:_(?P<type>[^_]+))?"
                  r"(?:_(?P<suffix>\d+))?\.\w+$",
-        "fields": ["date_code", "material", "batch", "bot", "top", "study", "type", "suffix"],
     },
     {
-        "id": "basic",
-        "template": "{date_code}_{material}_{study}_{suffix?}",
-        "description": "Basic naming (no matrix coordinates)",
-        "regex": r"^(?P<date_code>\d{6})_(?P<material>[^_]+)_(?P<study>[^_]+)"
+        "id": "rN-cN-iv",
+        "template": "{date_code}_{material}_iv-sweep_{matrix}_{suffix}.{ext}",
+        "description": "rN-cN convention (1-indexed, hyphen) for iv-sweep data",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)_(?P<technique>[A-Za-z0-9/-]+)"
+                 r"_(?P<matrix>r\d+-c\d+)_(?P<suffix>\d+)\.(?P<ext>\w+)$",
+    },
+    {
+        "id": "cv-deposition",
+        "template": "{date_code}_{material}_cv-deposition{suffix?}.{ext}",
+        "description": "CV deposition (Autolab)",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>cv-deposition)"
+                 r"(?:_(?P<suffix>[^_]+))?\.\w+$",
+    },
+    {
+        "id": "ca-doping",
+        "template": "{date_code}_{material}_ca-doping{suffix?}.{ext}",
+        "description": "CA doping (Autolab)",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>ca-doping)"
+                 r"(?:_(?P<suffix>[^_]+))?\.\w+$",
+    },
+    {
+        "id": "raman-spectrum",
+        "template": "{date_code}_{material}_raman[-sers]_{suffix}.{ext}",
+        "description": "Raman/SERS spectrum (Horiba USTH)",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>raman(?:-sers)?)"
                  r"(?:_(?P<suffix>\d+))?\.\w+$",
-        "fields": ["date_code", "material", "study", "suffix"],
+    },
+    {
+        "id": "uv-vis",
+        "template": "{date_code}_{material}_uv-vis.{ext}",
+        "description": "UV-Vis transmittance (IOP Hanoi)",
+        "regex": r"^(?P<date_code>\d{6})_(?P<material>.+?)_(?P<technique>uv-vis)\.\w+$",
     },
     {
         "id": "rN-cN-stp-decay",
         "template": "{date_code}_{material}_r{row}-c{col}_stp-decay_{suffix}{tag?}.{ext}",
         "description": "STP decay: 150626_cu-c-pda(q5)-ito_r5-c2_stp-decay_041_important.csv",
         "regex": r"^(?P<date_code>\d{6})_(?P<material>[-A-Za-z0-9/()]+)"
-                 r"_(?P<matrix>r\d+-c\d+)_(?P<study>stp-decay)"
+                 r"_(?P<matrix>r\d+-c\d+)_(?P<technique>stp-decay)"
                  r"_(?P<suffix>\d+)(?:_(?P<tag>[^_]+))?\.(?P<ext>\w+)$",
-        "fields": ["date_code", "material", "matrix", "study", "suffix", "tag", "ext"],
     },
 ]
-
-_GRAMMAR: dict = {
-    "file_naming": {
-        "separator": "_",
-        "patterns": _GRAMMAR_PATTERNS,
-    },
-}
 
 
 # ── config-template.yaml data ────────────────────────────────────────
@@ -405,11 +499,6 @@ def generate_config_instruments_yaml() -> str:
     return _yaml_dump({
         "instruments": _INSTRUMENTS,
     })
-
-
-def generate_config_grammar_yaml() -> str:
-    """Generate config-grammar.yaml — filename naming grammar patterns."""
-    return _yaml_dump(_GRAMMAR)
 
 
 def generate_config_template_yaml() -> str:

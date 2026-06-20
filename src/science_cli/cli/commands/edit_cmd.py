@@ -612,14 +612,14 @@ def _edit_device(args: list) -> None:
 
 
 def _edit_grammar_cmd(args: list) -> None:
-    """Edit grammar patterns — opens config-grammar.yaml in $EDITOR."""
+    """Edit grammar patterns — now lives in config-instruments.yaml per-instrument."""
     config_dir = Path.home() / ".config" / "science-cli"
-    path = config_dir / "config-grammar.yaml"
+    path = config_dir / "config-instruments.yaml"
     if not path.exists():
-        from science_cli.core.config_defaults import generate_config_grammar_yaml
+        from science_cli.core.config_defaults import generate_config_instruments_yaml
         config_dir.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            f.write(generate_config_grammar_yaml())
+            f.write(generate_config_instruments_yaml())
     editor = os.environ.get("EDITOR", "nvim")
     subprocess.run([editor, str(path)])
     from science_cli.core.config import invalidate_cache
