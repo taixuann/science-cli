@@ -6,6 +6,8 @@ Device-type dispatch:
 """
 from pathlib import Path
 
+from science_cli.core.plot_config import resolve_plot_config
+
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -81,12 +83,15 @@ def _load_and_resolve(filepath, console_msg: str):
     return df, info, cycle, r, xlabel, ylabel
 
 
-def _apply_common_style(ax, flags: dict, cycle, r, xlabel, ylabel, label: str = ""):
+def _apply_common_style(ax, flags: dict, cycle, r, xlabel, ylabel,
+                         label: str = "", plot_cfg: dict | None = None):
     """Apply endurance defaults: big markers, log x."""
-    marker = flags.get("marker", "o")
-    markersize = float(flags.get("markersize", 10))
-    lw = float(flags.get("linewidth", 1.0))
-    kw = dict(marker=marker, markersize=markersize, linewidth=lw, alpha=0.85)
+    cfg = plot_cfg or {}
+    marker = flags.get("marker", cfg.get("series.hrs.marker", "o"))
+    markersize = float(flags.get("markersize", cfg.get("series.hrs.markersize", 4)))
+    lw = float(flags.get("linewidth", cfg.get("series.hrs.linewidth", 1.0)))
+    alpha = float(cfg.get("series.hrs.alpha", 0.85))
+    kw = dict(marker=marker, markersize=markersize, linewidth=lw, alpha=alpha)
     if label:
         kw["label"] = label
     ax.plot(cycle, r, **kw)
@@ -107,14 +112,16 @@ def _plot_endurance(filepath: str, flags: dict) -> None:
     from science_cli.theme import apply_theme
     apply_theme(get_active_theme())
 
+    plot_cfg = resolve_plot_config("pulse:pulse-endurance")
+
     data = _load_and_resolve(filepath, "Could not determine x/y columns for endurance.")
     if data is None:
         return
     _, _, cycle, r, xlabel, ylabel = data
 
-    figsize = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
+    figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
     fig, ax = plt.subplots(figsize=figsize)
-    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel)
+    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel, plot_cfg=plot_cfg)
     apply_figure_kw(ax, flags, Path(filepath).stem)
     _save_fig(fig, filepath, flags)
 
@@ -131,15 +138,20 @@ def _plot_endurance_volatile(filepath: str, flags: dict) -> None:
     from science_cli.theme import apply_theme
     apply_theme(get_active_theme())
 
+    plot_cfg = resolve_plot_config(
+        "pulse:pulse-endurance", device_type="volatile-memristor",
+    )
+
     data = _load_and_resolve(filepath, "Could not determine columns for volatile endurance.")
     if data is None:
         return
     _, _, cycle, r, xlabel, ylabel = data
 
-    figsize = parse_figsize(flags) or (4.0, 3.0)
+    figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
     fig, ax = plt.subplots(figsize=figsize)
-    color = flags.get("color", "#2176AE")
-    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel, label="R_decay")
+    color = flags.get("color", plot_cfg.get("series.hrs.color", "#2176AE"))
+    label = plot_cfg.get("series.hrs.label", "R_decay")
+    _apply_common_style(ax, flags, cycle, r, xlabel, ylabel, label=label, plot_cfg=plot_cfg)
     ax.lines[0].set_color(color)
     ax.set_yscale("log")
     ax.set_title("Volatile Memristor — Endurance")
@@ -162,16 +174,26 @@ def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
     from science_cli.theme import apply_theme
     apply_theme(get_active_theme())
 
+    plot_cfg = resolve_plot_config(
+        "pulse:pulse-endurance", device_type="non-volatile-memristor",
+    )
+
     data = _load_and_resolve(filepath, "Could not determine columns for NV endurance.")
     if data is None:
         return
     _, _, cycle, r, xlabel, ylabel = data
 
-    figsize = parse_figsize(flags) or (7.0, 3.0)
+    figsize_cfg = plot_cfg.get("figure.figsize", [3.46, 2.75])
+    figsize = parse_figsize(flags) or (figsize_cfg[0] * 2, figsize_cfg[1])
     fig, (ax_hi, ax_lo) = plt.subplots(1, 2, figsize=figsize)
-    marker = flags.get("marker", "o")
-    markersize = float(flags.get("markersize", 10))
-    lw = float(flags.get("linewidth", 1.2))
+    hrs_marker = flags.get("marker", plot_cfg.get("series.hrs.marker", "o"))
+    lrs_marker = flags.get("marker", plot_cfg.get("series.lrs.marker", "s"))
+    hrs_markersize = float(flags.get("markersize", plot_cfg.get("series.hrs.markersize", 4)))
+    lrs_markersize = float(flags.get("markersize", plot_cfg.get("series.lrs.markersize", 4)))
+    hrs_lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
+    lrs_lw = float(flags.get("linewidth", plot_cfg.get("series.lrs.linewidth", 1.0)))
+    hrs_alpha = float(plot_cfg.get("series.hrs.alpha", 0.85))
+    lrs_alpha = float(plot_cfg.get("series.lrs.alpha", 0.85))
 
     # Split data: first half → R_high, second half → R_low
     # (actual separation comes from analyzer in Seq 4)
@@ -185,16 +207,18 @@ def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
     cyc_hi = np.arange(1, len(r_hi) + 1, dtype=float)
     cyc_lo = np.arange(1, len(r_lo) + 1, dtype=float)
 
-    color_hi = flags.get("color-hi", "#D64045")
-    color_lo = flags.get("color-lo", "#1B998B")
+    color_hi = flags.get("color-hi", plot_cfg.get("series.hrs.color", "#CC0000"))
+    color_lo = flags.get("color-lo", plot_cfg.get("series.lrs.color", "#0055CC"))
     xlbl = flags.get("xlabel", xlabel)
 
-    for ax, cy, rv, cl, title, ylbl in [
-        (ax_hi, cyc_hi, r_hi, color_hi, "High Resistance State", "R_high (Ω)"),
-        (ax_lo, cyc_lo, r_lo, color_lo, "Low Resistance State", "R_low (Ω)"),
+    for ax, cy, rv, cl, title, ylbl, mk, ms, lw, al in [
+        (ax_hi, cyc_hi, r_hi, color_hi, "High Resistance State", "R_high (Ω)",
+         hrs_marker, hrs_markersize, hrs_lw, hrs_alpha),
+        (ax_lo, cyc_lo, r_lo, color_lo, "Low Resistance State", "R_low (Ω)",
+         lrs_marker, lrs_markersize, lrs_lw, lrs_alpha),
     ]:
-        ax.plot(cy, rv, marker=marker, markersize=markersize, color=cl,
-                linewidth=lw, alpha=0.85, label=title.split()[0] + " " + title.split()[-1])
+        ax.plot(cy, rv, marker=mk, markersize=ms, color=cl,
+                linewidth=lw, alpha=al, label=title.split()[0] + " " + title.split()[-1])
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel(xlbl)

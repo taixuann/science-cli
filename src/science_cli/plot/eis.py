@@ -62,7 +62,9 @@ def plot_eis_bode(
     fig, ax1 = create_figure(flags.get("theme", ""), figsize=figsize)
 
     mag_flags = dict(flags)
-    mag_flags.setdefault("color", "#2563eb")
+    from science_cli.core.plot_config import resolve_plot_config
+    _eis_cfg = resolve_plot_config("ec:ec-eis")
+    mag_flags.setdefault("color", _eis_cfg.get("series.bode.color", "#2563eb"))
     plot_line(frequency, magnitude, ax=ax1, flags=mag_flags)
     ax1.set_ylabel("|Z| (Ω)")
     ax1.set_xscale("log")
@@ -72,7 +74,7 @@ def plot_eis_bode(
     if phase is not None:
         ax2 = ax1.twinx()
         phase_flags = dict(flags)
-        phase_flags["color"] = "#dc2626"
+        phase_flags["color"] = _eis_cfg.get("series.phase.color", "#dc2626")
         plot_line(frequency, phase, ax=ax2, flags=phase_flags)
         ax2.set_ylabel("Phase (°)")
         ax2.set_xscale("log")
@@ -96,9 +98,11 @@ def plot_eis_fit(
     y_data = _ensure_neg_imag(z_imag)
     y_fit = _ensure_neg_imag(fit_imag)
     plot_line(z_real, y_data, ax=ax, flags=flags, label="Data")
+    from science_cli.core.plot_config import resolve_plot_config
+    _eis_cfg = resolve_plot_config("ec:ec-eis")
     fit_flags = dict(flags)
     fit_flags["linestyle"] = "--"
-    fit_flags["color"] = "red"
+    fit_flags["color"] = _eis_cfg.get("series.fit.color", "red")
     fit_flags.pop("marker", None)
     plot_line(fit_real, y_fit, ax=ax, flags=fit_flags, label="Fit")
 

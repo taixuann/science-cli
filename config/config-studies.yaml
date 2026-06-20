@@ -67,6 +67,7 @@ studies:
               - compliance_current
               - compliance_voltage
               description: Compliance detection from IV data
+      plot: {}
     iv-breakdown:
       label: "Breakdown \u2014 ramped voltage to breakdown"
       patterns:
@@ -84,6 +85,7 @@ studies:
         - voltage_v
         - current_a
       instruments: {}
+      plot: {}
     iv-leakage:
       label: "Leakage \u2014 low-bias leakage current"
       patterns:
@@ -100,6 +102,10 @@ studies:
         - voltage_v
         - current_a
       instruments: {}
+      plot:
+        figure: {}
+        axes:
+          yscale: log
 
   pulse:
     pulse-stp-decay:
@@ -137,6 +143,10 @@ studies:
       instruments:
         keysight-b1500a:
           header_lines: 147
+          columns:
+            time: Time
+            voltage: MeasResult1_value
+            current: MeasResult2_value
           metadata:
             compliance:
               method: parse
@@ -158,9 +168,10 @@ studies:
               - set_width_us
               - read_width_us
               description: Extracted pulse parameters from waveform definition
+      plot: {}
 
     pulse-ppf:
-      label: "Paired-Pulse Facilitation \u2014 double set with \u0394t"
+      label: "Paired-Pulse Facilitation"
       patterns:
       - ppf
       - _PPF
@@ -188,6 +199,11 @@ studies:
       instruments:
         keysight-b1500a:
           header_lines: 147
+          columns:
+            time: Time
+            voltage: MeasResult1_value
+            current: MeasResult2_value
+      plot: {}
 
     pulse-endurance:
       label: Pulse Endurance Cycling
@@ -218,6 +234,11 @@ studies:
         volatile-memristor:
           add:
           - r_decay_ohm
+          plot:
+            series:
+              hrs:
+                color: "#2176AE"
+                label: "R_decay"
         non-volatile-memristor:
           add:
           - r_high_ohm
@@ -225,6 +246,52 @@ studies:
       instruments:
         keysight-b1500a:
           header_lines: 147
+          columns:
+            time: Time
+            voltage: MeasResult1_value
+            current: MeasResult2_value
+      plot:
+        figure:
+          figsize: [3.46, 2.75]
+        axes:
+          xscale: log
+          yscale: log
+          grid: true
+          grid_alpha: 0.25
+        legend: true
+        series:
+          hrs:
+            label: "HRS"
+            color: "#CC0000"
+            marker: "o"
+            markersize: 4
+            linewidth: 1.0
+            alpha: 0.8
+          lrs:
+            label: "LRS"
+            color: "#0055CC"
+            marker: "s"
+            markersize: 4
+            linewidth: 1.0
+            alpha: 0.8
+          ratio:
+            label: "Ratio"
+            color: "#CC7700"
+            marker: "^"
+            markersize: 4
+            linewidth: 1.0
+            alpha: 0.8
+        annotations:
+          hrs:
+            text: "HRS"
+            position: last
+            color: "#CC0000"
+            fontweight: bold
+          lrs:
+            text: "LRS"
+            position: last
+            color: "#0055CC"
+            fontweight: bold
 
     pulse-retention:
       label: Pulse Retention Time
@@ -255,7 +322,17 @@ studies:
         non-volatile-memristor:
           add:
           - r_read_ohm
-      instruments: {}
+      instruments:
+        keysight-b1500a:
+          header_lines: 147
+          columns:
+            time: Time
+            voltage: MeasResult1_value
+            current: MeasResult2_value
+      plot:
+        figure: {}
+        axes:
+          xscale: log
 
   raman:
     raman-spectrum:
@@ -280,6 +357,7 @@ studies:
       instruments:
         horiba-usth:
           header_lines: 45
+      plot: {}
 
   uv-vis:
     uv-vis-spectrum:
@@ -304,6 +382,7 @@ studies:
       instruments:
         spectrometer-iop:
           header_lines: 1
+      plot: {}
 
   ec:
     ec-cv:
@@ -323,6 +402,7 @@ studies:
       instruments:
         autolab-usth:
           header_lines: 0
+      plot: {}
 
     ec-ca:
       label: Chronoamperometry
@@ -341,6 +421,7 @@ studies:
       instruments:
         autolab-usth:
           header_lines: 0
+      plot: {}
 
     ec-eis:
       label: Electrochemical Impedance Spectroscopy
@@ -360,6 +441,17 @@ studies:
       instruments:
         autolab-usth:
           header_lines: 0
+      plot:
+        figure: {}
+        axes:
+          grid: true
+          grid_alpha: 0.3
+        series:
+          nyquist:
+            label: "Nyquist"
+          bode:
+            label: "|Z|"
+            color: "#2563eb"
 
   afm:
     afm-topography:
@@ -379,3 +471,7 @@ studies:
         - y_um
         - height_nm
       instruments: {}
+      plot:
+        figure:
+          figsize: [12, 5]
+        cmap: viridis

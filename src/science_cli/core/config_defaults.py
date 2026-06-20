@@ -342,95 +342,173 @@ _GRAMMAR_PATTERNS: list[dict] = [
 
 
 # ── config-template.yaml data ────────────────────────────────────────
+#
+# Single source of truth for both theme definitions and per-technique plot
+# templates. Read by:
+#   - science_cli.theme.registry.theme_to_rcparams() / apply_theme()
+#   - science_cli.theme.registry.template_to_flags()
+#   - science_cli.core.config.get_plot_labels()
+#
+# Format mirrors the on-disk config-template.yaml exactly (nested
+# figure/axes/grid/ticks/font/legend/lines/colors/savefig sections for
+# themes; nested figure/axes/defaults/font/colors/savefig/presets for
+# plot_techniques). The legacy "rcparams:" flat-key block is no longer
+# produced or read.
 
 
 _TEMPLATES: dict = {
     "templates": {
-        "publication-nature": {
-            "font": "Helvetica",
-            "fontsize": 7,
-            "dpi": 300,
-            "figure_format": "pdf",
-            "rcparams": {
-                "font.family": "sans-serif",
-                "font.sans-serif": ["Helvetica"],
-                "axes.linewidth": 0.5,
-                "axes.labelsize": 7,
-                "xtick.labelsize": 6,
-                "ytick.labelsize": 6,
-                "legend.fontsize": 6,
-                "lines.linewidth": 1.0,
+        "plot_labels": {
+            "iv-sweep": {"xlabel": "Voltage (V)", "ylabel": "Current (A)"},
+            "iv-breakdown": {"xlabel": "Voltage (V)", "ylabel": "Current (A)"},
+            "iv-leakage": {
+                "xlabel": "Voltage (V)",
+                "ylabel": "Current density (A/cm²)",
             },
+            "ec-cv": {"xlabel": "Potential (V)", "ylabel": "Current (A)"},
+            "ec-ca": {"xlabel": "Time (s)", "ylabel": "I (A)"},
+            "ec-eis": {"xlabel": "Z' (Ω)", "ylabel": "-Z'' (Ω)"},
+            "raman": {"xlabel": "Raman shift (cm⁻¹)", "ylabel": "Intensity (counts)"},
+            "uv-vis": {"xlabel": "Wavelength (nm)", "ylabel": "Transmission (%)"},
+        },
+        "plot_techniques": {
+            "iv-sweep": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Voltage (V)", "ylabel": "Current (A)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "iv-breakdown": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Voltage (V)", "ylabel": "Current (A)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "iv-leakage": {
+                "plot_type": "line",
+                "axes": {
+                    "xlabel": "Voltage (V)",
+                    "ylabel": "Current density (A/cm²)",
+                },
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "ec-cv": {
+                "plot_type": "line",
+                "axes": {"xlabel": "E vs Ref (V)", "ylabel": "I (mA)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "ec-ca": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Time (s)", "ylabel": "I (mA)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "ec-eis": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Z' (Ω)", "ylabel": "-Z'' (Ω)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "raman": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Raman shift (cm⁻¹)", "ylabel": "Intensity (a.u.)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+            "uv-vis": {
+                "plot_type": "line",
+                "axes": {"xlabel": "Wavelength (nm)", "ylabel": "Transmission (%)"},
+                "defaults": {"linewidth": 0.75, "linestyle": "-"},
+            },
+        },
+        "default": {
+            "figure": {"figsize": [6.4, 4.8], "dpi": 100},
+            "axes": {"linewidth": 1.0, "grid": False},
+            "font": {"family": "sans-serif", "size": 10},
+            "colors": {
+                "prop_cycle": [
+                    "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                    "#0072B2", "#D55E00", "#CC79A7", "#000000",
+                ],
+            },
+            "savefig": {"dpi": 300, "format": "pdf"},
+        },
+        "publication-nature": {
+            "figure": {"figsize": [3.46, 2.75], "dpi": 300},
+            "axes": {
+                "linewidth": 0.5,
+                "grid": False,
+                "spines_top": False,
+                "spines_right": False,
+            },
+            "font": {"family": "Helvetica", "size": 7},
+            "colors": {
+                "prop_cycle": [
+                    "#000000", "#0072B2", "#D55E00", "#009E73",
+                    "#E69F00", "#56B4E9", "#CC79A7", "#F0E442",
+                ],
+            },
+            "savefig": {"dpi": 600, "format": "pdf"},
+            "pdf": {"fonttype": 42},
         },
         "publication-acs": {
-            "font": "Helvetica",
-            "fontsize": 8,
-            "dpi": 600,
-            "figure_format": "pdf",
-            "rcparams": {
-                "font.family": "sans-serif",
-                "font.sans-serif": ["Helvetica"],
-                "axes.linewidth": 0.5,
-                "axes.labelsize": 8,
-                "xtick.labelsize": 7,
-                "ytick.labelsize": 7,
-                "legend.fontsize": 7,
-                "lines.linewidth": 1.0,
+            "figure": {"figsize": [3.35, 2.6], "dpi": 300},
+            "axes": {"linewidth": 0.8, "grid": False},
+            "font": {"family": "sans-serif", "size": 8},
+            "colors": {
+                "prop_cycle": [
+                    "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                    "#0072B2", "#D55E00", "#CC79A7", "#000000",
+                ],
             },
+            "savefig": {"dpi": 600, "format": "pdf"},
         },
-        "matcha": {
-            "font": "sans-serif",
-            "fontsize": 11,
-            "dpi": 150,
-            "figure_format": "png",
-            "rcparams": {
-                "axes.facecolor": "#f5f5f0",
-                "axes.edgecolor": "#4a4a4a",
-                "grid.color": "#d4d4d4",
-                "grid.alpha": 0.6,
+        "acs-annotated": {
+            "figure": {"figsize": [4.0, 3.2], "dpi": 300},
+            "axes": {"linewidth": 0.8, "grid": False},
+            "font": {"family": "sans-serif", "size": 8},
+            "colors": {
+                "prop_cycle": [
+                    "#E69F00", "#56B4E9", "#009E73", "#F0E442",
+                    "#0072B2", "#D55E00", "#CC79A7", "#000000",
+                ],
             },
+            "savefig": {"dpi": 600, "format": "pdf"},
         },
         "tufte": {
-            "font": "serif",
-            "fontsize": 10,
-            "dpi": 200,
-            "figure_format": "pdf",
-            "rcparams": {
-                "font.family": "serif",
-                "axes.linewidth": 0.3,
-                "axes.spines.top": False,
-                "axes.spines.right": False,
+            "figure": {"figsize": [6.4, 4.8], "dpi": 100},
+            "axes": {
+                "linewidth": 0.8,
+                "grid": False,
+                "spines_top": False,
+                "spines_right": False,
             },
+            "font": {"family": "serif", "size": 9},
+            "colors": {
+                "prop_cycle": [
+                    "#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00",
+                ],
+            },
+            "savefig": {"dpi": 300, "format": "pdf"},
         },
         "dark": {
-            "font": "sans-serif",
-            "fontsize": 10,
-            "dpi": 150,
-            "figure_format": "png",
-            "rcparams": {
-                "axes.facecolor": "#1a1a1a",
-                "axes.edgecolor": "#e0e0e0",
-                "text.color": "#e0e0e0",
-                "axes.labelcolor": "#e0e0e0",
-                "xtick.color": "#e0e0e0",
-                "ytick.color": "#e0e0e0",
-                "figure.facecolor": "#121212",
-                "grid.color": "#333333",
+            "figure": {"figsize": [6.4, 4.8], "dpi": 100},
+            "axes": {"linewidth": 1.0, "grid": False},
+            "font": {"family": "sans-serif", "size": 10},
+            "colors": {
+                "prop_cycle": [
+                    "#F5A623", "#73C7F0", "#00B884", "#F7EC60",
+                    "#0088CC", "#E87100", "#D989B4", "#505050",
+                ],
             },
+            "savefig": {"dpi": 300, "format": "pdf"},
         },
         "poster": {
-            "font": "sans-serif",
-            "fontsize": 14,
-            "dpi": 300,
-            "figure_format": "png",
-            "rcparams": {
-                "axes.linewidth": 1.5,
-                "axes.labelsize": 14,
-                "xtick.labelsize": 12,
-                "ytick.labelsize": 12,
-                "legend.fontsize": 12,
-                "lines.linewidth": 2.0,
+            "figure": {"figsize": [12.0, 8.0], "dpi": 100},
+            "axes": {"linewidth": 2.0, "grid": False},
+            "font": {"family": "sans-serif", "size": 18},
+            "colors": {
+                "prop_cycle": [
+                    "#0072B2", "#E69F00", "#D55E00", "#009E73",
+                    "#56B4E9", "#CC79A7", "#F0E442", "#000000",
+                ],
             },
+            "savefig": {"dpi": 150, "format": "pdf"},
         },
     },
 }

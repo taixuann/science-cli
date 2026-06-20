@@ -10,11 +10,13 @@ def _plot_raman_single(filepath: str, flags: dict) -> None:
     from rich.console import Console
 
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("raman:raman-spectrum")
     p = Path(filepath)
 
     try:
@@ -46,6 +48,8 @@ def _plot_raman_single(filepath: str, flags: dict) -> None:
         plot_kwargs["color"] = flags["color"]
     if flags.get("linewidth"):
         plot_kwargs["linewidth"] = float(flags["linewidth"])
+    else:
+        plot_kwargs["linewidth"] = float(plot_cfg.get("lines.linewidth", 1.0))
     if flags.get("linestyle"):
         plot_kwargs["linestyle"] = flags["linestyle"]
     plt.plot(shift, intensity, **plot_kwargs)
@@ -60,7 +64,8 @@ def _plot_raman_single(filepath: str, flags: dict) -> None:
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     if flags.get("grid"):
-        plt.grid(True, alpha=0.3)
+        grid_alpha = float(plot_cfg.get("grid.alpha", 0.3))
+        plt.grid(True, alpha=grid_alpha)
 
     xlim = flags.get("xlim") or flags.get("zoom")
     if xlim:
@@ -111,16 +116,18 @@ def _overlay_raman(files: list, flags: dict) -> None:
     from rich.console import Console
 
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("raman:raman-spectrum")
     plt.figure()
 
     xlabel = flags.get("xlabel") or "Raman shift (cm⁻¹)"
     ylabel = flags.get("ylabel") or "Intensity (counts)"
-    lw = float(flags.get("linewidth", 1.2))
+    lw = float(flags.get("linewidth", plot_cfg.get("lines.linewidth", 1.2)))
 
     for f in files:
         p = Path(f)
@@ -143,7 +150,8 @@ def _overlay_raman(files: list, flags: dict) -> None:
     plt.ylabel(ylabel)
     plt.legend()
     if flags.get("grid"):
-        plt.grid(True, alpha=0.3)
+        grid_alpha = float(plot_cfg.get("grid.alpha", 0.3))
+        plt.grid(True, alpha=grid_alpha)
 
     xlim = flags.get("xlim") or flags.get("zoom")
     if xlim:

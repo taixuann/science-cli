@@ -11,19 +11,21 @@ def _plot_uv_vis_single(filepath: str, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir, _resolve_xy_columns
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import apply_figure_kw, parse_figsize
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("uv-vis:uv-vis-spectrum")
     try:
         df, info = load_data_file(filepath, technique="uv-vis")
     except Exception as e:
         console.print(f"[red]Failed to load UV-Vis data: {e}[/red]")
         return
 
-    figsize = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
+    figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", mpl.rcParams.get("figure.figsize", (3.46, 2.75))))
     fig, ax = plt.subplots(figsize=figsize)
     x, y, xlabel, ylabel = _resolve_xy_columns(df, info, "uv-vis")
     if len(x) == 0 or len(y) == 0:
@@ -34,7 +36,8 @@ def _plot_uv_vis_single(filepath: str, flags: dict) -> None:
     if not flags.get("ylabel") and ylabel:
         flags["ylabel"] = ylabel
 
-    ax.plot(x, y, linewidth=float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 1.0))))
+    lw = float(flags.get("linewidth", plot_cfg.get("lines.linewidth", mpl.rcParams.get("lines.linewidth", 1.0))))
+    ax.plot(x, y, linewidth=lw)
     apply_figure_kw(ax, flags, Path(filepath).stem)
 
     out_dir = _get_results_dir(filepath)
@@ -43,7 +46,7 @@ def _plot_uv_vis_single(filepath: str, flags: dict) -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
+    dpi = int(flags.get("dpi", plot_cfg.get("savefig.dpi", mpl.rcParams.get("savefig.dpi", 600))))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] UV-Vis saved: {save_path}")
@@ -60,17 +63,19 @@ def _overlay_uv_vis(files: list, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir, _resolve_xy_columns
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import apply_figure_kw, parse_figsize
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
-    figsize = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
+    plot_cfg = resolve_plot_config("uv-vis:uv-vis-spectrum")
+    figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", mpl.rcParams.get("figure.figsize", (3.46, 2.75))))
     fig, ax = plt.subplots(figsize=figsize)
     cycle = mpl.rcParams["axes.prop_cycle"]
     colors = [entry["color"] for entry in cycle]
-    lw = float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 0.75)))
+    lw = float(flags.get("linewidth", plot_cfg.get("lines.linewidth", mpl.rcParams.get("lines.linewidth", 0.75))))
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
 
@@ -92,7 +97,7 @@ def _overlay_uv_vis(files: list, flags: dict) -> None:
     if not Path(out_name).suffix:
         out_name = str(Path(out_name)) + ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
+    dpi = int(flags.get("dpi", plot_cfg.get("savefig.dpi", mpl.rcParams.get("savefig.dpi", 600))))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] UV-Vis overlay saved: {save_path}")

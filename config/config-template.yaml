@@ -1,3 +1,16 @@
+# science-cli — theme & plot-technique templates (single source of truth)
+#
+# This file is the ONLY source of truth for:
+#   - Theme definitions (colors, fonts, figure defaults) read by
+#     science_cli.theme.registry.theme_to_rcparams() / apply_theme().
+#   - Per-technique plot defaults read by template_to_flags().
+#   - Per-technique plot labels (xlabel/ylabel) read by get_plot_labels().
+#
+# Legacy duplicates previously lived in:
+#   - src/science_cli/theme/plot-theme/*.yaml   (themes)  — REMOVED
+#   - src/science_cli/theme/plot-templates/*.yaml (techniques) — REMOVED
+#   - the old "templates.<name>.rcparams:" block (legacy format) — REMOVED
+
 templates:
   plot_labels:
     iv-sweep:
@@ -24,79 +37,756 @@ templates:
     uv-vis:
       xlabel: Wavelength (nm)
       ylabel: Transmission (%)
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Per-technique plot templates (read by template_to_flags()).
+  # Each entry is the full template definition previously living in
+  # src/science_cli/theme/plot-templates/<technique>.yaml.
+  # ─────────────────────────────────────────────────────────────────────
+  plot_techniques:
+    iv-sweep:
+      technique: iv-sweep
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Voltage (V)"
+        ylabel: "Current (A)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#000000"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#000000", "#0072B2", "#D55E00", "#009E73"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "V"
+        y_units: "A"
+        semi_log_y: false
+        show_switching: true
+        switching_cycle: "both"
+        sweep_direction: "forward+reverse"
+        show_rate: true
+        rate_label: "Sweep rate (V/s)"
+        segments: 2
+    iv-breakdown:
+      technique: iv-breakdown
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Voltage (V)"
+        ylabel: "Current (A)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#D55E00"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#D55E00", "#CC79A7", "#0072B2"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "V"
+        y_units: "A"
+        semi_log_y: true
+        highlight_breakdown: true
+        breakdown_marker: "v"
+        breakdown_color: "#CC0000"
+        show_compliance: true
+        compliance_label: "Compliance (A)"
+    iv-leakage:
+      technique: iv-leakage
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Voltage (V)"
+        ylabel: "Current density (A/cm²)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#0072B2"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#0072B2", "#D55E00", "#009E73"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "V"
+        y_units: "A/cm²"
+        semi_log_y: true
+        show_thickness: true
+        thickness_label: "Thickness (nm)"
+        show_electric_field: false
+        conduction_mechanisms:
+          - "ohmic"
+          - "pf-emission"
+          - "schottky"
+          - "fn-tunneling"
+    ec-cv:
+      technique: ec-cv
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "E vs Ref (V)"
+        ylabel: "I (mA)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#000000"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        forward: "#0072B2"
+        reverse: "#D55E00"
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "V vs Ref"
+        y_units: "mA"
+        iupac_convention: true
+        anodic_up: true
+        show_scan_arrow: true
+        scan_arrow_style: "->"
+        scan_segments: 2
+        show_scan_rate: true
+        scan_rate_label: "Scan rate (mV/s)"
+    ec-ca:
+      technique: ec-ca
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Time (s)"
+        ylabel: "I (mA)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#D55E00"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#D55E00", "#0072B2", "#009E73", "#CC79A7"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "s"
+        y_units: "mA"
+        show_step_potential: true
+        step_potential_label: "Step (V)"
+        x_scale: linear
+        y_scale: linear
+        show_time_regions: true
+    ec-eis:
+      technique: ec-eis
+      plot_type: line
+      figure:
+        figsize: [3.54, 3.54]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Z' (Ω)"
+        ylabel: "-Z'' (Ω)"
+        xlim: null
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: equal
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#000000"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        data: "#009E73"
+        fit: "#D55E00"
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "Ω"
+        y_units: "Ω"
+        plot_type: nyquist
+        forced_aspect_ratio: 1.0
+        show_fit: true
+        fit_linewidth: 0.5
+        fit_linestyle: "--"
+        fit_color: "#D55E00"
+        show_frequency_arrow: true
+        frequency_arrow_label: "f (Hz)"
+    raman:
+      technique: raman
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Raman shift (cm⁻¹)"
+        ylabel: "Intensity (a.u.)"
+        xlim: [200, 1800]
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#000000"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#000000", "#D55E00", "#0072B2", "#009E73", "#CC79A7"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "cm⁻¹"
+        y_units: "a.u."
+        fingerprint_region: [200, 1800]
+        high_frequency_region: [1800, 3500]
+        show_full_range: false
+        annotate_peaks: true
+        peak_prominence_pct: 15
+        baseline_method: asls
+        label_peaks: true
+    uv-vis:
+      technique: uv-vis
+      plot_type: line
+      figure:
+        figsize: [3.54, 2.76]
+        dpi: 600
+        facecolor: white
+      axes:
+        xlabel: "Wavelength (nm)"
+        ylabel: "Transmission (%)"
+        xlim: [300, 800]
+        ylim: null
+        tick_direction: in
+        tick_length: 3
+        tick_width: 0.5
+        linewidth: 0.5
+        grid: false
+        aspect: auto
+      defaults:
+        linewidth: 0.75
+        linestyle: "-"
+        color: "#000000"
+      font:
+        family: Helvetica
+        label_size: 7
+        tick_size: 6
+        title_size: 8
+        legend_size: 6
+      colors:
+        qualitative: ["#000000", "#D55E00", "#0072B2", "#009E73", "#CC79A7"]
+      savefig:
+        format: pdf
+        dpi: 600
+        bbox_inches: tight
+        pad_inches: 0.05
+      presets:
+        x_units: "nm"
+        y_units: "absorbance"
+        uv_region: [300, 400]
+        visible_region: [400, 800]
+        show_full_range: true
+        normalize_at_peak: true
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Theme definitions (read by theme_to_rcparams()).
+  # Each entry is the full theme definition previously living in
+  # src/science_cli/theme/plot-theme/<name>.yaml.
+  # ─────────────────────────────────────────────────────────────────────
+  default:
+    name: default
+    description: Clean, modern default — good for exploration
+    figure:
+      facecolor: white
+      figsize: [6.4, 4.8]
+      dpi: 100
+    axes:
+      facecolor: white
+      edgecolor: black
+      labelcolor: black
+      titlecolor: black
+      grid: false
+      linewidth: 1.0
+      spines_top: true
+      spines_right: true
+    grid:
+      color: "#e0e0e0"
+      alpha: 0.3
+      linestyle: "-"
+    ticks:
+      color: black
+      direction: in
+      major_width: 0.8
+    font:
+      family: sans-serif
+      size: 10
+      axes_labelsize: 12
+      axes_titlesize: 14
+      tick_labelsize: 10
+      legend_size: 10
+    legend:
+      frameon: true
+      fancybox: true
+      loc: best
+    lines:
+      linewidth: 1.5
+      markersize: 6
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#E69F00"
+        - "#56B4E9"
+        - "#009E73"
+        - "#F0E442"
+        - "#0072B2"
+        - "#D55E00"
+        - "#CC79A7"
+        - "#000000"
+    savefig:
+      dpi: 300
+      bbox: tight
+      pad_inches: 0.1
+      format: pdf
   publication-nature:
-    font: Helvetica
-    fontsize: 7
-    dpi: 300
-    figure_format: pdf
-    rcparams:
-      font.family: sans-serif
-      font.sans-serif:
-      - Helvetica
-      axes.linewidth: 0.5
-      axes.labelsize: 7
-      xtick.labelsize: 6
-      ytick.labelsize: 6
-      legend.fontsize: 6
-      lines.linewidth: 1.0
+    name: publication-nature
+    description: >-
+      Nature Research — Helvetica 5-7pt, 88mm single column, 300/600 DPI,
+      minimal ink (open axes), pdf.fonttype=42 for editable text.
+      Complies with https://research-figure-guide.nature.com
+    figure:
+      facecolor: white
+      figsize: [3.46, 2.75]
+      dpi: 300
+    axes:
+      facecolor: white
+      edgecolor: black
+      labelcolor: black
+      titlecolor: black
+      grid: false
+      linewidth: 0.5
+      spines_top: false
+      spines_right: false
+    grid:
+      color: "#cccccc"
+      alpha: 0.3
+      linestyle: "-"
+    ticks:
+      color: black
+      direction: in
+      major_width: 0.5
+      major_size: 3
+    font:
+      family: Helvetica
+      size: 7
+      axes_labelsize: 7
+      axes_titlesize: 8
+      tick_labelsize: 6
+      legend_size: 6
+    legend:
+      frameon: false
+      fancybox: false
+      loc: best
+    lines:
+      linewidth: 0.75
+      markersize: 3
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#000000"
+        - "#0072B2"
+        - "#D55E00"
+        - "#009E73"
+        - "#E69F00"
+        - "#56B4E9"
+        - "#CC79A7"
+        - "#F0E442"
+    savefig:
+      dpi: 600
+      bbox: tight
+      pad_inches: 0.05
+      format: pdf
+    pdf:
+      fonttype: 42
   publication-acs:
-    font: Helvetica
-    fontsize: 8
-    dpi: 600
-    figure_format: pdf
-    rcparams:
-      font.family: sans-serif
-      font.sans-serif:
-      - Helvetica
-      axes.linewidth: 0.5
-      axes.labelsize: 8
-      xtick.labelsize: 7
-      ytick.labelsize: 7
-      legend.fontsize: 7
-      lines.linewidth: 1.0
-  matcha:
-    font: sans-serif
-    fontsize: 11
-    dpi: 150
-    figure_format: png
-    rcparams:
-      axes.facecolor: '#f5f5f0'
-      axes.edgecolor: '#4a4a4a'
-      grid.color: '#d4d4d4'
-      grid.alpha: 0.6
+    name: publication-acs
+    description: ACS style — Helvetica 6-9pt, 8.5cm single column, 300/600 DPI, boxed axes
+    figure:
+      facecolor: white
+      figsize: [3.35, 2.6]
+      dpi: 300
+    axes:
+      facecolor: white
+      edgecolor: black
+      labelcolor: black
+      titlecolor: black
+      grid: false
+      linewidth: 0.8
+      spines_top: true
+      spines_right: true
+    grid:
+      color: "#cccccc"
+      alpha: 0.3
+      linestyle: "-"
+    ticks:
+      color: black
+      direction: in
+      major_width: 0.5
+    font:
+      family: sans-serif
+      size: 8
+      axes_labelsize: 9
+      axes_titlesize: 10
+      tick_labelsize: 8
+      legend_size: 7
+    legend:
+      frameon: false
+      fancybox: false
+      loc: best
+    lines:
+      linewidth: 1.0
+      markersize: 4
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#E69F00"
+        - "#56B4E9"
+        - "#009E73"
+        - "#F0E442"
+        - "#0072B2"
+        - "#D55E00"
+        - "#CC79A7"
+        - "#000000"
+    savefig:
+      dpi: 600
+      bbox: tight
+      pad_inches: 0.05
+      format: pdf
+  acs-annotated:
+    name: acs-annotated
+    description: ACS-based with annotation-friendly layout — lighter grid, spacious, arrow callouts
+    figure:
+      facecolor: white
+      figsize: [4.0, 3.2]
+      dpi: 300
+    axes:
+      facecolor: white
+      edgecolor: black
+      labelcolor: black
+      titlecolor: black
+      grid: false
+      linewidth: 0.8
+      spines_top: true
+      spines_right: true
+    grid:
+      color: "#e0e0e0"
+      alpha: 0.3
+      linestyle: "-"
+    ticks:
+      color: black
+      direction: in
+      major_width: 0.5
+    font:
+      family: sans-serif
+      size: 8
+      axes_labelsize: 10
+      axes_titlesize: 11
+      tick_labelsize: 8
+      legend_size: 8
+    legend:
+      frameon: false
+      fancybox: false
+      loc: best
+    lines:
+      linewidth: 1.2
+      markersize: 5
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#E69F00"
+        - "#56B4E9"
+        - "#009E73"
+        - "#F0E442"
+        - "#0072B2"
+        - "#D55E00"
+        - "#CC79A7"
+        - "#000000"
+    savefig:
+      dpi: 600
+      bbox: tight
+      pad_inches: 0.1
+      format: pdf
   tufte:
-    font: serif
-    fontsize: 10
-    dpi: 200
-    figure_format: pdf
-    rcparams:
-      font.family: serif
-      axes.linewidth: 0.3
-      axes.spines.top: false
-      axes.spines.right: false
+    name: tufte
+    description: Edward Tufte "Maximal Data, Minimal Ink" — clean, gridless, axis-only
+    figure:
+      facecolor: white
+      figsize: [6.4, 4.8]
+      dpi: 100
+    axes:
+      facecolor: white
+      edgecolor: "#555555"
+      labelcolor: "#333333"
+      titlecolor: "#333333"
+      grid: false
+      linewidth: 0.8
+      spines_top: false
+      spines_right: false
+    grid:
+      color: "#cccccc"
+      alpha: 0.2
+      linestyle: "-"
+    ticks:
+      color: "#555555"
+      direction: out
+      major_width: 0.5
+    font:
+      family: serif
+      size: 9
+      axes_labelsize: 11
+      axes_titlesize: 12
+      tick_labelsize: 9
+      legend_size: 8
+    legend:
+      frameon: false
+      fancybox: false
+      loc: best
+    lines:
+      linewidth: 1.0
+      markersize: 4
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#E69F00"
+        - "#56B4E9"
+        - "#009E73"
+        - "#0072B2"
+        - "#D55E00"
+    savefig:
+      dpi: 300
+      bbox: tight
+      pad_inches: 0.05
+      format: pdf
   dark:
-    font: sans-serif
-    fontsize: 10
-    dpi: 150
-    figure_format: png
-    rcparams:
-      axes.facecolor: '#1a1a1a'
-      axes.edgecolor: '#e0e0e0'
-      text.color: '#e0e0e0'
-      axes.labelcolor: '#e0e0e0'
-      xtick.color: '#e0e0e0'
-      ytick.color: '#e0e0e0'
-      figure.facecolor: '#121212'
-      grid.color: '#333333'
+    name: dark
+    description: Dark background — for presentations, posters, screen viewing
+    figure:
+      facecolor: "#2b2b2b"
+      figsize: [6.4, 4.8]
+      dpi: 100
+    axes:
+      facecolor: "#3c3c3c"
+      edgecolor: "#e0e0e0"
+      labelcolor: "#e0e0e0"
+      titlecolor: "#ffffff"
+      grid: false
+      linewidth: 1.0
+      spines_top: false
+      spines_right: false
+    grid:
+      color: "#555555"
+      alpha: 0.4
+      linestyle: "-"
+    ticks:
+      color: "#e0e0e0"
+      direction: in
+      major_width: 0.8
+    font:
+      family: sans-serif
+      size: 10
+      axes_labelsize: 12
+      axes_titlesize: 14
+      tick_labelsize: 10
+      legend_size: 10
+    legend:
+      frameon: true
+      fancybox: true
+      loc: best
+    lines:
+      linewidth: 2.0
+      markersize: 6
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#F5A623"
+        - "#73C7F0"
+        - "#00B884"
+        - "#F7EC60"
+        - "#0088CC"
+        - "#E87100"
+        - "#D989B4"
+        - "#505050"
+    savefig:
+      dpi: 300
+      bbox: tight
+      pad_inches: 0.1
+      format: pdf
   poster:
-    font: sans-serif
-    fontsize: 14
-    dpi: 300
-    figure_format: png
-    rcparams:
-      axes.linewidth: 1.5
-      axes.labelsize: 14
-      xtick.labelsize: 12
-      ytick.labelsize: 12
-      legend.fontsize: 12
-      lines.linewidth: 2.0
+    name: poster
+    description: Large fonts, high contrast, thick lines — for poster sessions
+    figure:
+      facecolor: white
+      figsize: [12.0, 8.0]
+      dpi: 100
+    axes:
+      facecolor: white
+      edgecolor: black
+      labelcolor: black
+      titlecolor: black
+      grid: false
+      linewidth: 2.0
+      spines_top: false
+      spines_right: false
+    grid:
+      color: "#cccccc"
+      alpha: 0.3
+      linestyle: "-"
+    ticks:
+      color: black
+      direction: in
+      major_width: 1.5
+    font:
+      family: sans-serif
+      size: 18
+      axes_labelsize: 24
+      axes_titlesize: 28
+      tick_labelsize: 18
+      legend_size: 16
+    legend:
+      frameon: true
+      fancybox: true
+      loc: best
+    lines:
+      linewidth: 3.0
+      markersize: 10
+      linestyle: "-"
+    colors:
+      prop_cycle:
+        - "#0072B2"
+        - "#E69F00"
+        - "#D55E00"
+        - "#009E73"
+        - "#56B4E9"
+        - "#CC79A7"
+        - "#F0E442"
+        - "#000000"
+    savefig:
+      dpi: 150
+      bbox: tight
+      pad_inches: 0.2
+      format: pdf

@@ -12,6 +12,7 @@ def _plot_ppf_single(filepath: str, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import parse_figsize
     from science_cli.theme import apply_theme
@@ -24,6 +25,7 @@ def _plot_ppf_single(filepath: str, flags: dict) -> None:
         return
 
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("pulse:pulse-ppf")
     t = df.get("time", df.get("Time"))
     v = df.get("voltage", df.get("MeasResult1_value"))
     i = df.get("current", df.get("MeasResult2_value"))
@@ -38,14 +40,16 @@ def _plot_ppf_single(filepath: str, flags: dict) -> None:
     t, v, i = t[mask], v[mask], i[mask]
     t_us = t * 1e6
 
-    base_size = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
+    base_size = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", mpl.rcParams.get("figure.figsize", (3.46, 2.75))))
     fig, (ax_v, ax_i) = plt.subplots(1, 2, figsize=(base_size[0] * 1.8, base_size[1]))
 
-    ax_v.plot(t_us, v, color="tab:blue", linewidth=1.0)
+    color_v = flags.get("color_v", plot_cfg.get("series.voltage.color", "tab:blue"))
+    ax_v.plot(t_us, v, color=color_v, linewidth=float(plot_cfg.get("lines.linewidth", 1.0)))
     ax_v.set_xlabel("Time (µs)")
     ax_v.set_ylabel("Voltage (V)")
 
-    ax_i.plot(t_us, i, color="tab:red", linewidth=1.0)
+    color_i = flags.get("color_i", plot_cfg.get("series.current.color", "tab:red"))
+    ax_i.plot(t_us, i, color=color_i, linewidth=float(plot_cfg.get("lines.linewidth", 1.0)))
     ax_i.set_xlabel("Time (µs)")
     ax_i.set_ylabel("Current (A)")
 
@@ -57,7 +61,7 @@ def _plot_ppf_single(filepath: str, flags: dict) -> None:
     if not Path(out_name).suffix:
         out_name += ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
+    dpi = int(flags.get("dpi", plot_cfg.get("savefig.dpi", mpl.rcParams.get("savefig.dpi", 600))))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] PPF plot saved: {save_path}")
@@ -75,15 +79,17 @@ def _overlay_ppf(files: list, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("pulse:pulse-ppf")
     cycle = mpl.rcParams["axes.prop_cycle"]
     colors = [entry["color"] for entry in cycle]
 
-    fig, (ax_v, ax_i) = plt.subplots(1, 2, figsize=(7, 3))
+    fig, (ax_v, ax_i) = plt.subplots(1, 2, figsize=tuple(plot_cfg.get("figure.figsize", (7, 3))))
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
 

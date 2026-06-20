@@ -5,6 +5,61 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.21.0] - 2026-06-20
+
+### Added
+- **Config-first plot parameters** — `core/plot_config.py:resolve_plot_config(study_name, device_type)` returns flat merged dict (theme → study → device). Per-study `plot:` blocks in `config-studies.yaml` define series colors, markers, sizes, annotations. Device-level `device_overrides.<device>.plot:` overrides per-device.
+- **`plot:` blocks in all 13 studies** — pulse-endurance (3 series + 2 annotations), iv, ec, raman, uv-vis, afm. Device overrides for volatile-memristor (#2176AE) and non-volatile-memristor (#D64045/#1B998B).
+- **Theme consolidation** — `config-template.yaml` is the single source for all theme definitions (publication-nature, publication-acs, tufte, dark, poster, matcha). `theme/plot-theme/*.yaml` and `theme/plot-templates/*.yaml` removed. `theme/registry.py:theme_to_rcparams()` reads from config.
+
+### Changed
+- **All 12 plot functions** now read styling from `resolve_plot_config()` instead of hardcoded values. CLI flags still override. Pattern: `flags.get("color", plot_cfg.get("series.hrs.color", "#CC0000"))`.
+- **`data_loader.py`** — auto-resolves `study_name` from `technique` via `resolve_legacy_technique()`. Wires pulse studies through the study-aware metadata pipeline.
+- **`config.py:_resolve_device_config()`** — study-level columns win over instrument-registry defaults (fixes WGFMU column remapping for pulse studies).
+- **`get_metadata_config_for()`** — fixed to check `instruments.<inst>.metadata` path instead of `metadata_extractors` (Phase 9 scoping fix).
+- **`config/config.yaml`** — `default_dpi: 300` → `default_dpi: 600`.
+- **`config/config-studies.yaml`** — added WGFMU column maps (`time→Time, voltage→MeasResult1_value, current→MeasResult2_value`) to pulse-stp-decay, pulse-ppf, pulse-endurance, pulse-retention.
+- **`config/config_schema.py`** — `validate_template_config()` exempts `plot_labels`/`plot_techniques` from theme-specific required-field checks.
+
+### Removed
+- `theme/plot-theme/` (7 yaml files) — consolidated into `config-template.yaml`.
+- `theme/plot-templates/` (8 yaml files) — replaced by per-study `plot:` blocks in `config-studies.yaml`.
+
+### Fixed
+- `test_load_keysight_stp_column_remap` — columns now correctly remap `MeasResult1_value` → `voltage` for pulse studies.
+- `test_generate_template_yaml_is_valid` — schema no longer requires theme fields on non-theme templates.
+- `test_keysight_iv_metadata_in_info` — metadata config resolved via `instruments.<inst>.metadata` path.
+
+### Tests
+- 572 passed, 4 pre-existing failures (migration script, technique detection, electrochem device type).
+- 0 new regressions from config-first plot params merge.
+
+## [3.20.0] - 2026-06-20
+
+### Added
+- **Waveform 2D pattern detection** — `detect_waveform_pattern_2d()` returns canonical `[[t, v], ...]` array (subsampled to 200 points). `extract_waveform_metadata()` orchestrator combines 2D pattern + derived scalars. Wired into `data_loader.py:_load_with_device_config()` — when `data_shape.kind == "waveform_2d"`, injects `waveform_pattern` + scalars into `analysis_meta`.
+- **fzf subpackage** — `core/fzf/` created with `__init__.py`, `columns.py` (from `core/fzf_columns.py`), `display.py` (from `core/fzf_utils.py`).
+- **(study, device) scoping for fzf columns** — `STUDY_COLUMN_REGISTRY` re-keyed to `dict[tuple[str, str | None], list[str]]` with `(study, device_type)` tuple keys. `get_columns_for(study, device_type)` helper with fall-through. `get_step_columns()` and `build_fzf_display()` accept `device_type` parameter.
+- **Metadata parser/analyzer subpackages** — `core/metadata/` split into `core/metadata/parsers/` (keysight, keithley, raman, waveform) and `core/metadata/analyzers/` (iv, waveform). `core/metadata/__init__.py` imports from subpackages.
+- **(study, instrument) scoping** — `get_metadata_config_for(study, instrument, device)` in `config.py`. `data_loader._load_with_device_config()` uses it for (study, instrument)-aware config resolution.
+- **New tests** — 10 waveform 2D tests + 14 (study, device) scoping tests.
+
+### Changed
+- **`STUDY_COLUMN_REGISTRY`** re-keyed from `dict[str, list[dict]]` to `dict[tuple[str, str | None], list[str]]` — keys are now `(study, device_type)` tuples with device-specific fall-through.
+- **`get_columns_for(study, device_type)`** replaces direct registry lookups; handles missing device entries by falling through to `(study, None)`.
+- **`get_step_columns()` and `build_fzf_display()`** accept `device_type` parameter for per-device-type column selection.
+- **`data_loader._load_with_device_config()`** uses `get_metadata_config_for()` for (study, instrument)-aware config resolution.
+- **STP and endurance studies** now get `waveform_2d` data_shape when waveform 2D pattern is detected.
+- Updated 27 importer files for fzf subpackage migration.
+
+### Removed
+- `core/metadata/keysight.py`, `core/metadata/keithley.py`, `core/metadata/raman_header.py`, `core/metadata/waveform.py` — split into `parsers/` + `analyzers/` subpackages.
+- `core/fzf_columns.py`, `core/fzf_utils.py` — replaced by `core/fzf/` subpackage.
+
+### Tests
+- **572 passed** (was 547 in v3.19.0), 4 pre-existing baseline failures.
+- 10 new tests for waveform 2D detection + 14 new tests for (study, device) scoping.
+
 ## [3.19.0] - 2026-06-19
 
 ### Added

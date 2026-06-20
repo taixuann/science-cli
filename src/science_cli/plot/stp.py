@@ -130,6 +130,7 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.plot.base import parse_figsize
     from science_cli.theme import apply_theme
@@ -142,6 +143,7 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
         return
 
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("pulse:pulse-stp-decay")
     t = df.get("time", df.get("Time"))
     v = df.get("voltage", df.get("MeasResult1_value"))
     i = df.get("current", df.get("MeasResult2_value"))
@@ -166,7 +168,7 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
     segments.append((start, len(t_us)))
 
     has_describe = flags.get("describe")
-    base_size = parse_figsize(flags) or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
+    base_size = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", mpl.rcParams.get("figure.figsize", (3.46, 2.75))))
     if has_describe:
         fig = plt.figure(figsize=(base_size[0] * 2.2, base_size[1] * 1.2))
         gs = fig.add_gridspec(1, 2, width_ratios=[0.65, 0.35], wspace=0.35)
@@ -174,21 +176,22 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
     else:
         fig, ax1 = plt.subplots(figsize=base_size)
 
-    color_v = "tab:blue"
+    color_v = flags.get("color_v", plot_cfg.get("series.voltage.color", "tab:blue"))
     ax1.set_xlabel("Time (µs)")
     ax1.set_ylabel("Voltage (V)", color=color_v)
     ax1.tick_params(axis="y", labelcolor=color_v)
 
     ax2 = ax1.twinx()
-    color_i = "tab:red"
+    color_i = flags.get("color_i", plot_cfg.get("series.current.color", "tab:red"))
     ax2.set_ylabel("Current (A)", color=color_i)
     ax2.tick_params(axis="y", labelcolor=color_i)
     ax2.spines["right"].set_visible(True)
     ax2.spines["right"].set_color("black")
 
+    lw = float(plot_cfg.get("lines.linewidth", 1.0))
     for s_start, s_end in segments:
-        ax1.plot(t_us[s_start:s_end], v[s_start:s_end], color=color_v, linewidth=1.0)
-        ax2.plot(t_us[s_start:s_end], i[s_start:s_end], color=color_i, linewidth=1.0)
+        ax1.plot(t_us[s_start:s_end], v[s_start:s_end], color=color_v, linewidth=lw)
+        ax2.plot(t_us[s_start:s_end], i[s_start:s_end], color=color_i, linewidth=lw)
 
     if has_describe:
         wf = _load_waveform_def(filepath)
@@ -295,7 +298,7 @@ def _plot_stp_decay(filepath: str, flags: dict) -> None:
     if not Path(out_name).suffix:
         out_name += ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
+    dpi = int(flags.get("dpi", plot_cfg.get("savefig.dpi", mpl.rcParams.get("savefig.dpi", 600))))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] STP plot saved: {save_path}")
@@ -313,15 +316,17 @@ def _overlay_stp_decay(files: list, flags: dict) -> None:
 
     from science_cli.cli.commands.plot import _get_results_dir
     from science_cli.core.data_loader import load_data_file
+    from science_cli.core.plot_config import resolve_plot_config
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
 
     console = Console()
     apply_theme(get_active_theme())
+    plot_cfg = resolve_plot_config("pulse:pulse-stp-decay")
     cycle = mpl.rcParams["axes.prop_cycle"]
     colors = [entry["color"] for entry in cycle]
 
-    fig, (ax_v, ax_i) = plt.subplots(1, 2, figsize=(7, 3))
+    fig, (ax_v, ax_i) = plt.subplots(1, 2, figsize=tuple(plot_cfg.get("figure.figsize", (7, 3))))
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
 
@@ -344,8 +349,8 @@ def _overlay_stp_decay(files: list, flags: dict) -> None:
         i_arr = i_arr[mask]
         color = colors[idx % len(colors)]
         label = label_list[idx] if idx < len(label_list) else Path(fp).stem
-        ax_v.plot(t_us, v_arr, color=color, linewidth=1.0, label=label)
-        ax_i.plot(t_us, i_arr, color=color, linewidth=1.0, label=label)
+        ax_v.plot(t_us, v_arr, color=color, linewidth=float(plot_cfg.get("lines.linewidth", 1.0)), label=label)
+        ax_i.plot(t_us, i_arr, color=color, linewidth=float(plot_cfg.get("lines.linewidth", 1.0)), label=label)
 
     ax_v.set_xlabel("Time (µs)")
     ax_v.set_ylabel("Voltage (V)")
@@ -360,7 +365,7 @@ def _overlay_stp_decay(files: list, flags: dict) -> None:
     if not Path(out_name).suffix:
         out_name += ".pdf"
     save_path = out_dir / out_name
-    dpi = int(flags.get("dpi", mpl.rcParams.get("savefig.dpi", 600)))
+    dpi = int(flags.get("dpi", plot_cfg.get("savefig.dpi", mpl.rcParams.get("savefig.dpi", 600))))
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]✓[/bold green] STP overlay saved: {save_path}")

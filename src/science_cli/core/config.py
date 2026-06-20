@@ -1347,10 +1347,18 @@ def get_metadata_config_for(
     cfg = load_global_config()
 
     # Try studies config first (canonical)
+    # Metadata lives at studies.<tech>.<study>.instruments.<inst>.metadata
     studies = cfg.get("studies", {})
     tech_prefix, study_key = _parse_study_qualifier(study_name)
     if tech_prefix in studies and study_key in studies[tech_prefix]:
         study_cfg = studies[tech_prefix][study_key]
+        # Primary: instruments.<inst>.metadata
+        instrs = study_cfg.get("instruments", {})
+        if instrument in instrs:
+            inst_meta = instrs[instrument].get("metadata", {})
+            if inst_meta:
+                return dict(inst_meta)
+        # Fallback: metadata_extractors.<inst>
         extractors = study_cfg.get("metadata_extractors", {})
         if instrument in extractors:
             return dict(extractors[instrument])
@@ -1409,9 +1417,9 @@ def _merge_instrument_parsing(
         parsing = instr_model.get("parsing", {})
 
         if parsing:
-            # Apply canonical parsing fields (instrument-level is source of truth)
+            # Apply canonical parsing fields — study-level values win
             for key in ("delimiter", "decimal", "encoding", "columns", "names"):
-                if key in parsing:
+                if key in parsing and key not in merged:
                     merged[key] = parsing[key]
 
             # header_lines: study override wins, else fall back to default

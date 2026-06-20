@@ -22,7 +22,13 @@ _REQUIRED_GRAMMAR_PATTERN_FIELDS = {"id", "template", "description",
                                     "regex", "fields"}
 
 _TEMPLATE_KEYS = {"templates"}
-_TEMPLATE_REQUIRED_TOP_FIELDS = {"font", "fontsize", "dpi", "figure_format"}
+# Themes use a nested structure (figure, axes, font, colors, savefig).
+# The flat "dpi"/"fontsize"/"figure_format" keys were from the legacy format.
+_TEMPLATE_REQUIRED_TOP_FIELDS = {"figure", "font", "colors", "savefig"}
+
+# Templates whose names appear here are NOT themes — they are label/technique
+# containers that don't need theme-specific fields (dpi, fontsize, etc.).
+_NON_THEME_TEMPLATES = {"plot_labels", "plot_techniques"}
 
 _ALLOWED_DEVICES_TOP_KEYS = {"device_types", "legacy_to_study"}
 
@@ -267,8 +273,11 @@ def validate_template_config(data: dict) -> list[str]:
         if not isinstance(tmpl_cfg, dict):
             errors.append(f"{tmpl_path}: expected dict")
             continue
-        errors.extend(_check_missing_keys(tmpl_cfg, _TEMPLATE_REQUIRED_TOP_FIELDS,
-                                          tmpl_path))
+        # Skip theme-specific required-field check for non-theme templates
+        # (e.g., plot_labels, plot_techniques — label/technique containers)
+        if tmpl_name not in _NON_THEME_TEMPLATES:
+            errors.extend(_check_missing_keys(tmpl_cfg, _TEMPLATE_REQUIRED_TOP_FIELDS,
+                                              tmpl_path))
         rcparams = tmpl_cfg.get("rcparams")
         if rcparams is not None:
             errors.extend(_check_type(rcparams, dict, f"{tmpl_path}.rcparams"))

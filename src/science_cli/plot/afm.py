@@ -139,8 +139,10 @@ def _plot_afm_single(filepath: str, flags: dict) -> None:
 
     console = Console()
     apply_theme(get_active_theme())
+    from science_cli.core.plot_config import resolve_plot_config
+    plot_cfg = resolve_plot_config("afm:afm-topography")
     p = Path(filepath)
-    cmap = flags.get("colormap", flags.get("cmap", "viridis"))
+    cmap = flags.get("colormap", flags.get("cmap", plot_cfg.get("cmap", "viridis")))
 
     try:
         from science_cli.library.afm import load_afm
@@ -156,7 +158,10 @@ def _plot_afm_single(filepath: str, flags: dict) -> None:
     from science_cli.plot.afm import plot_afm_image
 
     title = flags.get("title", f"{p.stem}")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    figsize_cfg = plot_cfg.get("figure.figsize", [12, 5])
+    if isinstance(figsize_cfg, list):
+        figsize_cfg = tuple(figsize_cfg)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize_cfg)
     plot_afm_image(data.image, data.pixel_to_nm, cmap=cmap, title=title, ax=ax1)
     ax1.set_aspect("equal")
 

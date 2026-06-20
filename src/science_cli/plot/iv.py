@@ -105,8 +105,11 @@ def _overlay_iv_bipolar(files: list, flags: dict) -> None:
     colors = [theme_colors[i % len(theme_colors)] for i in range(len(files))]
     lw = float(flags.get("linewidth", mpl.rcParams.get("lines.linewidth", 0.75)))
 
+    from science_cli.core.plot_config import resolve_plot_config
+    _iv_cfg = resolve_plot_config("iv:iv-bipolar-sweep")
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
+    _cfg_sweep_color = _iv_cfg.get("series.sweep.color")
 
     for i, fp in enumerate(files):
         try:
@@ -115,7 +118,8 @@ def _overlay_iv_bipolar(files: list, flags: dict) -> None:
             if len(xi) == 0 or len(yi) == 0:
                 continue
             label = label_list[i] if i < len(label_list) else Path(fp).stem
-            ax.plot(xi, yi, label=label, color=colors[i], linewidth=lw)
+            _line_color = _cfg_sweep_color or colors[i]
+            ax.plot(xi, yi, label=label, color=_line_color, linewidth=lw)
         except Exception:
             continue
 

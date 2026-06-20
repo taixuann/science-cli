@@ -585,9 +585,21 @@ Stay on `dev` (continues v3.20.0 wave) or open `feat/waveform-2d-and-fzf-subpack
   - Wired into `data_loader.py:_load_with_device_config()`: added `study_name` parameter; after metadata extraction, looks up `data_shape.kind == "waveform_2d"` from global config and calls `extract_waveform_metadata()` to inject 2D pattern + scalars into `analysis_meta`.
   - Added 10 new tests: `TestDetectWaveformPattern2d` (6) + `TestExtractWaveformMetadata` (4).
   - 558 passed, 4 pre-existing failures. Commit: `b40ecec`.
-- Phase 5c — TBD
-- Phase 5d — TBD
-- Phase 6 (fzf subpackage) — TBD
-- Phase 7 — TBD
-- Phase 8 — TBD
-- Phase 9 — TBD
+- Phase 8 (fzf subpackage) — **Done** (`ab99652`). Created `core/fzf/`:
+  - `core/fzf/columns.py` (from `core/fzf_columns.py`, verbatim)
+  - `core/fzf/display.py` (from `core/fzf_utils.py`, internal import updated to `core.fzf.columns`)
+  - `core/fzf/__init__.py` — re-exports public API for backwards compat
+  - Updated 27 importer files (10 CLI commands + 3 library files + 5 test files)
+  - Deleted `core/fzf_columns.py` + `core/fzf_utils.py`
+  - 558 passed, 4 pre-existing failures.
+- Phase 9 — **Done** (`fe72834`). (study, device) scoping for fzf display + metadata:
+  - `STUDY_COLUMN_REGISTRY` re-keyed to `dict[tuple[str, str | None], list[str]]` with `(study, device)` tuples.
+  - Device-specific overrides for pulse-endurance: volatile shows `v_read_v`, non-volatile shows `v_reset_v`.
+  - Added `get_columns_for(study, device_type)` helper with fall-through logic.
+  - Added `_STUDY_BY_NAME` backwards-compat alias.
+  - `get_step_columns()` and `build_fzf_display()` now accept `device_type` parameter.
+  - Added `get_metadata_config_for(study, instrument, device_type)` to `config.py` — resolves via study `metadata_extractors` with instrument-level fallback.
+  - `data_loader._load_with_device_config()` uses `get_metadata_config_for()` when study known.
+  - Extended `test_fzf_columns.py` with 10 new tests (registry shape, get_columns_for, device-type, build_fzf_display device override).
+  - Added `TestGetMetadataConfigFor` class (4 tests) to `test_config.py`.
+  - 572 passed, 4 pre-existing failures.

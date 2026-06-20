@@ -1,6 +1,6 @@
 projects_root: /Users/tai/workspace/projects/active_projects
 theme: publication-nature
-default_dpi: 300
+default_dpi: 600
 default_figure_format: pdf
 defaults:
   iv-sweep: keithley-2400

@@ -46,6 +46,14 @@ def load_data_file(
         except ImportError:
             pass
 
+    # Auto-resolve study_name from technique if not provided
+    if technique and not study_name:
+        try:
+            from science_cli.core.config import resolve_legacy_technique
+            study_name = resolve_legacy_technique(technique) or ""
+        except ImportError:
+            pass
+
     # Try device-aware loading if technique + device or study_name provided
     device_cfg = _resolve_device_config(technique, device, study_name)
     if device_cfg:
@@ -108,7 +116,8 @@ def _resolve_device_config(
                     global_cfg = get_global_device_config(device)
                     if global_cfg:
                         from science_cli.core.config import _merge_dicts
-                        cfg = _merge_dicts(cfg, global_cfg)
+                        # Study-level config wins over global device defaults
+                        cfg = _merge_dicts(global_cfg, cfg)
 
                     from science_cli.core.config import _DEFAULT_DEVICE
                     merged = dict(_DEFAULT_DEVICE)

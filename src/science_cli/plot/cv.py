@@ -158,8 +158,11 @@ def _overlay_cv(files: list, flags: dict) -> None:
     fig, ax = plt.subplots(figsize=figsize)
     cycle = mpl.rcParams["axes.prop_cycle"]
     colors = [entry["color"] for entry in cycle]
+    from science_cli.core.plot_config import resolve_plot_config
+    _cv_cfg = resolve_plot_config("ec:ec-cv")
     custom_labels = flags.get("label-name") or flags.get("labels", "")
     label_list = [s.strip() for s in custom_labels.split(",") if s.strip()] if custom_labels else []
+    _cfg_cv_color = _cv_cfg.get("series.cv.color")
 
     for i, fp in enumerate(files):
         try:
@@ -168,7 +171,8 @@ def _overlay_cv(files: list, flags: dict) -> None:
             if len(xi) == 0 or len(yi) == 0:
                 continue
             label = label_list[i] if i < len(label_list) else Path(fp).stem
-            cf = dict(flags, color=colors[i % len(colors)])
+            _line_color = _cfg_cv_color or colors[i % len(colors)]
+            cf = dict(flags, color=_line_color)
             plot_cv_curve(xi, yi, flags=cf, label=label, ax=ax)
         except Exception:
             continue

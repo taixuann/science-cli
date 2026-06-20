@@ -1,59 +1,62 @@
 """Theme registry: load, apply, list themes.
 
-Three-tier LabPlot-inspired system:
-  Theme       → global colors, fonts, grid, axis style
-  Template    → per-object curve/plot presets
-  PlotTemplate → full figure blueprints
+Single source of truth: config-template.yaml in the global config directory.
+Theme definitions live under ``templates.<theme_name>`` and per-technique
+plot defaults live under ``templates.plot_techniques.<technique>``.
 
-This file handles the Theme tier. Templates live in theme/plot-templates/.
+This file is the Theme tier loader; it converts YAML → matplotlib rcParams.
+The legacy ``theme/plot-theme/*.yaml`` and ``theme/plot-templates/*.yaml``
+directories have been removed (consolidation v3.20).
 """
 
-from pathlib import Path
+from __future__ import annotations
 
 import matplotlib as mpl
 
-_THEME_DIR = Path(__file__).parent / "plot-theme"
-_THEME_CACHE: dict[str, dict] = {}
 
-BUILTIN_THEMES = [
-    "default",
-    "tufte",
-    "dark",
-    "publication-acs",
-    "publication-nature",
-    "poster",
-]
+def _load_templates_config() -> dict:
+    """Load templates section from the global config (cached)."""
+    from science_cli.core.config import load_global_config
+    return load_global_config().get("templates", {}) or {}
 
 
-def _load_yaml_theme(name: str) -> dict:
-    path = _THEME_DIR / f"{name}.yaml"
-    if not path.exists():
-        return {}
-    import yaml
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
-
-
-def list_themes() -> list[str]:
-    themes = []
-    for p in _THEME_DIR.glob("*.yaml"):
-        themes.append(p.stem)
-    return sorted(themes)
-
-
-def get_theme(name: str) -> dict:
-    if name in _THEME_CACHE:
-        return _THEME_CACHE[name]
-    theme = _load_yaml_theme(name)
+def _load_theme(theme_name: str) -> dict:
+    """Return the theme dict for *theme_name* from config-template.yaml."""
+    templates = _load_templates_config()
+    theme = templates.get(theme_name)
     if not theme:
-        theme = _load_yaml_theme("default") or {}
-    _THEME_CACHE[name] = theme
+        # Fall back to default theme so apply_theme() never silently no-ops.
+        theme = templates.get("default", {}) or {}
     return theme
 
 
+def list_themes() -> list[str]:
+    """List all built-in theme names from config-template.yaml.
+
+    Excludes non-theme keys (plot_labels, plot_techniques) so callers only
+    see actual theme entries.
+    """
+    templates = _load_templates_config()
+    non_theme_keys = {"plot_labels", "plot_techniques"}
+    return sorted(k for k in templates if k not in non_theme_keys)
+
+
+def get_theme(name: str) -> dict:
+    """Return raw theme dict (used by overlays.py for color cycling)."""
+    return _load_theme(name)
+
+
 def theme_to_rcparams(name: str) -> dict:
-    theme = get_theme(name)
-    rc = {}
+    """Convert a theme dict to matplotlib rcParams.
+
+    Reads from config-template.yaml (single source of truth — formerly
+    theme/plot-theme/*.yaml). Returns a flat dict of matplotlib rcParams keys.
+    """
+    theme = _load_theme(name)
+    if not theme:
+        return {}
+
+    rc: dict = {}
 
     figure = theme.get("figure", {})
     rc["figure.facecolor"] = figure.get("facecolor", "white")
@@ -123,27 +126,25 @@ def theme_to_rcparams(name: str) -> dict:
     return rc
 
 
-def apply_theme(name: str):
+def apply_theme(name: str) -> None:
+    """Apply theme rcParams to matplotlib's global rcParams dict."""
     rc = theme_to_rcparams(name)
     mpl.rcParams.update(rc)
 
 
 def template_to_flags(technique: str) -> dict:
-    """Load a technique template YAML and return a flag dict.
+    """Load a technique template from config-template.yaml and return flags.
 
-    Templates live in theme/plot-templates/ and define plot_type, defaults
-    (linewidth, linestyle, marker, markersize), and labels (xlabel, ylabel).
+    Templates now live under ``templates.plot_techniques.<technique>`` in
+    config-template.yaml. The extracted flag shape is preserved 1:1 with
+    the previous plot-templates/*.yaml readers (plot_type, defaults.*,
+    axes.{xlabel,ylabel}).
     """
-    templates_dir = Path(__file__).parent / "plot-templates"
-    path = templates_dir / f"{technique}.yaml"
-    if not path.exists():
+    templates = _load_templates_config()
+    data = templates.get("plot_techniques", {}).get(technique)
+    if not data:
         return {}
-    import yaml
-    try:
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-    except (yaml.YAMLError, OSError):
-        return {}
+
     flags: dict[str, str] = {}
     plot_type = data.get("plot_type", "")
     if plot_type:
@@ -153,9 +154,9 @@ def template_to_flags(technique: str) -> dict:
         val = defaults.get(key)
         if val is not None:
             flags[key] = str(val)
-    labels = data.get("axes", {})
+    axes = data.get("axes", {})
     for key in ("xlabel", "ylabel"):
-        val = labels.get(key)
+        val = axes.get(key)
         if val:
             flags[key] = str(val)
     return flags
