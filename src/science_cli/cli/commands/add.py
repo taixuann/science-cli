@@ -9,6 +9,7 @@ from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
+from science_cli.core.grammar import parse_filename
 
 console = Console()
 
@@ -460,6 +461,31 @@ def _add_data(args: list) -> None:
                 s.setdefault("files", []).append(filename)
                 step_counts[step_choice] = step_counts.get(step_choice, 0) + 1
                 break
+
+    # Grammar-based metadata: auto-populate from filenames
+    for filename, step_choice in steps_to_assign.items():
+        fname = Path(filename).name
+        parsed = parse_filename(fname)
+        if parsed:
+            for s in protocol.get("steps", []):
+                if s["name"] == step_choice:
+                    # Auto-populate step-level study if not already set
+                    if not s.get("study"):
+                        s["study"] = parsed["study"]
+                    # Store filename-derived metadata in step metadata dict
+                    meta = s.setdefault("metadata", {})
+                    meta.setdefault("date_code", parsed["date_code"])
+                    meta.setdefault("timestamp", parsed["timestamp"])
+                    meta.setdefault("study", parsed["study"])
+                    if parsed.get("device_id"):
+                        meta.setdefault("device_id", parsed["device_id"])
+                    if parsed.get("remarks"):
+                        meta.setdefault("remarks", parsed["remarks"])
+                    if parsed.get("flags"):
+                        meta.setdefault("flags", parsed["flags"])
+                    if parsed.get("count") is not None:
+                        meta.setdefault("count", parsed["count"])
+                    break
 
     # Sweep metadata: auto-detect for IV files
     iv_techniques = {"iv", "iv-sweep", "iv-breakdown", "iv-leakage"}

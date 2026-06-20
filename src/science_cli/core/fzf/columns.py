@@ -11,6 +11,67 @@ priority when the caller supplies a matching device type.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+
+# ── Global columns (always shown before per-study metadata) ──────
+
+GLOBAL_COLUMNS: list[tuple[str, int]] = [
+    ("Step",      16),   # step name from protocol.yaml
+    ("DateTime",  14),   # DDMMYY-HHMMSS from filename
+    ("Device-ID", 30),   # device-id from filename
+    ("Study",     16),   # study name from filename
+    ("Remarks",   12),   # remarks from filename
+    ("Flags",      8),   # flags from filename
+    ("Count",      6),   # count from filename
+]
+
+
+def get_global_columns(filepath: str, step_name: str | None = None) -> list[str]:
+    """Return global column values for a file.
+
+    Parses the filename using the universal convention
+    (``DDMMYY-HHMMSS_device-id_study_remarks_flags_count.ext``)
+    and returns one formatted column per ``GLOBAL_COLUMNS`` entry.
+
+    Args:
+        filepath: Full path to the data file.
+        step_name: Optional step name from protocol.yaml (populates the
+            ``Step`` column).
+
+    Returns:
+        List of formatted column strings, one per ``GLOBAL_COLUMNS`` entry,
+        each padded to its configured width.
+    """
+    from science_cli.core.grammar import parse_filename
+
+    fname = Path(filepath).name
+    parsed = parse_filename(fname)
+
+    columns: list[str] = []
+    for col_name, width in GLOBAL_COLUMNS:
+        if col_name == "Step" and step_name:
+            val: str = step_name[:width]
+        elif col_name == "DateTime" and parsed:
+            dt = f"{parsed.get('date_code', '')}-{parsed.get('timestamp', '')}"
+            val = dt[:width]
+        elif col_name == "Device-ID" and parsed:
+            val = (parsed.get("device_id", "") or "")[:width]
+        elif col_name == "Study" and parsed:
+            val = (parsed.get("study", "") or "")[:width]
+        elif col_name == "Remarks" and parsed:
+            val = (parsed.get("remarks", "") or "")[:width]
+        elif col_name == "Flags" and parsed:
+            val = (parsed.get("flags", "") or "")[:width]
+        elif col_name == "Count" and parsed:
+            cnt = parsed.get("count")
+            val = str(cnt or "")[:width]
+        else:
+            val = ""
+        columns.append(val.ljust(width))
+
+    return columns
+
 
 # ── Study column registry ────────────────────────────────────────
 

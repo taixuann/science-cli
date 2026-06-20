@@ -192,13 +192,16 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
                        status_badge: str = "") -> str:
     """Build a fixed-width fzf display line.
 
-    When ``show_protocol=True``: ``<protocol:20> <step:22> <filename>``.
-    When ``show_protocol=False``: ``<step:22> <filename>``.
+    When the filename matches the universal naming convention
+    (``DDMMYY-HHMMSS_device-id_study_remarks_flags_count.ext``),
+    the first columns are built from ``GLOBAL_COLUMNS``::
 
-    When ``metadata`` is provided, appends fixed-width columns for each
-    key-value pair in the dict, e.g.::
+        [status] Step  DateTime       Device-ID  Study  Remarks  Flags  Count  [per-study metadata...]
 
-        <step:22> <filename:30> <technique:20> <instrument:20>
+    When the filename does NOT match (legacy files), falls back to the
+    previous format::
+
+        [status] <step:22> <filename>  [metadata...]
 
     When ``study_name`` matches a key in ``STUDY_COLUMN_REGISTRY``,
     only the registered columns are shown (in registry order) with
@@ -209,22 +212,22 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
     are used if registered (e.g. volatile vs non-volatile endurance).
 
     When ``status_badge`` is non-empty, it is prepended (with 1 space)
-    before the protocol/step columns.
+    before the columns.
 
     Parameters
     ----------
     protocol : str
-        Protocol name.
+        Protocol name (only used in legacy fallback).
     step : str
         Step name, or ``""`` for unassigned.
     filename : str
-        File basename.
+        File basename (used for both global column parsing and legacy fallback).
     show_protocol : bool
-        Whether to include the protocol column (default True).
+        Whether to include the protocol column in legacy fallback (default True).
     width_proto : int
-        Fixed width for protocol column (default 20).
+        Fixed width for protocol column in legacy fallback (default 20).
     width_step : int
-        Fixed width for step column (default 22).
+        Fixed width for step column in legacy fallback (default 22).
     metadata : dict or None
         Optional dict of metadata key-value pairs to display in
         subsequent columns (e.g. ``{"technique": "ec-cv", "instrument": "keithley-2400"}``).
@@ -255,10 +258,20 @@ def build_fzf_display(protocol: str = "", step: str = "", filename: str = "",
             effective_meta = {k: metadata[k] for k in cols if k in metadata}
             effective_width = 12  # compact for narrow pulse values
 
-    if show_protocol and protocol:
-        base = f"{protocol:<{width_proto}} {step:<{width_step}} {filename}"
+    # Build base columns: try global columns from filename, fall back to legacy
+    from science_cli.core.fzf.columns import get_global_columns
+
+    global_cols = get_global_columns(filename, step_name=step)
+    has_parsed = any(col.strip() for col in global_cols[1:])  # col[0] (Step) may have step name
+    if has_parsed:
+        # Universal convention: use global columns
+        base = " ".join(global_cols)
     else:
-        base = f"{step:<{width_step}} {filename}"
+        # Legacy file: fall back to step + filename
+        if show_protocol and protocol:
+            base = f"{protocol:<{width_proto}} {step:<{width_step}} {filename}"
+        else:
+            base = f"{step:<{width_step}} {filename}"
 
     if effective_meta:
         meta_parts = []

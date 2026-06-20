@@ -3,10 +3,27 @@
 The protocol YAML format lives at ``protocol/<name>/<name>.yaml`` and can
 optionally include a ``device:`` section and enriched ``files:`` entries
 per step with sweep metadata.
+
+The schema supports a hierarchical structure:
+
+.. code-block:: yaml
+
+    device: volatile-memristor             # top-level device type (str)
+    name: my-protocol
+    steps:
+      - name: pulse-endurance-1
+        instrument: keysight-b1500a        # per-step instrument (str)
+        files:
+          - "data_file.csv"
+
+Backward compatible: old files where ``device:`` is a dict (geometry section)
+still load with ``Protocol.device = None``.
 """
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -25,6 +42,188 @@ KNOWN_DEVICE_TYPES: list[str] = [
 def validate_device_type(devices: str) -> bool:
     """Validate that a device type string is a known type or 'general'."""
     return devices in KNOWN_DEVICE_TYPES
+
+
+# ── Dataclasses ──────────────────────────────────────────────────────
+
+
+@dataclass
+class ProtocolStep:
+    """A single measurement step within a protocol.
+
+    Parameters
+    ----------
+    name:
+        Unique step name within the protocol.
+    technique:
+        Measurement technique identifier (e.g. ``"iv-sweep"``, ``"mem-endurance"``).
+    instrument:
+        Instrument used for this step (e.g. ``"keysight-b1500a"``).
+        Added per-step in the new hierarchical schema.
+    files:
+        List of data filenames attached to this step.
+    study:
+        Optional study/analysis class identifier.
+    metadata:
+        Arbitrary key-value metadata for analysis results.
+    """
+
+    name: str = ""
+    technique: str = ""
+    instrument: str | None = None
+    files: list[str | dict] = field(default_factory=list)
+    study: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ProtocolStep":
+        """Create a ProtocolStep from a raw YAML dict (backward-compatible)."""
+        return cls(
+            name=d.get("name", ""),
+            technique=d.get("technique", ""),
+            instrument=d.get("instrument"),
+            files=list(d.get("files", []) or []),
+            study=d.get("study", ""),
+            metadata=dict(d.get("metadata", {}) or {}),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize back to a plain dict, omitting None defaults."""
+        d: dict[str, Any] = {}
+        if self.name:
+            d["name"] = self.name
+        if self.technique:
+            d["technique"] = self.technique
+        if self.instrument is not None:
+            d["instrument"] = self.instrument
+        if self.files:
+            d["files"] = list(self.files)
+        if self.study:
+            d["study"] = self.study
+        if self.metadata:
+            d["metadata"] = dict(self.metadata)
+        return d
+
+
+@dataclass
+class Protocol:
+    """Top-level protocol container.
+
+    Parameters
+    ----------
+    name:
+        Protocol name.
+    description:
+        Optional human-readable description.
+    device:
+        Device type string e.g. ``"volatile-memristor"`` at the protocol level.
+        In the new hierarchical schema this is a top-level string, replacing the
+        older ``devices:`` field and coexisting with the ``device:`` geometry dict.
+    steps:
+        Ordered list of measurement steps.
+    """
+
+    name: str = ""
+    description: str = ""
+    device: str | None = None
+    steps: list[ProtocolStep] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Protocol":
+        """Create a Protocol from a raw YAML dict (backward-compatible).
+
+        Handles two shapes for the ``device`` key:
+
+        * **String** (new schema): ``device: volatile-memristor``
+          → stored as ``Protocol.device``.
+        * **Dict** (legacy geometry section): ``device: {rows: 6, cols: 6}``
+          → ``Protocol.device`` stays ``None``.
+        """
+        device_val: str | None = None
+        raw_device = d.get("device")
+        # String device type — new hierarchical schema
+        if isinstance(raw_device, str):
+            device_val = raw_device
+        # Also accept the plural ``devices:`` field as a fallback
+        if device_val is None:
+            raw_devices = d.get("devices")
+            if isinstance(raw_devices, str):
+                device_val = raw_devices
+
+        steps = [
+            ProtocolStep.from_dict(s)
+            for s in (d.get("steps", []) or [])
+            if isinstance(s, dict)
+        ]
+
+        return cls(
+            name=d.get("name", ""),
+            description=d.get("description", ""),
+            device=device_val,
+            steps=steps,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize back to a plain dict, omitting empty parts."""
+        d: dict[str, Any] = {}
+        if self.name:
+            d["name"] = self.name
+        if self.description:
+            d["description"] = self.description
+        if self.device is not None:
+            d["device"] = self.device
+        if self.steps:
+            d["steps"] = [s.to_dict() for s in self.steps]
+        return d
+
+
+# ── New: load/save protocol ──────────────────────────────────────────
+
+
+def load_protocol(yaml_path: Path) -> Protocol:
+    """Load a protocol YAML file and return a :class:`Protocol` instance.
+
+    Args:
+        yaml_path: Path to the protocol YAML file.
+
+    Returns:
+        A :class:`Protocol` instance, or an empty one if the file
+        doesn't exist or cannot be parsed.
+    """
+    path = Path(yaml_path)
+    if not path.exists():
+        return Protocol()
+
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return Protocol()
+
+    if not isinstance(data, dict):
+        return Protocol()
+
+    return Protocol.from_dict(data)
+
+
+def save_protocol(yaml_path: Path, protocol: Protocol) -> bool:
+    """Write a :class:`Protocol` instance to a YAML file.
+
+    Args:
+        yaml_path: Path to write the protocol YAML file.
+        protocol: The :class:`Protocol` to serialize.
+
+    Returns:
+        ``True`` on success.
+    """
+    path = Path(yaml_path)
+    data = protocol.to_dict()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False,
+                  allow_unicode=True, indent=2)
+    return True
 
 
 # ── Devices field ────────────────────────────────────────────────────

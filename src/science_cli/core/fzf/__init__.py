@@ -7,8 +7,10 @@ Public API re-exports (for backwards compat):
 """
 from science_cli.core.fzf.columns import (
     STUDY_COLUMN_REGISTRY,
+    GLOBAL_COLUMNS,
     status_badge_for_file,
     get_step_columns,
+    get_global_columns,
 )
 from science_cli.core.fzf.display import (
     build_fzf_display,
@@ -17,8 +19,10 @@ from science_cli.core.fzf.display import (
 
 __all__ = [
     "STUDY_COLUMN_REGISTRY",
+    "GLOBAL_COLUMNS",
     "status_badge_for_file",
     "get_step_columns",
+    "get_global_columns",
     "build_fzf_display",
     "fzf_select",
 ]
