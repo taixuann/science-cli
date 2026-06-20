@@ -823,6 +823,41 @@
               <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done — Committed ea05b71 + 9f318bf</div>
             </button>
 
+            <!-- NEW: STP Origin Line Fix -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#f4c95d;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">200626k_fix-stp-origin-line.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">
+                <strong>Fix STP origin line.</strong> Multi-cycle WGFMU files connect cycle N→N+1 with a diagonal
+                line through (0,0). Fix: insert NaN breaks at large time gaps (>10× median).
+                <code style="color:#f06464">generic.py</code> — ~10 lines, no config changes.
+              </p>
+              <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-bottom:0.5rem">
+                <span class="dep-pill dep-purple">assignee: code-medium</span>
+                <span class="dep-pill dep-blue">Layer 5</span>
+                <span class="dep-pill dep-gold">3 tasks · ~45m</span>
+                <span class="dep-pill" style="background:#2a1414;color:#f06464">🐛 bugfix</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Root Cause</div>
+                <div style="font-size:0.75rem;color:#aeb6c6;line-height:1.6">
+                  WGFMU STP files contain 3+ pulse cycles. After sort_values(x), cycle 1 end connects to
+                  cycle 2 start — diagonal through origin. Median gap=0.1µs, boundary gap=30µs.
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                  <span class="dep-pill dep-purple">task-001: generic.py NaN break</span>
+                  <span class="dep-pill dep-green">task-002: smoke test</span>
+                  <span class="dep-pill dep-gold">task-003: docs</span>
+                </div>
+              </div>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done — NaN break at large time gaps</div>
+            </button>
+
           </div>
         </div>
       </section>

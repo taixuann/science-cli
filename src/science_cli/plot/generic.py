@@ -185,36 +185,19 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
 
     sign = float(cfg.get("current_sign", 1))
 
-    # Apply filter (e.g. voltage > 0.05 for stp-decay)
-    # Resolve filter field through column mapping if needed
-    filter_cfg = cfg.get("filter")
-    if isinstance(filter_cfg, dict):
-        field = filter_cfg.get("field")
-        min_val = filter_cfg.get("min")
-        if field and min_val is not None:
-            field_series = _get_column(df, field)
-            # Fallback: resolve through instrument config's column mapping
-            if field_series is None and _info:
-                inst_cols = _info.get("instrument_config", {}).get("columns", {})
-                if field in inst_cols:
-                    field_series = _get_column(df, inst_cols[field])
-            if field_series is not None:
-                mask = field_series.astype(float) > float(min_val)
-                df = df[mask].copy()
-
     columns = cfg.get("columns", {})
     x_col = columns.get("x")
     y_col = columns.get("y")
     y2_col = columns.get("y2")
 
-    # Drop rows where x or y is NaN (NaN breaks matplotlib line plots)
+    # Drop NaN/Inf rows (rendering fix — matplotlib cannot plot NaN)
     df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.dropna(subset=[x_col] if x_col else [])
-    # Also drop NaN in y column (current) — some WGFMU rows have voltage-only data
+    if x_col and x_col in df.columns:
+        df = df.dropna(subset=[x_col])
     if y_col and y_col in df.columns:
         df = df.dropna(subset=[y_col])
 
-    # Sort by x to prevent time-backwards jumps from creating lines through origin
+    # Sort by time to prevent backward-time rendering glitches
     if x_col and x_col in df.columns:
         df = df.sort_values(x_col).reset_index(drop=True)
 
