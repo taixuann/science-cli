@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer 5: Plotting Dispatch — science-cli Artifact Registry</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet">
+  <meta name="lavish-live-reload" content="root">
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0f1115; color: #f7f3ea; margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+    /* Layout safety */
+    .dashboard-wrap { display: flex; width: 100%; max-width: 100vw; overflow-x: hidden; }
+    .main-content { flex: 1; min-width: 0; padding: 1.5rem; }
+    .sidebar { width: 16rem; min-width: 16rem; border-right: 1px solid #2a2f3a; padding: 1rem; overflow-y: auto; height: calc(100vh - 56px); }
+
+    /* Cards */
+    button { cursor: pointer !important; }
+    .card-btn {
+      display: block; width: 100%; text-align: left; background: #11141a;
+      border: 1px solid #303745; border-radius: 12px; padding: 1rem;
+      transition: all 0.15s ease-out; font: inherit; color: inherit;
+    }
+    .card-btn:hover { border-color: #c99ee3; box-shadow: 0 0 0 1px #c99ee3; }
+    .card-btn:focus-visible { outline: 2px solid #c99ee3; outline-offset: 2px; }
+
+    /* Badges */
+    .badge-star { color: #f4c95d; }
+    .badge-keep { color: #72c96e; }
+    .badge-discard { color: #f06464; }
+
+    /* Layer tags */
+    .layer-tag { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+    .layer-plot { background: #2a1a3a; color: #c99ee3; }
+    .layer-theme { background: #3a2a1a; color: #f4c95d; }
+    .layer-feature { background: #172419; color: #8fe39e; }
+    .layer-artifact { background: #1a2450; color: #8ca4e3; }
+    .layer-deferred { background: #2a1414; color: #f06464; }
+
+    /* Version timeline */
+    .version-dot {
+      width: 0.75rem; height: 0.75rem; border-radius: 50%;
+      background: #c99ee3; border: 2px solid #0f1115; flex-shrink: 0;
+    }
+    .version-dot-old { background: #4a4f5a; }
+
+    /* Sidebar nav */
+    .nav-btn {
+      display: flex; align-items: center; gap: 0.5rem; width: 100%;
+      padding: 0.5rem 0.75rem; border-radius: 8px; text-align: left;
+      border: none; font: inherit; font-size: 0.875rem; background: transparent; color: #b9c0cf;
+      transition: all 0.12s ease-out;
+    }
+    .nav-btn:hover { background: #1c212b; color: #f7f3ea; }
+    .nav-btn.active { background: #1c212b; border: 1px solid #c99ee3; color: #f7f3ea; }
+
+    /* Artifact grid */
+    .artifact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
+    .artifact-grid .col-span-2 { grid-column: span 2; }
+
+    /* Dep pills */
+    .dep-pill {
+      display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.5rem;
+      border-radius: 4px; background: #1c1f2e; color: #8ca4e3;
+    }
+    .dep-pill.dep-green { background: #172419; color: #8fe39e; }
+    .dep-pill.dep-gold { background: #25230f; color: #f4c95d; }
+    .dep-pill.dep-red { background: #2a1414; color: #f06464; }
+    .dep-pill.dep-blue { background: #1c1f2e; color: #8ca4e3; }
+    .dep-pill.dep-purple { background: #241a2e; color: #c99ee3; }
+
+    /* Collapsible */
+    .collapsed-content { display: none; }
+    .expanded .collapsed-content { display: block; }
+    .expand-arrow { transition: transform 0.15s ease-out; display: inline-block; }
+    .expanded .expand-arrow { transform: rotate(90deg); }
+
+    /* Section toggle */
+    .section-toggle {
+      background: none; border: none; color: #8c96aa; font-size: 0.7rem;
+      font-family: inherit; cursor: pointer !important;
+    }
+    .section-toggle:hover { color: #f7f3ea; }
+
+    /* Gap card */
+    .gap-card {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.5rem 0.75rem; border-radius: 8px; background: #1c1f1e;
+    }
+
+    /* Feature checklist */
+    .feature-item {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.5rem 0.75rem; border-radius: 8px; background: #172419;
+    }
+    .feature-item.deferred { background: #2a1414; }
+
+    /* Size bar */
+    .size-bar {
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .size-bar-inner {
+      height: 0.375rem; border-radius: 999px; background: #2a2f3a; flex: 1;
+    }
+    .size-bar-fill {
+      height: 100%; border-radius: 999px; background: #c99ee3;
+    }
+    .size-bar-fill.gold { background: #f4c95d; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .artifact-grid { grid-template-columns: 1fr; }
+      .artifact-grid .col-span-2 { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <header style="position:sticky;top:0;z-index:50;background:#171a21;border-bottom:1px solid #2a2f3a;padding:0.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:1rem">
+      <h1 style="font-size:1.125rem;font-weight:750;letter-spacing:.02em">science-cli · Artifact Registry</h1>
+      <span style="font-size:0.875rem;color:#8c96aa">v3.21.0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <span style="font-size:0.75rem;color:#8c96aa">7 layers · 29 artifacts</span>
+      <span style="padding:0.125rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:600;background:#241a2e;color:#c99ee3">plotting</span>
+    </div>
+  </header>
+
+  <div class="dashboard-wrap">
+    <!-- Sidebar: Layer Navigator -->
+    <aside class="sidebar" style="height:calc(100vh - 56px)">
+      <h2 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem;font-weight:600">Layers</h2>
+      <nav style="display:flex;flex-direction:column;gap:0.125rem">
+        <button class="nav-btn" onclick="switchLayer(1)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#f4c95d;color:#17130a;flex-shrink:0">1</span>
+          Config + Grammar
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">16</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(2)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">2</span>
+          Metadata Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">5</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(3)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">3</span>
+          Keysight Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">3</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(4)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">4</span>
+          FZF Display
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn active" onclick="switchLayer(5)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#c99ee3;color:#17130a;flex-shrink:0">5</span>
+          Plotting Dispatch
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">23</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(6)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">6</span>
+          Protocol.yaml
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(7)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">7</span>
+          Pulse Analyzers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">5</span>
+        </button>
+      </nav>
+
+      <!-- Status Tags -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Status Tags</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-star" style="font-size:1.125rem">★</span>
+            <span style="color:#8c96aa">Highlight</span>
+            <span style="margin-left:auto;color:#8c96aa">4</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-keep" style="font-size:1.125rem">✓</span>
+            <span style="color:#8c96aa">Keep</span>
+            <span style="margin-left:auto;color:#8c96aa">12</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-discard" style="font-size:1.125rem">✗</span>
+            <span style="color:#8c96aa">Discard</span>
+            <span style="margin-left:auto;color:#8c96aa">0</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span style="color:#f4c95d;font-size:1.125rem">🔄</span>
+            <span style="color:#8c96aa">Planning</span>
+            <span style="margin-left:auto;color:#8c96aa">1</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Stats -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Layer 5 Stats</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#8c96aa">
+          <div style="display:flex;justify-content:space-between"><span>Code files</span><span style="color:#aeb6c6">14</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Theme files</span><span style="color:#aeb6c6">2</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Plan artifacts</span><span style="color:#aeb6c6">8</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Deferred items</span><span style="color:#f06464">2</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:0.25rem;padding-top:0.25rem;border-top:1px solid #2a2f3a">
+            <span>Total LOC</span>
+            <span style="color:#c99ee3;font-weight:600">~2,756</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Interactive</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#8c96aa">
+          <div>▸ Click any card to expand/collapse details</div>
+          <div>▸ Click section headers to collapse sections</div>
+          <div>▸ Layer nav shows artifact counts</div>
+          <div>▸ Size bars show relative file weight</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Layer Header -->
+      <div style="margin-bottom:1.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem">
+          <span style="font-size:1.5rem;font-weight:700;color:#c99ee3">05</span>
+          <h2 style="font-size:1.25rem;font-weight:600;margin:0">Plotting Dispatch</h2>
+        </div>
+        <p style="font-size:0.875rem;color:#8c96aa;max-width:48rem;margin:0.25rem 0 0.5rem 0">
+          The plotting engine layer: <code style="color:#c99ee3">STUDY_PLOTTERS</code> registry with <code style="color:#c99ee3">DevicePlotterVariant</code> for per-device dispatch,
+          config-first plot parameter resolution, 12 per-study plot files, centralized theme system.
+          All 12 plot files migrated from hardcoded to config lookups in v3.21.0.
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <span class="layer-tag layer-plot">plot</span>
+          <span class="layer-tag layer-theme">theme</span>
+          <span class="layer-tag layer-feature">feature</span>
+          <span class="layer-tag layer-artifact">artifact</span>
+          <span class="layer-tag layer-deferred">deferred</span>
+        </div>
+      </div>
+
+      <!-- Section A: Code Files -->
+      <section style="margin-bottom:2rem" id="section-A">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-A')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">A. Code Files (14 plot/*.py)</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">14 artifacts · ~2,756 LOC</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- registry.py — hero card, 2 cols -->
+            <button class="card-btn col-span-2" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">registry.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/registry.py</span>
+                </div>
+                <span class="layer-tag layer-plot">plot</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">
+                Central dispatch hub. Contains <code style="color:#c99ee3">STUDY_PLOTTERS</code> dict mapping <code style="color:#c99ee3">(study, device_type)</code> →
+                <code style="color:#c99ee3">DevicePlotterVariant</code> tuples for per-device plot function dispatch.
+                The brain of the plotting system — all plot commands route through here.
+              </p>
+              <!-- Size bar -->
+              <div class="size-bar" style="margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">12.0 KB</span>
+                <div class="size-bar-inner"><div class="size-bar-fill" style="width:55%"></div></div>
+                <span style="font-size:0.7rem;color:#8c96aa">~310L</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>v3.18.0</span><span>·</span><span>created for STUDY_PLOTTERS</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Key Interfaces</div>
+                  <div style="color:#aeb6c6">
+                    <code>STUDY_PLOTTERS</code> — dict keyed by <code>(study, device_type)</code><br>
+                    <code>DevicePlotterVariant</code> — NamedTuple(plot_func, device_type)<br>
+                    <code>resolve_plotter(study, device_type) → func</code><br>
+                    <code>register_plotter(study_patterns, device_type=None)</code> decorator
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                    <span class="dep-pill dep-purple">routes to: all 12 plot/*.py files</span>
+                    <span class="dep-pill dep-blue">imported by: dispatch.py, each plot command</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand interface details</span>
+              </div>
+            </button>
+
+            <!-- stp.py — star, large file -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">stp.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/stp.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Short-term plasticity (STP) decay plots. Config-first plot params. Largest non-special plot file (420 lines).</p>
+              <div class="size-bar" style="margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">15.4 KB</span>
+                <div class="size-bar-inner"><div class="size-bar-fill" style="width:70%"></div></div>
+                <span style="font-size:0.7rem;color:#8c96aa">~420L</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>v3.21.0 migrated</span><span>·</span><span>dep: core/plot_config.py</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <span class="dep-pill dep-green" style="display:inline-block;margin-bottom:0.25rem">fixed by: 190626g_fix-stp-plot.md</span>
+              </div>
+            </button>
+
+            <!-- pulse_endurance.py — star, special -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">pulse_endurance.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/pulse_endurance.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">★ Pre-processed CSV support. Endurance cycling plots (LRS/HRS/ratio vs cycle). Two variants: volatile (R_decay) and non-volatile (R_high + R_low).</p>
+              <div class="size-bar" style="margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">16.2 KB</span>
+                <div class="size-bar-inner"><div class="size-bar-fill gold" style="width:75%"></div></div>
+                <span style="font-size:0.7rem;color:#8c96aa">~450L</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>v3.20.0 DevicePlotterVariant</span><span>·</span><span>largest plot file</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Why Pre-Processed CSV</div>
+                  <div style="color:#aeb6c6">Keysight WGFMU endurance files contain per-pulse raw data. The parser (Layer 3) extracts LRS/HRS per cycle into a simplified CSV that this plotter reads directly — no raw file iteration needed.</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                    <span class="dep-pill dep-green">fixed by: 190626f_fix-endurance-plot.md</span>
+                    <span class="dep-pill dep-blue">dep: core/plot_config.py</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            <!-- eis.py — star, dual-panel -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">eis.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/eis.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">★ Special dual-panel Nyquist + Bode plots. The only plot file with a composite two-axis layout.</p>
+              <div class="size-bar" style="margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">12.4 KB</span>
+                <div class="size-bar-inner"><div class="size-bar-fill gold" style="width:55%"></div></div>
+                <span style="font-size:0.7rem;color:#8c96aa">~350L</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>v3.21.0 migrated</span><span>·</span><span>dual-panel layout</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;font-size:0.75rem">
+                  <span class="dep-pill dep-purple">special: dual-panel Nyquist + Bode</span>
+                  <span class="dep-pill dep-blue">dep: core/plot_config.py</span>
+                </div>
+              </div>
+            </button>
+
+            <!-- iv.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">iv.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/iv.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">IV curve plots. Config-first styling, voltage range, compliance current markers.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>5.6 KB</span><span>·</span><span>~150L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- cv.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">cv.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/cv.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Cyclic voltammetry plots. Sweep direction arrows, multi-cycle overlay, config-first styling.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>6.4 KB</span><span>·</span><span>~170L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- ca.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">ca.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/ca.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Chronoamperometry plots. Current decay vs time, config-first styling.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>6.0 KB</span><span>·</span><span>~160L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- raman.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">raman.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/raman.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Raman spectroscopy plots. Spectral peak annotation, config-first styling.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>6.4 KB</span><span>·</span><span>~180L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- base.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">base.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/base.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Base plot class. Shared axis formatting, color cycle, legend placement, figure sizing.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;margin-bottom:0.5rem">
+                <span>3.2 KB</span><span>·</span><span>~126L</span><span>·</span><span>dep: theme/registry.py</span>
+              </div>
+              <span class="dep-pill dep-green">dep: theme/registry.py</span>
+            </button>
+
+            <!-- afm.py — star, special image -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">afm.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/afm.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">★ Special: image-type data. AFM/SPM topographic image plots with color bars. Different data shape than all other analyzers.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>5.7 KB</span><span>·</span><span>~160L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;font-size:0.75rem">
+                  <span class="dep-pill dep-purple">special: image-type (not timeseries)</span>
+                  <span class="dep-pill dep-blue">dep: core/plot_config.py</span>
+                </div>
+              </div>
+            </button>
+
+            <!-- ppf.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">ppf.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/ppf.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Paired-pulse facilitation (PPF) ratio vs interval plots.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>5.3 KB</span><span>·</span><span>~140L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- uv_vis.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">uv_vis.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/uv_vis.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">UV-Vis absorbance spectra plots. Wavelength on x-axis, config-first styling.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>4.5 KB</span><span>·</span><span>~120L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- pulse_retention.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">pulse_retention.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/pulse_retention.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Pulse retention decay plots. Smallest plot file.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>2.2 KB</span><span>·</span><span>~60L</span><span>·</span><span>v3.21.0 migrated</span>
+              </div>
+            </button>
+
+            <!-- overlays.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">overlays.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/overlays.py</span>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Multi-file overlay plot generator. Calls individual plot functions and composites them.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;margin-bottom:0.5rem">
+                <span>971 B</span><span>·</span><span>~30L</span><span>·</span><span>smallest file</span>
+              </div>
+              <span class="dep-pill dep-purple">dep: all plot/*.py files</span>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section B: Theme Files -->
+      <section style="margin-bottom:2rem" id="section-B">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-B')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">B. Theme System</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">2 artifacts</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- theme/registry.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">theme/registry.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/theme/registry.py</span>
+                </div>
+                <span class="layer-tag layer-theme">theme</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Theme registry. Loads theme definitions from config-template.yaml, applies <code style="color:#f4c95d">apply_theme()</code> patterns to matplotlib rcParams. ~5 KB.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>~5 KB</span><span>·</span><span>v3.21.0 consolidated</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;font-size:0.75rem">
+                  <span class="dep-pill dep-gold">consolidated: plot-theme/ + plot-templates/ deleted</span>
+                  <span class="dep-pill dep-blue">reads: config-template.yaml:themes:</span>
+                  <span class="dep-pill dep-green">feeds: plot/base.py apply_theme()</span>
+                </div>
+              </div>
+            </button>
+
+            <!-- config-template.yaml themes section -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">config-template.yaml</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">:themes: section</span>
+                </div>
+                <span class="layer-tag layer-theme">theme</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Theme definitions (publication-nature, acs, tufte, dark, poster, matcha) + plot labels. Embedded in config-template.yaml (18.8 KB total).</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;margin-bottom:0.5rem">
+                <span>embedded</span><span>·</span><span>v3.21.0</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;font-size:0.75rem">
+                  <span class="dep-pill dep-gold">consolidated: 15 YAML → 1</span>
+                  <span class="dep-pill dep-red">supersedes: plot-theme/*.yaml (deleted)</span>
+                </div>
+              </div>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section C: Key Features (All Implemented v3.21.0) -->
+      <section style="margin-bottom:2rem" id="section-C">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-C')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">C. Key Features — ALL Implemented (v3.21.0 · 6b63cc0)</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">5 features · all merged</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1rem;display:flex;flex-direction:column;gap:0.5rem">
+            <div class="feature-item">
+              <span style="font-size:1.125rem;flex-shrink:0">✅</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">STUDY_PLOTTERS with DevicePlotterVariant</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Per-device dispatch via <code>(study, device_type) → plot_func</code> mapping. Allows volatile vs non-volatile variants for pulse-endurance.</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <span style="font-size:1.125rem;flex-shrink:0">✅</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">Config-first plot parameters</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0"><code>resolve_plot_config()</code> merges theme defaults → study plot blocks → device overrides. Eliminated hardcoded color/size dictionaries.</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <span style="font-size:1.125rem;flex-shrink:0">✅</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">ALL 12 plot files migrated to config lookups</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Every per-study plot file now calls <code>resolve_plot_config()</code> instead of inline hardcoded values.</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <span style="font-size:1.125rem;flex-shrink:0">✅</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">Theme consolidation</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0"><code>plot-theme/</code> + <code>plot-templates/</code> directories deleted. All theme data consolidated into <code>config-template.yaml:themes:</code>.</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <span style="font-size:1.125rem;flex-shrink:0">✅</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">CLI flags override config</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Pattern: <code>flags.get("color", cfg.get(...))</code> — CLI flags take precedence over config-first resolution.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section D: NOT Implemented (Deferred) -->
+      <section style="margin-bottom:2rem" id="section-D">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-D')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">D. NOT Implemented (Deferred)</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">2 items · Phases 4-6</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#f06464">❌</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#f06464">plot/single.py — generic config-driven dispatch</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Would replace 9 per-study files with a single generic plotter that dispatches by <code>data_shape.kind</code>. Estimated 60% LOC reduction. Deferred to Phase 5-6 of restructure plan (200626h).</p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#f06464">❌</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500;color:#f06464">Per-study plot file consolidation</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">9 near-identical per-study files (iv.py, cv.py, ca.py, raman.py, uv_vis.py, stp.py, ppf.py, pulse_retention.py, overlays.py) with 60-80% duplicated boilerplate. Consolidation deferred to Phase 4.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section E: Plan Artifacts -->
+      <section style="margin-bottom:2rem" id="section-E">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-E')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">E. Plan Artifacts</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">7 artifacts</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- merged artifacts -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">190626j_config-first-plot-params.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Config-first plot params plan. Merged v3.21.0. Core design document for the config-first migration.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Merged v3.21.0</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">190626i_theme-plot-config-architecture.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Theme system audit + 3-tier analysis (config YAML → plot functions → protocol.yaml). Provided the blueprint for consolidation.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">200626g_merge-plot-config.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Merge report for config-first plot params. Documents the integration of all 12 plot files.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Merged</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#f4c95d;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">200626h_restructure-library-plot-core.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Plot consolidation plan (10 phases). Phase 1-3 done (config-first merge). Phases 4-6 deferred (generic single.py + per-study consolidation).</p>
+              <div style="font-size:0.75rem;color:#f4c95d;font-weight:600">🟡 Planning (Phases 4-6 deferred)</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">170626d_device-dispatch-architecture.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Device-aware plot dispatch design. Documented DevicePlotterVariant pattern and STUDY_PLOTTERS architecture.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">190626f_fix-endurance-plot.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">Endurance plot fix plan. Fixed LRS/HRS extraction from pre-processed CSV and volatile/non-volatile dispatch.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done</div>
+            </button>
+
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">190626g_fix-stp-plot.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">STP plot fix plan. Fixed config-first migration bugs in stp.py decay plot rendering.</p>
+              <div style="font-size:0.75rem;color:#72c96e;font-weight:600">🟢 Done</div>
+            </button>
+
+            <!-- NEW: Generic Plot Executor -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#f4c95d;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">200626j_generic-plot-executor.md</span>
+                </div>
+                <span class="layer-tag layer-artifact">artifact</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">
+                <strong>Config-first generic plot executor.</strong> Replace 9 study-specific plot files with a single
+                <code style="color:#c99ee3">plot/generic.py</code> that reads layout, columns, axis, filter, and styling
+                from config-studies.yaml. Keep only 3 complex plotters (endurance, eis, afm). 14 files → 4 files, ~2500 LOC → ~800 LOC.
+              </p>
+              <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-bottom:0.5rem">
+                <span class="dep-pill dep-purple">assignee: code-heavy</span>
+                <span class="dep-pill dep-blue">Layer 5</span>
+                <span class="dep-pill dep-gold">8 tasks · ~7.5h</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Task Breakdown</div>
+                <div style="font-size:0.75rem;color:#aeb6c6;line-height:1.6">
+                  <div>1. Add layout/columns/axis/filter to config-studies.yaml (1h, code-medium)</div>
+                  <div>2. Create plot/generic.py — config-driven executor (3h, code-heavy)</div>
+                  <div>3. Simplify registry.py — generic as default (30m, code-light)</div>
+                  <div>4. Update CLI routing (30m, code-light)</div>
+                  <div>5. Delete 9 replaced plot files (15m, code-light)</div>
+                  <div>6. Run pytest — verify no regressions (30m, review-medium)</div>
+                  <div>7. Smoke test all study types (1h, review-medium)</div>
+                  <div>8. Update sci-plot-config skill (1h, docs-medium)</div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                  <span class="dep-pill dep-purple">replaces: stp.py, iv.py, cv.py, ca.py</span>
+                  <span class="dep-pill dep-purple">replaces: raman.py, uv_vis.py, ppf.py</span>
+                  <span class="dep-pill dep-purple">replaces: pulse_retention.py, overlays.py</span>
+                  <span class="dep-pill dep-green">keeps: endurance.py, eis.py, afm.py</span>
+                </div>
+              </div>
+              <div style="font-size:0.75rem;color:#f4c95d;font-weight:600">🟡 Planning — Approved</div>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section F: Version Timeline -->
+      <section style="margin-bottom:2rem" id="section-F">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-F')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">F. Version Timeline</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">6 versions</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+            <div style="display:flex;flex-direction:column;gap:0.75rem;font-size:0.75rem">
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#c99ee3;font-weight:600">v3.22.0 (planned)</div>
+                  <div style="color:#aeb6c6">Generic plot executor. Config-driven layout/columns/axis/filter replaces 9 study-specific plot files. 14 files → 4 files. See 200626j_generic-plot-executor.md.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">v3.21.0 (6b63cc0)</div>
+                  <div style="color:#aeb6c6">Config-first plot params merged. ALL 12 plot files migrated from hardcoded to config lookups. Theme consolidation — plot-theme/ + plot-templates/ deleted, all in config-template.yaml. CLI flags override config. EIS dual-panel, AFM image, endurance pre-processed CSV all working.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">v3.20.0</div>
+                  <div style="color:#aeb6c6">DevicePlotterVariant for pulse-endurance. volatile/non-volatile dispatch added to STUDY_PLOTTERS.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">v3.18.0</div>
+                  <div style="color:#aeb6c6">STUDY_PLOTTERS registry created. Central dispatch hub introduced. plot/base.py created.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">v3.14.0</div>
+                  <div style="color:#aeb6c6">Plot theme system split into plot-theme/ and plot-templates/ directories. 15 YAML files for themes.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">v3.12.0</div>
+                  <div style="color:#aeb6c6">Per-study plot files created (iv.py, cv.py, ca.py, eis.py, raman.py, uv_vis.py, stp.py, ppf.py, pulse_endurance.py, pulse_retention.py, afm.py). Replaced monolithic library/*/plotting.py with SVG generators.</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:0.75rem">
+                <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                <div>
+                  <div style="color:#8c96aa;font-weight:600">pre-v3.12</div>
+                  <div style="color:#aeb6c6">Monolithic library/*/plotting.py with SVG generators. Hardcoded colors, styles, and layout in each technique module.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section G: Cross-Layer Dependencies -->
+      <section style="margin-bottom:2rem" id="section-G">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-G')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">G. Cross-Layer Dependencies</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">How Layer 5 connects to other layers</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.75rem">
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">1</span>
+                  <span style="font-weight:600;color:#d8deea">Config Layer</span>
+                </div>
+                <div style="color:#8c96aa">PROVIDES:</div>
+                <div style="color:#aeb6c6">config-studies.yaml plot: blocks, config-template.yaml themes, config-devices.yaml device_types</div>
+                <div style="color:#8c96aa;margin-top:0.25rem">CONSUMED BY:</div>
+                <div style="color:#aeb6c6">core/plot_config.py → resolve_plot_config() merger</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">2</span>
+                  <span style="font-weight:600;color:#d8deea">Metadata Parsers</span>
+                </div>
+                <div style="color:#8c96aa">PROVIDES:</div>
+                <div style="color:#aeb6c6">DataFrames with annotated columns for each technique</div>
+                <div style="color:#8c96aa;margin-top:0.25rem">CONSUMED BY:</div>
+                <div style="color:#aeb6c6">Each plot/*.py file reads parsed data</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">6</span>
+                  <span style="font-weight:600;color:#d8deea">Protocol.yaml</span>
+                </div>
+                <div style="color:#8c96aa">PROVIDES:</div>
+                <div style="color:#aeb6c6">Step metadata for plot annotations (V_set, V_read, pulse widths)</div>
+                <div style="color:#8c96aa;margin-top:0.25rem">CONSUMED BY:</div>
+                <div style="color:#aeb6c6">pulse_endurance.py, stp.py, ppf.py — annotate plots with step params</div>
+              </div>
+            </div>
+
+            <!-- Data Flow -->
+            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2a2f3a">
+              <div style="font-size:0.75rem;font-weight:600;color:#8c96aa;margin-bottom:0.5rem">Plot Dispatch Data Flow</div>
+              <div style="font-size:0.75rem;font-family:ui-monospace,monospace;color:#aeb6c6;line-height:1.75">
+                <div>Layer 1 (config.yaml) &rarr; <span style="color:#c99ee3">theme/registry.py</span> &rarr; <span style="color:#c99ee3">plot/base.py</span> (apply_theme)</div>
+                <div>Layer 1 (config-studies.yaml plot:) &rarr; <span style="color:#c99ee3">core/plot_config.py</span> &rarr; <span style="color:#c99ee3">resolve_plot_config()</span></div>
+                <div>Layer 1 (config-devices.yaml) &rarr; <span style="color:#c99ee3">plot/registry.py</span> (STUDY_PLOTTERS key)</div>
+                <div>Layer 6 (protocol.yaml step metadata) &rarr; <span style="color:#c99ee3">plot/*.py</span> (annotation data)</div>
+                <div><span style="color:#c99ee3">plot/registry.py</span> &rarr; dispatches to <span style="color:#c99ee3">plot/{study}.py</span></div>
+                <div><span style="color:#c99ee3">plot/*.py</span> &rarr; matplotlib figure &rarr; <span style="color:#8fe39e">saved to results/</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    function toggleCard(btn) {
+      btn.classList.toggle('expanded');
+    }
+
+    function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      const body = section.querySelector('.section-body');
+      const arrow = section.querySelector('.expand-arrow');
+      if (body.style.display === 'none') {
+        body.style.display = '';
+        arrow.textContent = '▶';
+      } else {
+        body.style.display = 'none';
+        arrow.textContent = '▼';
+      }
+    }
+
+    function switchLayer(n) {
+      const urls = [
+        'layer01-config-grammar.html',
+        'layer02-metadata-parsers.html',
+        'layer03-keysight-parsers.html',
+        'layer04-fzf-display.html',
+        'layer05-plotting-dispatch.html',
+        'layer06-protocol-yaml.html',
+        'layer07-pulse-analyzers.html'
+      ];
+      if (n >= 1 && n <= 7) {
+        window.location.href = urls[n - 1];
+      }
+    }
+  </script>
+</body>
+</html>

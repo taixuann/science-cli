@@ -1,10 +1,11 @@
 # Standard blocklist (repo is isolated — no allowlist needed)
 # Only deny what should be excluded
 
-# Ignore all hidden files/dirs except .github (CI)
+# Ignore all hidden files/dirs except .github (CI) and .lavish/ (artifact dashboards + plans)
 .*
 !.github/
 !.gitignore
+!.lavish/
 
 # Ignore AGENTS.md, RULES.md, SCHEMA.md, issues.md, generated PLAN files, test artifacts
 AGENTS.md

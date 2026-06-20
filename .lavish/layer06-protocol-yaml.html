@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer 6: Protocol.yaml — science-cli Artifact Registry</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow-y: auto;
+    }
+    .sidebar-title {
+      padding: 0 16px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #30363d;
+      margin-bottom: 8px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      color: #8b949e;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      font-family: inherit;
+    }
+    .nav-btn:hover { background: #1c2333; color: #c9d1d9; }
+    .nav-btn.active {
+      background: #1f3a5f;
+      color: #58a6ff;
+      border-right: 3px solid #58a6ff;
+    }
+    .layer-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #21262d;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .nav-btn.active .layer-number {
+      background: #1f6feb;
+      color: #fff;
+    }
+    .artifact-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: #484f58;
+      background: #0d1117;
+      padding: 1px 7px;
+      border-radius: 10px;
+    }
+
+    /* ===== MAIN ===== */
+    .main {
+      flex: 1;
+      padding: 32px 40px;
+      max-width: 1100px;
+    }
+
+    /* ===== LAYER HEADER ===== */
+    .layer-header {
+      margin-bottom: 28px;
+    }
+    .layer-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 6px;
+    }
+    .layer-header .subtitle {
+      color: #8b949e;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    /* ===== STATUS BADGES ===== */
+    .status-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #30363d;
+      background: #161b22;
+    }
+    .badge-keep { color: #3fb950; border-color: #3fb95033; background: #0d2d1a; }
+    .badge-highlight { color: #d29922; border-color: #d2992233; background: #2d220d; }
+    .badge-discard { color: #f85149; border-color: #f8514933; background: #2d0d0d; }
+    .badge-planning { color: #db6d28; border-color: #db6d2833; background: #2d1a0d; }
+    .badge-warning { color: #d29922; border-color: #d2992233; background: #2d220d; }
+
+    /* ===== SECTION ===== */
+    .section {
+      margin-bottom: 32px;
+    }
+    .section-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 0;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #21262d;
+      cursor: pointer;
+      color: #c9d1d9;
+      font-family: inherit;
+      text-align: left;
+      margin-bottom: 16px;
+    }
+    .section-toggle:hover { border-bottom-color: #30363d; }
+    .section-toggle .expand-arrow {
+      font-size: 12px;
+      color: #8b949e;
+      transition: transform 0.2s;
+    }
+    .section-toggle .expand-arrow.open { transform: rotate(90deg); }
+    .section-toggle h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+    .section-toggle .count {
+      margin-left: auto;
+      font-size: 12px;
+      color: #484f58;
+    }
+
+    /* ===== CARD ===== */
+    .card-btn {
+      display: block;
+      width: 100%;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #c9d1d9;
+      font-family: inherit;
+      text-align: left;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .card-btn:hover {
+      background: #1c2333;
+      border-color: #58a6ff44;
+    }
+    .card-btn.expanded {
+      border-color: #58a6ff66;
+      background: #1c2333;
+    }
+    .card-btn .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .card-btn .card-header .badge {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .card-btn .artifact-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+    .card-btn .layer-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #1f3a5f;
+      color: #58a6ff;
+      margin-left: auto;
+    }
+    .card-btn .layer-tag.tag-code  { background: #1f3a5f; color: #58a6ff; }
+    .card-btn .layer-tag.tag-plan  { background: #3d1a1a; color: #f85149; }
+    .card-btn .layer-tag.tag-evol  { background: #1a3d2e; color: #3fb950; }
+    .card-btn .desc {
+      color: #8b949e;
+      font-size: 13px;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .card-btn .meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #484f58;
+      flex-wrap: wrap;
+    }
+    .card-btn .meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .card-btn .hint {
+      font-size: 11px;
+      color: #484f58;
+      margin-top: 8px;
+    }
+    .card-btn.expanded .hint { display: none; }
+
+    /* ===== COLLAPSED CONTENT ===== */
+    .collapsed-content {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #21262d;
+    }
+    .card-btn.expanded .collapsed-content { display: block; }
+
+    .collapsed-content h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #8b949e;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+    .collapsed-content h4:first-child { margin-top: 0; }
+    .collapsed-content p, .collapsed-content li {
+      font-size: 13px;
+      color: #c9d1d9;
+      line-height: 1.5;
+    }
+    .collapsed-content ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .collapsed-content ul li {
+      padding: 2px 0 2px 16px;
+      position: relative;
+    }
+    .collapsed-content ul li::before {
+      content: '·';
+      position: absolute;
+      left: 4px;
+      color: #484f58;
+    }
+
+    /* ===== VERSION TIMELINE ===== */
+    .timeline {
+      position: relative;
+      padding-left: 24px;
+      margin: 8px 0;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: #30363d;
+    }
+    .timeline-item {
+      position: relative;
+      padding: 0 0 14px 0;
+    }
+    .timeline-item:last-child { padding-bottom: 0; }
+    .timeline-item .dot {
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #1f6feb;
+      border: 2px solid #0d1117;
+    }
+    .timeline-item .dot.old { background: #484f58; }
+    .timeline-item .dot.future { background: #3fb950; }
+    .timeline-item .tl-version {
+      font-weight: 600;
+      color: #f0f6fc;
+      font-size: 13px;
+    }
+    .timeline-item .tl-desc {
+      font-size: 13px;
+      color: #8b949e;
+    }
+
+    /* ===== DEPENDENCY TABLE ===== */
+    .dep-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .dep-table th, .dep-table td {
+      padding: 8px 12px;
+      border: 1px solid #21262d;
+      text-align: left;
+    }
+    .dep-table th {
+      background: #0d1117;
+      color: #8b949e;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .dep-table td { color: #c9d1d9; }
+    .dep-table tr:hover td { background: #1c2333; }
+    .dep-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      margin: 1px 2px;
+    }
+    .dep-l1 { background: #1a2e3d; color: #79c0ff; }
+    .dep-l2 { background: #2e1a3d; color: #bc8cff; }
+    .dep-l3 { background: #3d1a1a; color: #f85149; }
+    .dep-l4 { background: #1f3a5f; color: #58a6ff; }
+    .dep-l5 { background: #1a3d2e; color: #3fb950; }
+    .dep-l6 { background: #3d2e1a; color: #d29922; }
+    .dep-l7 { background: #3d1a2e; color: #f85149; }
+    .dep-all { background: #21262d; color: #8b949e; }
+
+    /* ===== METADATA FLOW DIAGRAM ===== */
+    .flow-diagram {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 16px 18px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    .flow-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: #1c2333;
+      border: 1px solid #30363d;
+      font-weight: 500;
+    }
+    .flow-node.l2 { border-color: #bc8cff66; background: #2e1a3d; color: #bc8cff; }
+    .flow-node.l4 { border-color: #58a6ff66; background: #1f3a5f; color: #58a6ff; }
+    .flow-node.l5 { border-color: #3fb95066; background: #1a3d2e; color: #3fb950; }
+    .flow-node.l6 { border-color: #d2992266; background: #3d2e1a; color: #d29922; }
+    .flow-node.l7 { border-color: #f8514966; background: #3d1a2e; color: #f85149; }
+    .flow-arrow {
+      color: #484f58;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ===== CODE BLOCK ===== */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #c9d1d9;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .code-block .kw { color: #ff7b72; }
+    .code-block .str { color: #a5d6ff; }
+    .code-block .cm { color: #484f58; font-style: italic; }
+    .code-block .fn { color: #d2a8ff; }
+    .code-block .op { color: #79c0ff; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      body { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        min-width: unset;
+        height: auto;
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 12px;
+        gap: 4px;
+        border-right: none;
+        border-bottom: 1px solid #30363d;
+      }
+      .sidebar-title { display: none; }
+      .nav-btn { width: auto; padding: 6px 10px; border-radius: 6px; }
+      .nav-btn.active { border-right: none; border-bottom: 2px solid #58a6ff; }
+      .artifact-count { display: none; }
+      .main { padding: 20px; }
+      .main { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar">
+  <div class="sidebar-title">Architecture Layers</div>
+  <button class="nav-btn" onclick="switchLayer(1)"><span class="layer-number">1</span> Config + Grammar <span class="artifact-count">16</span></button>
+  <button class="nav-btn" onclick="switchLayer(2)"><span class="layer-number">2</span> Metadata Parsers <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(3)"><span class="layer-number">3</span> Keysight Parsers <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(4)"><span class="layer-number">4</span> FZF Display <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(5)"><span class="layer-number">5</span> Plotting Dispatch <span class="artifact-count">—</span></button>
+  <button class="nav-btn active" onclick="switchLayer(6)"><span class="layer-number">6</span> Protocol.yaml <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(7)"><span class="layer-number">7</span> Pulse Analyzers <span class="artifact-count">—</span></button>
+</nav>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+
+  <!-- Layer Header -->
+  <div class="layer-header">
+    <h1>Layer 6: Protocol.yaml</h1>
+    <p class="subtitle">ProtocolManager · step metadata · merge_analysis_to_metadata · grammar fields · pulse step schema</p>
+  </div>
+
+  <!-- Status Summary Badges -->
+  <div class="status-bar">
+    <span class="status-badge badge-keep">✓ keep (4)</span>
+    <span class="status-badge badge-highlight">★ highlight (2)</span>
+    <span class="status-badge badge-planning">🟡 Planning (1)</span>
+    <span class="status-badge badge-warning">⚠️ content-light (3)</span>
+  </div>
+
+  <!-- ===== SECTION A: CODE FILES ===== -->
+  <div class="section" id="section-A">
+    <button class="section-toggle" onclick="toggleSection('section-A')">
+      <span class="expand-arrow open">▶</span>
+      <h3>A. Key Code Files</h3>
+      <span class="count">4 artifacts</span>
+    </button>
+    <div class="section-body">
+
+      <!-- core/protocol.py -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">core/protocol.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc"><code>ProtocolManager</code> — reads and writes <code>protocol.yaml</code> with full step metadata support. Central hub of Layer 6. Implements step CRUD, metadata merge, grammar field readback, and device-type dispatch.</p>
+        <div class="meta">
+          <span>28.9KB</span>
+          <span>925 lines</span>
+          <span>v6</span>
+          <span>✓ keep</span>
+          <span>★ highlight</span>
+        </div>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l1">L1/Config</span> — <code>core/studies.py</code> (study definitions)</li>
+            <li><span class="dep-badge dep-l1">L1/Config</span> — <code>core/config.py</code> (config resolution)</li>
+            <li><span class="dep-badge dep-l2">L2/Parsers</span> — Metadata analyzers return results for merge</li>
+            <li><span class="dep-badge dep-l4">L4/FZF</span> — <code>get_step_columns()</code> reads metadata from protocol.yaml</li>
+            <li><span class="dep-badge dep-l5">L5/Plotting</span> — Plot annotations read metadata fields</li>
+            <li><span class="dep-badge dep-l7">L7/Pulse</span> — Pulse analyzers call <code>merge_analysis_to_metadata()</code></li>
+          </ul>
+          <h4>Key Methods</h4>
+          <ul>
+            <li><code>ProtocolManager.__init__(project_root)</code> — Load protocol.yaml</li>
+            <li><code>read_steps()</code> — Parse all steps with metadata</li>
+            <li><code>write_steps(steps)</code> — Serialize steps back to YAML</li>
+            <li><code>merge_analysis_to_metadata(step_name, results)</code> — Write analysis results into step.metadata</li>
+            <li><code>get_step(step_name)</code> — Single step lookup</li>
+            <li><code>add_step(step)</code> — Append new step</li>
+          </ul>
+          <h4>Version Timeline</h4>
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="dot"></span>
+              <span class="tl-version">v6 (current)</span>
+              <span class="tl-desc">Grammar fields + device_type dispatch in step schema</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v5 (v3.21.0)</span>
+              <span class="tl-desc">Grammar fields added to step schema (dev, uncommitted)</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v4 (v3.20.0)</span>
+              <span class="tl-desc"><code>merge_analysis_to_metadata()</code> created</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3 (v3.18.0)</span>
+              <span class="tl-desc">Metadata auto-write (analysis results → protocol.yaml)</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v2 (v3.14.0)</span>
+              <span class="tl-desc">ProtocolManager with step metadata</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v1 (v3.10.0)</span>
+              <span class="tl-desc">Initial protocol.yaml support</span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      <!-- core/analysis_output.py -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">core/analysis_output.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc">Analysis output data structures — defines the result schema that flows into <code>merge_analysis_to_metadata()</code>. Provides typed containers for per-step analysis results.</p>
+        <div class="meta">
+          <span>~5KB</span>
+          <span>~150 lines</span>
+          <span>v2</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l6">L6/Protocol</span> — <code>core/protocol.py</code> consumes these structures</li>
+            <li><span class="dep-badge dep-l7">L7/Pulse</span> — Pulse analyzers produce AnalysisResult objects</li>
+          </ul>
+          <h4>Key Types</h4>
+          <ul>
+            <li><code>AnalysisResult</code> — Typed dict for single-step analysis output</li>
+            <li><code>AnalysisSuite</code> — Collection of results across steps</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- analysis/general/protocol.py -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">analysis/general/protocol.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc">General protocol analysis helpers — utility functions for reading/writing protocol metadata from the analysis pipeline. Bridges core protocol.py and the analysis subpackage.</p>
+        <div class="meta">
+          <span>~2KB</span>
+          <span>~50 lines</span>
+          <span>v1</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l6">L6/Protocol</span> — <code>core/protocol.py</code></li>
+            <li><span class="dep-badge dep-l7">L7/Pulse</span> — Called by pulse analyzers</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- analysis/validators.py -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">analysis/validators.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc">Step validation logic — validates protocol.yaml step schemas, ensures required fields are present, checks consistency of metadata against study definitions.</p>
+        <div class="meta">
+          <span>~3KB</span>
+          <span>~80 lines</span>
+          <span>v1</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l6">L6/Protocol</span> — <code>core/protocol.py</code></li>
+            <li><span class="dep-badge dep-l1">L1/Config</span> — Reads study schema from config</li>
+          </ul>
+          <h4>Validation Rules</h4>
+          <ul>
+            <li>Required fields: <code>device</code>, <code>instrument</code>, <code>files[]</code></li>
+            <li><code>step.metadata</code> must match study schema</li>
+            <li>Grammar fields checked for consistency</li>
+          </ul>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION B: KEY FEATURES ===== -->
+  <div class="section" id="section-B">
+    <button class="section-toggle" onclick="toggleSection('section-B')">
+      <span class="expand-arrow open">▶</span>
+      <h3>B. Key Features</h3>
+      <span class="count">5 artifacts</span>
+    </button>
+    <div class="section-body">
+
+      <!-- ProtocolManager -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">ProtocolManager — Read/Write protocol.yaml</span>
+          <span class="layer-tag tag-code">core</span>
+        </div>
+        <p class="desc">Central manager class for all protocol.yaml operations. Loads, parses, validates, and serializes the entire protocol file with step-level metadata support.</p>
+        <div class="meta">
+          <span>core/protocol.py</span>
+          <span>v6</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <h4>Step Schema</h4>
+          <div class="code-block">
+            <span class="kw">steps</span>:
+            <span class="op">-</span> <span class="kw">name</span>: <span class="str">"stp_decay_1"</span>
+              <span class="kw">device</span>: <span class="str">"device_01"</span>
+              <span class="kw">instrument</span>: <span class="str">"keysight_b1500"</span>
+              <span class="kw">files</span>:
+                <span class="op">-</span> <span class="str">"data/raw/stp_decay_1.csv"</span>
+              <span class="kw">metadata</span>:
+                <span class="kw">v_set_v</span>: <span class="op">-</span><span class="str">8</span>
+                <span class="kw">v_read_v</span>: <span class="str">0.5</span>
+                <span class="kw">pulse_width_us</span>: <span class="str">50000</span>
+                <span class="kw">read_delay_ms</span>: <span class="str">10</span>
+                <span class="kw">repeat_count</span>: <span class="str">100</span>
+              <span class="kw">grammar</span>:                                    <span class="cm"># optional block</span>
+                <span class="kw">remarks</span>: <span class="str">"STP protocol step"</span>
+                <span class="kw">flags</span>:
+                  <span class="op">-</span> <span class="str">"pulse_study"</span>
+                <span class="kw">count</span>: <span class="op">1</span>
+              <span class="kw">results</span>:                                    <span class="cm"># written by L7 analyzers</span>
+                <span class="kw">lrs_avg</span>: <span class="str">0.0023</span>
+                <span class="kw">hrs_avg</span>: <span class="str">0.045</span>
+          </div>
+        </div>
+      </button>
+
+      <!-- merge_analysis_to_metadata -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">merge_analysis_to_metadata()</span>
+          <span class="layer-tag tag-code">core</span>
+        </div>
+        <p class="desc">Writes analysis results back to protocol.yaml step.metadata. The bridge between computation (analyzers) and persistence (protocol file). Called after every analysis run.</p>
+        <div class="meta">
+          <span>core/protocol.py</span>
+          <span>v4 (v3.20.0)</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Write Flow</h4>
+          <div class="code-block">
+            <span class="kw">def</span> <span class="fn">merge_analysis_to_metadata</span>(<span class="kw">self</span>, step_name, results):
+                <span class="cm"># 1. Load step by name</span>
+                step = <span class="kw">self</span>.<span class="fn">get_step</span>(step_name)
+                <span class="cm"># 2. Merge analysis results into metadata dict</span>
+                step[<span class="str">"metadata"</span>].<span class="fn">update</span>(results)
+                <span class="cm"># 3. Write back to protocol.yaml</span>
+                <span class="kw">self</span>.<span class="fn">write_steps</span>(<span class="kw">self</span>.steps)
+          </div>
+        </div>
+      </button>
+
+      <!-- waveform_pattern -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">waveform_pattern (2D array)</span>
+          <span class="layer-tag tag-code">data</span>
+        </div>
+        <p class="desc">Waveform metadata stored as a 2D array in protocol.yaml step.metadata. Written by <code>data_loader.py</code> (committed b40ecec). Provides pulse shape parameters to analyzers and plotters.</p>
+        <div class="meta">
+          <span>committed b40ecec</span>
+          <span>via data_loader.py</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>2D Array Format</h4>
+          <div class="code-block">
+            <span class="kw">metadata</span>:
+              <span class="kw">waveform_pattern</span>:                     <span class="cm"># 2D array: [[V_set, V_read, ...], ...]</span>
+                <span class="op">-</span> [<span class="str">-8</span>, <span class="str">0.5</span>, <span class="str">50000</span>, <span class="str">10</span>, <span class="str">100</span>]
+                <span class="op">-</span> [<span class="str">-7</span>, <span class="str">0.5</span>, <span class="str">50000</span>, <span class="str">10</span>, <span class="str">100</span>]
+          </div>
+          <h4>Consumer Chain</h4>
+          <ul>
+            <li>Written by: <code>data_loader.py</code> during file ingestion (Seq 2)</li>
+            <li>Read by: <span class="dep-badge dep-l1">L1/Config</span> protocol parsers</li>
+            <li>Displayed by: <span class="dep-badge dep-l4">L4/FZF</span> column system</li>
+            <li>Consumed by: <span class="dep-badge dep-l5">L5/Plotting</span> plot annotations</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- Step Schema -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">Step Schema — device, instrument, files[], metadata{}</span>
+          <span class="layer-tag tag-code">schema</span>
+        </div>
+        <p class="desc">The core step schema used across all protocol.yaml files. Defines the structural contract between protocol loading and all consuming layers (L4, L5, L7).</p>
+        <div class="meta">
+          <span>protocol.yaml</span>
+          <span>v3</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Schema Fields</h4>
+          <table class="dep-table">
+            <thead>
+              <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>name</code></td><td>string</td><td>✓</td><td>Unique step identifier</td></tr>
+              <tr><td><code>device</code></td><td>string</td><td>✓</td><td>Device type (volatile/non-volatile)</td></tr>
+              <tr><td><code>instrument</code></td><td>string</td><td>✓</td><td>Instrument identifier (e.g. keysight_b1500)</td></tr>
+              <tr><td><code>files[]</code></td><td>array[string]</td><td>✓</td><td>Paths to raw data files</td></tr>
+              <tr><td><code>metadata{}</code></td><td>dict</td><td>—</td><td>Key-value store for analysis results</td></tr>
+              <tr><td><code>grammar{}</code></td><td>dict</td><td>—</td><td>Optional grammar block (remarks, flags, count)</td></tr>
+              <tr><td><code>results{}</code></td><td>dict</td><td>—</td><td>Written by L7 pulse analyzers</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </button>
+
+      <!-- Grammar Fields -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">⚠️</span>
+          <span class="artifact-name">Grammar Fields — optional block</span>
+          <span class="layer-tag tag-code">feature</span>
+        </div>
+        <p class="desc">Optional <code>grammar:</code> block within each step, containing <code>remarks</code>, <code>flags[]</code>, and <code>count</code>. Added in v3.21.0 on dev branch (uncommitted).</p>
+        <div class="meta">
+          <span>v3.21.0 (dev, uncommitted)</span>
+          <span>⚠️ not yet merged</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Grammar Block Schema</h4>
+          <div class="code-block">
+            <span class="kw">grammar</span>:
+              <span class="kw">remarks</span>: <span class="str">"Describes protocol intent"</span>   <span class="cm"># optional</span>
+              <span class="kw">flags</span>:
+                <span class="op">-</span> <span class="str">"pulse_study"</span>                           <span class="cm"># optional list</span>
+                <span class="op">-</span> <span class="str">"voltage_sweep"</span>
+              <span class="kw">count</span>: <span class="op">3</span>                                     <span class="cm"># optional integer</span>
+          </div>
+          <h4>Status</h4>
+          <p>Grammar fields are defined in the schema but are currently only written by the universal grammar pipeline (grammar.py, Layer 1). Not yet flowing through on <code>main</code> — pending v3.22.0 merge.</p>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION C: METADATA FLOW ===== -->
+  <div class="section" id="section-C">
+    <button class="section-toggle" onclick="toggleSection('section-C')">
+      <span class="expand-arrow open">▶</span>
+      <h3>C. Metadata Flow</h3>
+      <span class="count">1 artifact</span>
+    </button>
+    <div class="section-body">
+
+      <!-- Flow Diagram -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">Layer 6 → Consumer Flow</span>
+          <span class="layer-tag tag-evol">flow</span>
+        </div>
+        <p class="desc">How metadata flows from analyzers through protocol.yaml out to consumers in Layers 4, 5, and 7.</p>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <div class="flow-diagram">
+            <span class="flow-node l2">L2 Metadata Analyzers</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-node l6">L6 merge_analysis_to_metadata()</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-node l6">protocol.yaml step.metadata</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-node l4">L4 FZF Display Columns</span>
+          </div>
+          <div class="flow-diagram" style="margin-top: 4px;">
+            <span class="flow-node l6">protocol.yaml step.metadata</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-node l5">L5 Plot Annotations</span>
+          </div>
+          <div class="flow-diagram" style="margin-top: 4px;">
+            <span class="flow-node l7">L7 Pulse Analyzers</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-node l6">step.results</span>
+            <span class="flow-arrow">↔</span>
+            <span class="flow-node l6">protocol.yaml</span>
+          </div>
+          <h4>Pipeline Steps</h4>
+          <ol style="color:#c9d1d9; font-size:13px; padding-left:20px; margin-top:8px;">
+            <li><strong>Seq 1:</strong> Data files loaded by <code>data_loader.py</code> → waveform pattern written to protocol.yaml metadata</li>
+            <li><strong>Seq 2:</strong> Metadata analyzers (L2) extract per-file metadata → passed to <code>merge_analysis_to_metadata()</code></li>
+            <li><strong>Seq 3:</strong> <code>ProtocolManager.write_steps()</code> persists updated metadata to protocol.yaml on disk</li>
+            <li><strong>Seq 4:</strong> FZF display (L4) reads <code>get_step_columns()</code> → renders metadata columns</li>
+            <li><strong>Seq 5:</strong> Plot dispatch (L5) reads metadata for annotation text / colors</li>
+            <li><strong>Seq 6:</strong> Pulse analyzers (L7) read/write <code>step.results</code> for computation outputs</li>
+          </ol>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION D: ARTIFACTS (PLANS) ===== -->
+  <div class="section" id="section-D">
+    <button class="section-toggle" onclick="toggleSection('section-D')">
+      <span class="expand-arrow open">▶</span>
+      <h3>D. Key Artifacts (Plans)</h3>
+      <span class="count">3 artifacts</span>
+    </button>
+    <div class="section-body">
+
+      <!-- 200626h_grammar-protocol-yaml -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">🟡</span>
+          <span class="artifact-name">200626h_grammar-protocol-yaml.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">Protocol as sole source of truth — establish protocol.yaml as the single authoritative source for all step-level metadata, replacing fragmented per-script metadata files.</p>
+        <div class="meta">
+          <span>20/06/2026</span>
+          <span>🟡 Planning</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Actions</h4>
+          <ul>
+            <li>Audit all current metadata consumers for protocol.yaml dependency</li>
+            <li>Remove legacy metadata file reads (per-script YAML, JSON sidecars)</li>
+            <li>Add grammar fields full read/write support in ProtocolManager</li>
+            <li>Update FZF columns to always prefer protocol.yaml metadata</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- 160626h_auto-write-metadata -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">160626h_auto-write-metadata.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">Auto-write metadata to protocol.yaml — after each analysis run, automatically populate metadata fields from analysis results back into the protocol YAML.</p>
+        <div class="meta">
+          <span>16/06/2026</span>
+          <span>🟢 Done</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Actions</h4>
+          <ul>
+            <li>Implemented <code>merge_analysis_to_metadata()</code> in ProtocolManager</li>
+            <li>Added post-analysis metadata write hook in analysis pipeline</li>
+            <li>Mapped grammar parse results to metadata keys</li>
+            <li>Added device_type and study auto-detection</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- 160626c_stp-decay-wiring -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">160626c_stp-decay-wiring.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">STP metadata wiring — connect STP decay analysis results through protocol.yaml metadata pipeline. Ensure FZF columns display STP-specific metadata correctly.</p>
+        <div class="meta">
+          <span>16/06/2026</span>
+          <span>🟢 Done</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Actions</h4>
+          <ul>
+            <li>Wired STP decay analyzer output → merge_analysis_to_metadata()</li>
+            <li>Added STP-specific FZF columns</li>
+            <li>Verified display in pulse list --fzf</li>
+          </ul>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION E: VERSION TIMELINE ===== -->
+  <div class="section" id="section-E">
+    <button class="section-toggle" onclick="toggleSection('section-E')">
+      <span class="expand-arrow open">▶</span>
+      <h3>E. Version Timeline</h3>
+      <span class="count">combined</span>
+    </button>
+    <div class="section-body">
+
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">Protocol.yaml Evolution</span>
+          <span class="layer-tag tag-evol">evolution</span>
+        </div>
+        <p class="desc">From zero protocol support to full metadata pipeline with grammar fields and analysis merge</p>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="dot future"></span>
+              <span class="tl-version">v3.22 (planned)</span>
+              <span class="tl-desc">Merge grammar fields to main, audit all metadata consumers</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot"></span>
+              <span class="tl-version">v3.21.0 (dev, uncommitted)</span>
+              <span class="tl-desc">Grammar fields added to step schema (remarks, flags, count)</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.20.0</span>
+              <span class="tl-desc"><code>merge_analysis_to_metadata()</code> created — analysis results write back to protocol.yaml</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.18.0</span>
+              <span class="tl-desc">Metadata auto-write: analysis results → protocol.yaml step.metadata</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.14.0</span>
+              <span class="tl-desc">ProtocolManager with step metadata support (read/write steps, metadata CRUD)</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.10.0</span>
+              <span class="tl-desc">Initial protocol.yaml support — basic step load/save</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">pre-v3.10</span>
+              <span class="tl-desc">No protocol.yaml — all file-based, no step metadata</span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">⚠️</span>
+          <span class="artifact-name">Content-Light Status</span>
+          <span class="layer-tag tag-evol">status</span>
+        </div>
+        <p class="desc">The mechanical pipeline works perfectly — reads, writes, merges — but no pulse-specific analysis results are flowing through yet. All pulse analyzers are stubs (Layer 7).</p>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Working (🟢)</h4>
+          <ul>
+            <li>ProtocolManager — reads/writes protocol.yaml with step metadata ✓</li>
+            <li>merge_analysis_to_metadata() — writes analysis results back ✓</li>
+            <li>waveform_pattern (2D array) — written via data_loader.py ✓</li>
+            <li>Step schema — device, instrument, files[], metadata{} ✓</li>
+            <li>Grammar fields — optional grammar: block with remarks, flags, count ✓</li>
+          </ul>
+          <h4>Not Working (🔴)</h4>
+          <ul>
+            <li>No pulse-specific analysis results flowing through protocol.yaml</li>
+            <li>All pulse analyzers are stubs (L7 incomplete)</li>
+            <li>step.results remains empty for pulse steps</li>
+          </ul>
+          <h4>Fix Path</h4>
+          <p>Complete Layer 7 pulse analyzers — once they produce real results, <code>merge_analysis_to_metadata()</code> will automatically persist them. The L6 pipeline is ready and tested; it's waiting on L7 data.</p>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION F: CROSS-LAYER DEPENDENCIES ===== -->
+  <div class="section" id="section-F">
+    <button class="section-toggle" onclick="toggleSection('section-F')">
+      <span class="expand-arrow open">▶</span>
+      <h3>F. Cross-Layer Dependencies</h3>
+      <span class="count">4 artifacts</span>
+    </button>
+    <div class="section-body">
+      <table class="dep-table">
+        <thead>
+          <tr>
+            <th>Artifact</th>
+            <th>Layer</th>
+            <th>Depends On</th>
+            <th>Feeds Into</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>core/protocol.py</code></td>
+            <td><span class="dep-badge dep-l6">L6</span></td>
+            <td><span class="dep-badge dep-l1">L1/studies.py</span> <span class="dep-badge dep-l1">L1/config.py</span></td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span> <span class="dep-badge dep-l5">L5/Plotting</span> <span class="dep-badge dep-l7">L7/Pulse</span></td>
+          </tr>
+          <tr>
+            <td><code>core/analysis_output.py</code></td>
+            <td><span class="dep-badge dep-l6">L6</span></td>
+            <td><span class="dep-badge dep-l6">L6/protocol.py</span></td>
+            <td><span class="dep-badge dep-l7">L7/Pulse</span></td>
+          </tr>
+          <tr>
+            <td><code>merge_analysis_to_metadata()</code></td>
+            <td><span class="dep-badge dep-l6">L6</span></td>
+            <td><span class="dep-badge dep-l2">L2/Parsers</span> (analysis results)</td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span> <span class="dep-badge dep-l6">L6/protocol.yaml</span></td>
+          </tr>
+          <tr>
+            <td><code>waveform_pattern</code></td>
+            <td><span class="dep-badge dep-l6">L6</span></td>
+            <td><code>data_loader.py</code> (writes it)</td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span> <span class="dep-badge dep-l5">L5/Plotting</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script>
+  function toggleCard(btn) {
+    btn.classList.toggle('expanded');
+    var hint = btn.querySelector('.hint');
+    if (hint) {
+      hint.textContent = btn.classList.contains('expanded') ? '▸ collapse' : '▸ click to expand';
+    }
+  }
+
+  function toggleSection(sectionId) {
+    var section = document.getElementById(sectionId);
+    if (!section) return;
+    var body = section.querySelector('.section-body');
+    var arrow = section.querySelector('.expand-arrow');
+    if (body.style.display === 'none') {
+      body.style.display = '';
+      if (arrow) arrow.classList.add('open');
+    } else {
+      body.style.display = 'none';
+      if (arrow) arrow.classList.remove('open');
+    }
+  }
+
+  function switchLayer(n) {
+    var urls = [
+      '',  /* 0-index unused */
+      'layer01-config-grammar.html',
+      'layer02-metadata-parsers.html',
+      'layer03-keysight-parsers.html',
+      'layer04-fzf-display.html',
+      'layer05-plotting-dispatch.html',
+      'layer06-protocol-yaml.html',
+      'layer07-pulse-analyzers.html'
+    ];
+    if (n >= 1 && n <= 7) {
+      window.location.href = urls[n];
+    }
+  }
+
+  /* Keyboard shortcuts: 1-7 to jump to layer, E to expand/collapse all sections */
+  document.addEventListener('keydown', function(e) {
+    var n = parseInt(e.key);
+    if (n >= 1 && n <= 7) {
+      switchLayer(n);
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      var allBodies = document.querySelectorAll('.section-body');
+      var allArrows = document.querySelectorAll('.expand-arrow');
+      var anyHidden = false;
+      allBodies.forEach(function(b) { if (b.style.display === 'none') anyHidden = true; });
+      allBodies.forEach(function(b) {
+        b.style.display = anyHidden ? '' : 'none';
+      });
+      allArrows.forEach(function(a) {
+        if (anyHidden) a.classList.add('open'); else a.classList.remove('open');
+      });
+    }
+  });
+</script>
+
+</body>
+</html>

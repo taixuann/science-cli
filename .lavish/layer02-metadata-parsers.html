@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer 2: Metadata Parsers + Analyzers — science-cli Artifact Registry</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet">
+  <meta name="lavish-live-reload" content="root">
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0f1115; color: #f7f3ea; margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+    /* Layout safety — prevent horizontal overflow */
+    .dashboard-wrap { display: flex; width: 100%; max-width: 100vw; overflow-x: hidden; }
+    .main-content { flex: 1; min-width: 0; padding: 1.5rem; }
+    .sidebar { width: 16rem; min-width: 16rem; border-right: 1px solid #2a2f3a; padding: 1rem; overflow-y: auto; height: calc(100vh - 56px); }
+
+    /* Cards — everything clickable is a native button */
+    button { cursor: pointer !important; }
+    .card-btn {
+      display: block; width: 100%; text-align: left; background: #11141a;
+      border: 1px solid #303745; border-radius: 12px; padding: 1rem;
+      transition: all 0.15s ease-out; font: inherit; color: inherit;
+    }
+    .card-btn:hover { border-color: #f4c95d; box-shadow: 0 0 0 1px #f4c95d; }
+    .card-btn:focus-visible { outline: 2px solid #f4c95d; outline-offset: 2px; }
+
+    /* Badges */
+    .badge-star { color: #f4c95d; }
+    .badge-keep { color: #72c96e; }
+    .badge-discard { color: #f06464; }
+
+    /* Layer tags */
+    .layer-tag { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+    .layer-parser { background: #1a2040; color: #8cb4e3; }
+    .layer-analyzer { background: #1a2a3a; color: #8fe3c9; }
+    .layer-func { background: #2a1a35; color: #c9a0e3; }
+    .layer-io { background: #2a2a1a; color: #e3d47a; }
+
+    /* Version timeline */
+    .version-dot {
+      width: 0.75rem; height: 0.75rem; border-radius: 50%;
+      background: #f4c95d; border: 2px solid #0f1115; flex-shrink: 0;
+    }
+    .version-dot-old { background: #4a4f5a; }
+
+    /* Sidebar nav buttons */
+    .nav-btn {
+      display: flex; align-items: center; gap: 0.5rem; width: 100%;
+      padding: 0.5rem 0.75rem; border-radius: 8px; text-align: left;
+      border: none; font: inherit; font-size: 0.875rem; background: transparent; color: #b9c0cf;
+      transition: all 0.12s ease-out;
+    }
+    .nav-btn:hover { background: #1c212b; color: #f7f3ea; }
+    .nav-btn.active { background: #1c212b; border: 1px solid #f4c95d; color: #f7f3ea; }
+
+    /* Artifact grid */
+    .artifact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
+    .artifact-grid .col-span-2 { grid-column: span 2; }
+
+    /* Dep pills */
+    .dep-pill {
+      display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.5rem;
+      border-radius: 4px; background: #1c1f2e; color: #8ca4e3;
+    }
+    .dep-pill.dep-green { background: #172419; color: #8fe39e; }
+    .dep-pill.dep-gold { background: #25230f; color: #f4c95d; }
+    .dep-pill.dep-red { background: #2a1414; color: #f06464; }
+    .dep-pill.dep-blue { background: #1c1f2e; color: #8ca4e3; }
+
+    /* Collapsible */
+    .collapsed-content { display: none; }
+    .expanded .collapsed-content { display: block; }
+    .expand-arrow { transition: transform 0.15s ease-out; display: inline-block; }
+    .expanded .expand-arrow { transform: rotate(90deg); }
+
+    /* Section collapse toggle */
+    .section-toggle {
+      background: none; border: none; color: #8c96aa; font-size: 0.7rem;
+      font-family: inherit; cursor: pointer !important;
+    }
+    .section-toggle:hover { color: #f7f3ea; }
+
+    /* Gap card */
+    .gap-card {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.5rem 0.75rem; border-radius: 8px; background: #1c1f1e;
+    }
+
+    /* Function table */
+    .func-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    .func-table th { text-align: left; padding: 0.5rem 0.75rem; color: #8c96aa; font-weight: 600; border-bottom: 1px solid #2a2f3a; }
+    .func-table td { padding: 0.5rem 0.75rem; color: #aeb6c6; border-bottom: 1px solid #1c212b; }
+    .func-table tr:hover td { background: #171a21; }
+    .func-code { font-family: ui-monospace, monospace; color: #f4c95d; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .artifact-grid { grid-template-columns: 1fr; }
+      .artifact-grid .col-span-2 { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar — sticky, always visible -->
+  <header style="position:sticky;top:0;z-index:50;background:#171a21;border-bottom:1px solid #2a2f3a;padding:0.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:1rem">
+      <h1 style="font-size:1.125rem;font-weight:750;letter-spacing:.02em">science-cli · Artifact Registry</h1>
+      <span style="font-size:0.875rem;color:#8c96aa">v3.22.0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <span style="font-size:0.75rem;color:#8c96aa">7 layers · 29 artifacts</span>
+      <span style="padding:0.125rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:600;background:#172419;color:#8fe39e">skill loaded</span>
+    </div>
+  </header>
+
+  <div class="dashboard-wrap">
+    <!-- Sidebar: Layer Navigator -->
+    <aside class="sidebar" style="height:calc(100vh - 56px)">
+      <h2 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem;font-weight:600">Layers</h2>
+      <nav style="display:flex;flex-direction:column;gap:0.125rem">
+        <button class="nav-btn" onclick="switchLayer(1)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">1</span>
+          Config + Grammar
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">16</span>
+        </button>
+        <button class="nav-btn active" onclick="switchLayer(2)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#f4c95d;color:#17130a;flex-shrink:0">2</span>
+          Metadata Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">8</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(3)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">3</span>
+          Keysight Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">3</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(4)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">4</span>
+          FZF Display
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(5)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">5</span>
+          Plotting Dispatch
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">6</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(6)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">6</span>
+          Protocol.yaml
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(7)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">7</span>
+          Pulse Analyzers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">5</span>
+        </button>
+      </nav>
+
+      <!-- Status Tags -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Status Tags</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-star" style="font-size:1.125rem">★</span>
+            <span style="color:#8c96aa">Highlight</span>
+            <span style="margin-left:auto;color:#8c96aa">2</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-keep" style="font-size:1.125rem">✓</span>
+            <span style="color:#8c96aa">Keep</span>
+            <span style="margin-left:auto;color:#8c96aa">6</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-discard" style="font-size:1.125rem">✗</span>
+            <span style="color:#8c96aa">Discard</span>
+            <span style="margin-left:auto;color:#8c96aa">0</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span style="color:#4a4f5a;font-size:1.125rem">—</span>
+            <span style="color:#8c96aa">Untagged</span>
+            <span style="margin-left:auto;color:#8c96aa">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Interactive</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#8c96aa">
+          <div>▸ Click any card to expand/collapse details</div>
+          <div>▸ Click section headers to collapse sections</div>
+          <div>▸ Layer nav shows artifact counts</div>
+          <div>▸ Function tables are always visible</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Layer Header -->
+      <div style="margin-bottom:1.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem">
+          <span style="font-size:1.5rem;font-weight:700;color:#f4c95d">02</span>
+          <h2 style="font-size:1.25rem;font-weight:600;margin:0">Metadata Parsers + Analyzers</h2>
+        </div>
+        <p style="font-size:0.875rem;color:#8c96aa;max-width:48rem;margin:0.25rem 0 0.5rem 0">
+          The instrument-aware metadata parsing and analysis layer. Parsers extract header metadata from
+          Keysight, Keithley, Raman, and waveform CSV files. Analyzers run high-level interpretation on
+          the parsed data — IV compliance detection, waveform pattern recognition, and parameter extraction.
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <span class="layer-tag layer-parser">parser</span>
+          <span class="layer-tag layer-analyzer">analyzer</span>
+          <span class="layer-tag layer-func">functions</span>
+          <span class="layer-tag layer-io">io</span>
+        </div>
+      </div>
+
+      <!-- Section A: Parser Files -->
+      <section style="margin-bottom:2rem" id="section-A">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-A')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">A. Parser Files</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">5 artifacts · ea550b9</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- __init__.py (parsers) -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">parsers/__init__.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Parser registry init. Exports all parser modules and provides unified <code style="color:#f4c95d">parse_metadata()</code> dispatcher based on instrument type.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>866 B</span><span>·</span><span>~20 lines</span><span>·</span><span>ea550b9</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#aeb6c6">
+                  <div><span style="color:#8c96aa">Exports:</span> keysight, keithley, raman, waveform</div>
+                  <div><span style="color:#8c96aa">Dispatch:</span> <code style="color:#f4c95d">parse_metadata(filepath, instrument_type)</code></div>
+                  <div><span style="color:#8c96aa">Deps:</span> None — standalone registry</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand details</span>
+              </div>
+            </button>
+
+            <!-- keysight.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">parsers/keysight.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Keysight WGFMU / B1500A header parser. Extracts set voltage, compliance, sweep range, repeat count from CSV comment headers.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>2.8 KB</span><span>·</span><span>88 lines</span><span>·</span><span>ea550b9</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div><span style="color:#8c96aa">Functions:</span> <code style="color:#f4c95d">parse_set_voltage()</code>, <code style="color:#f4c95d">parse_compliance()</code>, <code style="color:#f4c95d">parse_sweep_range()</code>, <code style="color:#f4c95d">parse_repeat_count()</code></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                    <span class="dep-pill dep-green">depends on: config-instruments.yaml (L1)</span>
+                    <span class="dep-pill dep-blue">used by: Layer 3 (Keysight parsers)</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand functions + deps</span>
+              </div>
+            </button>
+
+            <!-- keithley.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">parsers/keithley.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Keithley sourcemeter header parser. Extracts compliance and sweep range from Keithley-specific CSV comment formats.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>1.8 KB</span><span>·</span><span>~50 lines</span><span>·</span><span>ea550b9</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div><span style="color:#8c96aa">Functions:</span> <code style="color:#f4c95d">parse_compliance()</code>, <code style="color:#f4c95d">parse_sweep_range()</code></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                    <span class="dep-pill dep-green">depends on: config-instruments.yaml (L1)</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+
+            <!-- raman.py -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">parsers/raman.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Raman spectroscopy header parser. Extracts spectral parameters (laser wavelength, grating, acquisition time, spectral range) from Renishaw/WITec CSV headers.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>1.4 KB</span><span>·</span><span>~35 lines</span><span>·</span><span>ea550b9</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div><span style="color:#8c96aa">Functions:</span> <code style="color:#f4c95d">parse_raman_params()</code></div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                    <span class="dep-pill dep-green">depends on: config-instruments.yaml (L1)</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+
+            <!-- waveform.py (parsers) -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">parsers/waveform.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Generic waveform CSV header parser. Extracts time step, voltage step, and sweep direction from waveform data files.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>632 B</span><span>·</span><span>~20 lines</span><span>·</span><span>ea550b9</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#aeb6c6">
+                  <div><span style="color:#8c96aa">Deps:</span> None — standalone parser</div>
+                  <div><span style="color:#8c96aa">Used by:</span> waveform analyzer (Section B)</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section B: Analyzer Files -->
+      <section style="margin-bottom:2rem" id="section-B">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-B')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">B. Analyzer Files</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">3 artifacts · b40ecec</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- __init__.py (analyzers) -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">analyzers/__init__.py</span>
+                </div>
+                <span class="layer-tag layer-analyzer">analyzer</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Analyzer registry init. Exports all analyzer modules and provides <code style="color:#f4c95d">analyze()</code> dispatcher.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>765 B</span><span>·</span><span>~20 lines</span><span>·</span><span>b40ecec</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#aeb6c6">
+                  <div><span style="color:#8c96aa">Exports:</span> iv, waveform</div>
+                  <div><span style="color:#8c96aa">Dispatch:</span> <code style="color:#f4c95d">analyze(data, analyzer_type, **kwargs)</code></div>
+                  <div><span style="color:#8c96aa">Deps:</span> None — standalone registry</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand details</span>
+              </div>
+            </button>
+
+            <!-- iv.py — hero card -->
+            <button class="card-btn col-span-2" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">analyzers/iv.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">3.5 KB · 107 lines</span>
+                </div>
+                <span class="layer-tag layer-analyzer">analyzer</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">
+                IV curve analysis module. Detects compliance events from IV sweep data — identifies
+                the voltage at which current compliance is reached, useful for forming voltage analysis
+                and SET/RESET detection in memristor devices.
+              </p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>3.5 KB</span><span>·</span><span>107 lines</span><span>·</span><span>b40ecec</span>
+              </div>
+
+              <!-- Key function cards -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem;font-size:0.75rem">
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="color:#8c96aa;margin-bottom:0.25rem;font-weight:600">Primary Function</div>
+                  <div style="color:#aeb6c6"><code style="color:#f4c95d">analyze_iv_compliance()</code></div>
+                  <div style="color:#8c96aa;margin-top:0.25rem">Detects the voltage/current point where compliance is hit in an IV sweep.</div>
+                </div>
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="color:#8c96aa;margin-bottom:0.25rem;font-weight:600">Data Flow</div>
+                  <div style="color:#aeb6c6">Parsed metadata (keysight/keithley) → Actual data array → Compliance detection → Result dict</div>
+                </div>
+              </div>
+
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                  <span class="dep-pill dep-green">depends on: parser output (Section A)</span>
+                  <span class="dep-pill dep-blue">used by: analyze command, plot dispatch</span>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand dependencies</span>
+              </div>
+            </button>
+
+            <!-- waveform.py (analyzers) — hero card -->
+            <button class="card-btn col-span-2" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">analyzers/waveform.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">7.0 KB · 206 lines</span>
+                </div>
+                <span class="layer-tag layer-analyzer">analyzer</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">
+                Waveform pattern analysis module. Detects 2D switching patterns (LRS/HRS separation),
+                extracts waveform metadata (pulse heights, V_set/V_read), and performs full waveform
+                parameter analysis. Largest and most complex analyzer — 7 KB of signal processing logic.
+              </p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>7.0 KB</span><span>·</span><span>206 lines</span><span>·</span><span>b40ecec</span><span>·</span><span>heaviest analyzer</span>
+              </div>
+
+              <!-- Key functions inline -->
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-top:0.75rem;font-size:0.75rem">
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="color:#8c96aa;margin-bottom:0.25rem;font-weight:600">detect_waveform_pattern_2d()</div>
+                  <div style="color:#aeb6c6">Detects binary switching pattern from 2D (time, voltage) data array</div>
+                </div>
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="color:#8c96aa;margin-bottom:0.25rem;font-weight:600">extract_waveform_metadata()</div>
+                  <div style="color:#aeb6c6">Extracts pulse timing, voltages, and metadata from waveform data</div>
+                </div>
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="color:#8c96aa;margin-bottom:0.25rem;font-weight:600">analyze_waveform_params()</div>
+                  <div style="color:#aeb6c6">Full waveform analysis: voltage levels, switching events, compliance</div>
+                </div>
+              </div>
+
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-bottom:0.25rem">
+                    <span class="dep-pill dep-green">depends on: parser output (Section A)</span>
+                    <span class="dep-pill dep-blue">internal helpers: _detect_voltage_levels(), _find_crossing_time()</span>
+                    <span class="dep-pill dep-gold">used by: Layer 7 (Pulse Analyzers)</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand dependencies + version history</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section C: Key Parser Functions -->
+      <section style="margin-bottom:2rem" id="section-C">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-C')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">C. Key Parser Functions</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">7 functions across 4 modules</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;overflow:hidden">
+            <table class="func-table">
+              <thead>
+                <tr>
+                  <th style="width:28%">Function</th>
+                  <th style="width:18%">Module</th>
+                  <th>Purpose</th>
+                  <th style="width:10%">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="func-code">parse_set_voltage()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keysight</span></td>
+                  <td>Extract set voltage from Keysight CSV comment header</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_compliance()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keysight</span></td>
+                  <td>Extract compliance current from Keysight header</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_sweep_range()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keysight</span></td>
+                  <td>Extract sweep start/stop/step from Keysight header</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_repeat_count()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keysight</span></td>
+                  <td>Extract measurement repeat count from Keysight header</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_compliance()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keithley</span></td>
+                  <td>Keithley-specific compliance current extraction</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_sweep_range()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">keithley</span></td>
+                  <td>Keithley-specific sweep range extraction</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">parse_raman_params()</span></td>
+                  <td><span class="layer-tag layer-parser" style="font-size:0.65rem">raman</span></td>
+                  <td>Extract Raman spectral parameters (laser, grating, range)</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section D: Key Analyzer Functions -->
+      <section style="margin-bottom:2rem" id="section-D">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-D')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">D. Key Analyzer Functions</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">6 functions across 2 modules</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;overflow:hidden">
+            <table class="func-table">
+              <thead>
+                <tr>
+                  <th style="width:32%">Function</th>
+                  <th style="width:18%">Module</th>
+                  <th>Purpose</th>
+                  <th style="width:10%">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="func-code">analyze_iv_compliance()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">iv</span></td>
+                  <td>Detect IV compliance point from sweep data (voltage + current arrays)</td>
+                  <td><span class="badge-star" style="font-size:1rem">★</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">detect_waveform_pattern_2d()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">waveform</span></td>
+                  <td>Detect binary LRS/HRS switching pattern from 2D (time, voltage) data</td>
+                  <td><span class="badge-star" style="font-size:1rem">★</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">extract_waveform_metadata()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">waveform</span></td>
+                  <td>Extract pulse timing, voltage levels, and pattern metadata</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">analyze_waveform_params()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">waveform</span></td>
+                  <td>Full waveform analysis — voltage levels, switching, thresholds</td>
+                  <td><span class="badge-star" style="font-size:1rem">★</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">_detect_voltage_levels()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">waveform</span></td>
+                  <td>Detect V_set and V_read voltage levels from waveform data</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+                <tr>
+                  <td><span class="func-code">_find_crossing_time()</span></td>
+                  <td><span class="layer-tag layer-analyzer" style="font-size:0.65rem">waveform</span></td>
+                  <td>Find the time at which a voltage threshold is crossed</td>
+                  <td><span class="badge-keep" style="font-size:1rem">✓</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section E: Data Flow Architecture -->
+      <section style="margin-bottom:2rem" id="section-E">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-E')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">E. Data Flow Architecture</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">How data moves through Layer 2</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+
+            <!-- Flow diagram -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.75rem;margin-bottom:1rem">
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="font-weight:600;color:#d8deea;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem">
+                  <span style="font-size:1rem">📄</span> Raw CSV
+                </div>
+                <div style="color:#aeb6c6">Keysight header →</div>
+                <div style="color:#aeb6c6">Keithley header →</div>
+                <div style="color:#aeb6c6">Raman header →</div>
+                <div style="color:#aeb6c6">Waveform CSV →</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="font-weight:600;color:#d8deea;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem">
+                  <span style="font-size:0.8rem;color:#8cb4e3">⬇</span> Parser Layer
+                </div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">parse_set_voltage()</code> → V</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">parse_compliance()</code> → I_comp</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">parse_sweep_range()</code> → V_min/max</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">parse_raman_params()</code> → λ, grating</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="font-weight:600;color:#d8deea;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem">
+                  <span style="font-size:0.8rem;color:#8fe3c9">⬇</span> Analyzer Layer
+                </div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">analyze_iv_compliance()</code> → result</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">detect_pattern_2d()</code> → LRS/HRS</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">extract_metadata()</code> → meta dict</div>
+                <div style="color:#aeb6c6"><code style="color:#f4c95d">analyze_params()</code> → full analysis</div>
+              </div>
+            </div>
+
+            <!-- Cross-layer flow -->
+            <div style="padding-top:0.75rem;border-top:1px solid #2a2f3a">
+              <div style="font-size:0.75rem;font-weight:600;color:#8c96aa;margin-bottom:0.5rem">Layer 2 in the Pipeline</div>
+              <div style="font-size:0.75rem;font-family:ui-monospace,monospace;color:#aeb6c6;line-height:1.75">
+                <div>Layer 1 (Config + Grammar) &rarr; <span style="color:#8cb4e3">instrument config + grammar patterns</span></div>
+                <div>Layer 2 (Parsers + Analyzers) &rarr; <span style="color:#8cb4e3">extracted metadata + analysis results</span></div>
+                <div>Layer 3 (Keysight Parsers) &rarr; <span style="color:#8fe39e">consumes keysight parser output</span></div>
+                <div>Layer 5 (Plotting Dispatch) &rarr; <span style="color:#8fe39e">consumes analyzer results for plot overlays</span></div>
+                <div>Layer 7 (Pulse Analyzers) &rarr; <span style="color:#8fe39e">consumes waveform analyzer output</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section F: Cross-Layer Dependencies -->
+      <section style="margin-bottom:2rem" id="section-F">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-F')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">F. Cross-Layer Dependencies</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">Which layers consume Layer 2</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.75rem">
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">3</span>
+                  <span style="font-weight:600;color:#d8deea">Keysight Parsers</span>
+                </div>
+                <div style="color:#8c96aa">CONSUMES:</div>
+                <div style="color:#aeb6c6">keysight parser functions (parse_set_voltage, parse_compliance, etc.)</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">5</span>
+                  <span style="font-weight:600;color:#d8deea">Plotting Dispatch</span>
+                </div>
+                <div style="color:#8c96aa">CONSUMES:</div>
+                <div style="color:#aeb6c6">analyzer results for overlay annotations (compliance, V_set labels)</div>
+              </div>
+              <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                  <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">7</span>
+                  <span style="font-weight:600;color:#d8deea">Pulse Analyzers</span>
+                </div>
+                <div style="color:#8c96aa">CONSUMES:</div>
+                <div style="color:#aeb6c6">waveform analyzer functions, V_set/V_read detection</div>
+              </div>
+            </div>
+
+            <!-- File → Layer Dependency Map -->
+            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2a2f3a">
+              <div style="font-size:0.75rem;font-weight:600;color:#8c96aa;margin-bottom:0.5rem">File → Layer Dependency Map</div>
+              <div style="font-size:0.75rem;font-family:ui-monospace,monospace;color:#aeb6c6;line-height:1.75">
+                <div>parsers/__init__.py &rarr; <span style="color:#8cb4e3">Layer 2 (self)</span></div>
+                <div>parsers/keysight.py &rarr; <span style="color:#8cb4e3">Layer 2</span> + <span style="color:#8fe39e">Layer 3</span></div>
+                <div>parsers/keithley.py &rarr; <span style="color:#8cb4e3">Layer 2</span></div>
+                <div>parsers/raman.py &rarr; <span style="color:#8cb4e3">Layer 2</span></div>
+                <div>parsers/waveform.py &rarr; <span style="color:#8cb4e3">Layer 2</span> + <span style="color:#8fe39e">Layer 7</span></div>
+                <div>analyzers/__init__.py &rarr; <span style="color:#8cb4e3">Layer 2 (self)</span></div>
+                <div>analyzers/iv.py &rarr; <span style="color:#8cb4e3">Layer 2</span> + <span style="color:#8fe39e">Layer 5</span></div>
+                <div>analyzers/waveform.py &rarr; <span style="color:#8cb4e3">Layer 2</span> + <span style="color:#8fe39e">Layer 5/7</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section G: Status & Gaps -->
+      <section id="section-G">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-G')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">G. Status & Gaps</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">Completion report</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+            <!-- Status summary -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.5rem">
+              <div style="background:#172419;border-radius:8px;padding:0.75rem;border:1px solid #1a3a2a;text-align:center">
+                <div style="font-size:1.5rem;font-weight:700;color:#8fe39e">5</div>
+                <div style="font-size:0.75rem;color:#8fe39e;font-weight:500">Parser Files</div>
+                <div style="font-size:0.65rem;color:#4a7a5a">ea550b9</div>
+              </div>
+              <div style="background:#172419;border-radius:8px;padding:0.75rem;border:1px solid #1a3a2a;text-align:center">
+                <div style="font-size:1.5rem;font-weight:700;color:#8fe39e">3</div>
+                <div style="font-size:0.75rem;color:#8fe39e;font-weight:500">Analyzer Files</div>
+                <div style="font-size:0.65rem;color:#4a7a5a">b40ecec</div>
+              </div>
+              <div style="background:#172419;border-radius:8px;padding:0.75rem;border:1px solid #1a3a2a;text-align:center">
+                <div style="font-size:1.5rem;font-weight:700;color:#8fe39e">13</div>
+                <div style="font-size:0.75rem;color:#8fe39e;font-weight:500">Key Functions</div>
+                <div style="font-size:0.65rem;color:#4a7a5a">7 parser + 6 analyzer</div>
+              </div>
+            </div>
+
+            <!-- Commit info -->
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#8fe39e">✓</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">All parser files committed in ea550b9</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">5 parser modules (keysight, keithley, raman, waveform, __init__) — all ✓ keep or ★ highlight</p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#8fe39e">✓</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">All analyzer files committed in b40ecec</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">3 analyzer modules (iv, waveform, __init__) — all ✓ keep or ★ highlight</p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#8fe39e">✓</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">All modules registered in __init__.py</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Parser and analyzer registries correctly export and dispatch.</p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span style="font-size:1rem;flex-shrink:0;color:#72c96e">ℹ</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">No known gaps</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
+                  All essential instrument parsers implemented. No coverage gaps identified in the current
+                  instrument fleet (Keysight, Keithley, Raman, generic waveform). If new instruments are added,
+                  a corresponding parser module should be created and registered in the __init__ dispatcher.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    function toggleCard(btn) {
+      btn.classList.toggle('expanded');
+    }
+
+    function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      const body = section.querySelector('.section-body');
+      const arrow = section.querySelector('.expand-arrow');
+      if (body.style.display === 'none') {
+        body.style.display = '';
+        arrow.textContent = '▶';
+      } else {
+        body.style.display = 'none';
+        arrow.textContent = '▼';
+      }
+    }
+
+    function switchLayer(n) {
+      // Update active nav button
+      document.querySelectorAll('.nav-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === n - 1);
+      });
+      // Navigate to the correct layer file
+      const layerFiles = [
+        'layer01-config-grammar.html',
+        'layer02-metadata-parsers.html',
+        'layer03-keysight-parsers.html',
+        'layer04-fzf-display.html',
+        'layer05-plotting-dispatch.html',
+        'layer06-protocol-yaml.html',
+        'layer07-pulse-analyzers.html',
+      ];
+      window.location.href = layerFiles[n - 1];
+    }
+  </script>
+</body>
+</html>

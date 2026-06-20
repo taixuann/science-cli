@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>science-cli · 7-Layer Artifact Registry</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+.subtitle { color: #8b949e; font-size: 1.1rem; margin-bottom: 3rem; }
+
+/* Layer grid */
+.layer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  max-width: 1100px;
+  width: 90%;
+  margin-bottom: 3rem;
+}
+
+.layer-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: #e6edf3;
+  position: relative;
+  transition: border-color 0.2s, transform 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+.layer-card:hover {
+  border-color: #58a6ff;
+  transform: translateY(-2px);
+}
+.layer-card:active { transform: translateY(0); }
+
+.layer-number {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  font-size: 3rem;
+  font-weight: 800;
+  color: #1f2937;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.layer-card:hover .layer-number { opacity: 0.8; }
+
+.layer-name { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.4rem; }
+.layer-desc { color: #8b949e; font-size: 0.85rem; line-height: 1.4; margin-bottom: 0.75rem; flex: 1; }
+
+.status-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.badge {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  font-size: 0.75rem; padding: 0.15rem 0.5rem;
+  border-radius: 999px; font-weight: 500;
+}
+.badge-green { background: #1a3d2e; color: #7ee787; }
+.badge-yellow { background: #3d2e00; color: #e3b341; }
+.badge-red { background: #3d1a1a; color: #ffa198; }
+.badge-blue { background: #0c2d6b; color: #58a6ff; }
+
+.artifact-count { color: #8b949e; font-size: 0.8rem; }
+
+/* Status footer */
+.status-bar {
+  display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;
+  margin-top: 1rem; padding: 1.5rem 2rem;
+  background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+}
+.status-item { text-align: center; }
+.status-item .num { font-size: 1.8rem; font-weight: 700; }
+.status-item .label { color: #8b949e; font-size: 0.85rem; }
+.num-green { color: #7ee787; }
+.num-yellow { color: #e3b341; }
+.num-red { color: #ffa198; }
+.num-blue { color: #58a6ff; }
+
+.footer-note { color: #484f58; font-size: 0.8rem; margin-top: 2rem; text-align: center; }
+.footer-note code { background: #161b22; padding: 0.1rem 0.3rem; border-radius: 4px; }
+
+/* Layer status indicators */
+.l1-border { border-left: 3px solid #58a6ff; }
+.l2-border { border-left: 3px solid #7ee787; }
+.l3-border { border-left: 3px solid #e3b341; }
+.l4-border { border-left: 3px solid #bc8cff; }
+.l5-border { border-left: 3px solid #79c0ff; }
+.l6-border { border-left: 3px solid #d2a8ff; }
+.l7-border { border-left: 3px solid #ffa198; }
+
+/* Hero badge */
+.hero-badge { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.hero-ok { background: #1a3d2e; color: #7ee787; }
+.hero-warn { background: #3d2e00; color: #e3b341; }
+.hero-bad { background: #3d1a1a; color: #ffa198; }
+</style>
+</head>
+<body>
+
+<h1>🏗️ science-cli</h1>
+<p class="subtitle">7-Layer Artifact Registry · v3.22.0</p>
+
+<div class="layer-grid">
+
+  <!-- L1: Config + Grammar -->
+  <a href="layer01-config-grammar.html" class="layer-card l1-border">
+    <span class="layer-number">1</span>
+    <div class="layer-name">Config + Grammar</div>
+    <span class="hero-badge hero-warn">⚠️ Partial</span>
+    <div class="layer-desc">5-file config system, universal filename grammar, 6-layer resolution, legacy patterns to clean up</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 5 keep</span>
+      <span class="badge badge-blue">★ 2 highlight</span>
+      <span class="badge badge-red">✗ 2 discard</span>
+      <span class="badge badge-yellow">🟡 1 plan</span>
+    </div>
+    <span class="artifact-count">16 artifacts</span>
+  </a>
+
+  <!-- L2: Metadata Parsers -->
+  <a href="layer02-metadata-parsers.html" class="layer-card l2-border">
+    <span class="layer-number">2</span>
+    <div class="layer-name">Metadata Parsers + Analyzers</div>
+    <span class="hero-badge hero-ok">✅ Good</span>
+    <div class="layer-desc">Config-driven parsing (keysight, keithley, raman, waveform) + data-driven analyzers (IV compliance, waveform params)</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 6 keep</span>
+      <span class="badge badge-blue">★ 2 highlight</span>
+    </div>
+    <span class="artifact-count">8 artifacts</span>
+  </a>
+
+  <!-- L3: Keysight Parsers -->
+  <a href="layer03-keysight-parsers.html" class="layer-card l3-border">
+    <span class="layer-number">3</span>
+    <div class="layer-name">Keysight B1500A Parsers</div>
+    <span class="hero-badge hero-warn">⚠️ Basic</span>
+    <div class="layer-desc">4 basic parsers. No pulse-specific parsing (intentional — pre-processing design). External script handles endurance CSV.</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 2 keep</span>
+      <span class="badge badge-blue">★ 1 highlight</span>
+    </div>
+    <span class="artifact-count">5 artifacts</span>
+  </a>
+
+  <!-- L4: FZF Display -->
+  <a href="layer04-fzf-display.html" class="layer-card l4-border">
+    <span class="layer-number">4</span>
+    <div class="layer-name">FZF Display</div>
+    <span class="hero-badge hero-ok">✅ Good</span>
+    <div class="layer-desc">STUDY_COLUMN_REGISTRY, per-(study,device) scoping, GLOBAL_COLUMNS from grammar, status badges, build_fzf_display()</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 3 keep</span>
+      <span class="badge badge-blue">★ 2 highlight</span>
+    </div>
+    <span class="artifact-count">6 artifacts</span>
+  </a>
+
+  <!-- L5: Plotting Dispatch -->
+  <a href="layer05-plotting-dispatch.html" class="layer-card l5-border">
+    <span class="layer-number">5</span>
+    <div class="layer-name">Plotting Dispatch</div>
+    <span class="hero-badge hero-warn">⚠️ Partial</span>
+    <div class="layer-desc">STUDY_PLOTTERS, DevicePlotterVariant, config-first plot params (v3.21.0), theme consolidation. Plot/single.py deferred.</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 12 keep</span>
+      <span class="badge badge-blue">★ 3 highlight</span>
+      <span class="badge badge-yellow">🟡 1 plan</span>
+    </div>
+    <span class="artifact-count">21 artifacts</span>
+  </a>
+
+  <!-- L6: Protocol.yaml -->
+  <a href="layer06-protocol-yaml.html" class="layer-card l6-border">
+    <span class="layer-number">6</span>
+    <div class="layer-name">Protocol.yaml</div>
+    <span class="hero-badge hero-warn">⚠️ Content-Light</span>
+    <div class="layer-desc">ProtocolManager, merge_analysis_to_metadata, waveform_pattern. Pipeline works but needs pulse analysis content.</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 4 keep</span>
+      <span class="badge badge-blue">★ 1 highlight</span>
+      <span class="badge badge-yellow">🟡 1 plan</span>
+    </div>
+    <span class="artifact-count">7 artifacts</span>
+  </a>
+
+  <!-- L7: Pulse Analyzers -->
+  <a href="layer07-pulse-analyzers.html" class="layer-card l7-border">
+    <span class="layer-number">7</span>
+    <div class="layer-name">Pulse Analyzers</div>
+    <span class="hero-badge hero-bad">🔴 All Stubs</span>
+    <div class="layer-desc">4 of 4 CLI analyzers are stubs. Library/ analysis functions exist but unwired. BIGGEST GAP.</div>
+    <div class="status-row">
+      <span class="badge badge-green">✓ 5 keep</span>
+      <span class="badge badge-blue">★ 1 highlight</span>
+      <span class="badge badge-red">✗ 1 discard</span>
+      <span class="badge badge-yellow">🟡 1 plan</span>
+      <span class="badge badge-red">🔴 4 stubs</span>
+    </div>
+    <span class="artifact-count">11 artifacts</span>
+  </a>
+
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="status-item">
+    <div class="num num-green">12</div>
+    <div class="label">Config/Code Files</div>
+  </div>
+  <div class="status-item">
+    <div class="num num-blue">11</div>
+    <div class="label">★ Highlighted</div>
+  </div>
+  <div class="status-item">
+    <div class="num num-red">4</div>
+    <div class="label">✗ Discard/Stubs</div>
+  </div>
+  <div class="status-item">
+    <div class="num num-yellow">4</div>
+    <div class="label">🟡 Active Plans</div>
+  </div>
+  <div class="status-item">
+    <div class="num" style="color:#58a6ff;">74</div>
+    <div class="label">Total Artifacts</div>
+  </div>
+</div>
+
+<p class="footer-note">
+  Built from <code>science-cli@dev (6b63cc0)</code> · <a href="artifacts/" style="color:#58a6ff;">30 artifacts</a> in <code>.lavish/artifacts/</code> · 45+ code/config files <br>
+  Plan artifacts live alongside layer dashboards for fast AI agent discovery via YAML frontmatter tags.
+</p>
+
+</body>
+</html>

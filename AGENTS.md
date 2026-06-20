@@ -107,8 +107,10 @@ General-purpose skills also available: `browser`, `memory`, `git`, `free-tools-m
 | Global config | `~/.config/science-cli/config/` |
 | tools workspace | `~/workspace/tools/` |
 | tools AGENTS.md | `~/workspace/tools/AGENTS.md` |
-| Task board | `~/workspace/tools/task.md` | **DEPRECATED — use `.lavish/` dashboard instead** |
+| Task board | `.lavish/` artifact dashboards | Single source of truth for work tracking |
+| Plan artifacts | `.lavish/artifacts/` | DDMMYY plan artifacts with YAML frontmatter tags |
 | Artifact dashboards | `<project>/.lavish/` | Single source of truth for tracking work, versions, tags, assignees |
+| Plan artifacts | `<project>/.lavish/artifacts/` | DDMMYY plan artifacts with YAML frontmatter (layer, type, status, tags, depends_on, assignee) |
 
 ---
 

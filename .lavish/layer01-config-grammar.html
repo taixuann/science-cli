@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Layer 1: Config + Grammar — science-cli Artifact Registry</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0d1117; color: #c9d1d9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  display: flex; min-height: 100vh;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; padding: 1rem; }
+.sidebar h2 { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; margin-bottom: .75rem; font-weight: 600; }
+.nav-btn { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .5rem .75rem; border-radius: 6px; border: none; font: inherit; font-size: .8rem; background: transparent; color: #8b949e; cursor: pointer; text-align: left; transition: all .12s; }
+.nav-btn:hover { background: #1c2128; color: #c9d1d9; }
+.nav-btn.active { background: #1c2128; color: #58a6ff; border: 1px solid #58a6ff; }
+.nav-btn .num { width: 1.25rem; height: 1.25rem; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: .7rem; background: #21262d; color: #8b949e; flex-shrink: 0; }
+.nav-btn.active .num { background: #58a6ff; color: #0d1117; }
+.nav-btn .cnt { margin-left: auto; font-size: .7rem; color: #484f58; }
+.sidebar-divider { border-top: 1px solid #30363d; margin: 1rem 0; }
+.tag-list { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; }
+.tag-row { display: flex; align-items: center; gap: .5rem; color: #8b949e; }
+.tag-row .count { margin-left: auto; color: #484f58; font-size: .75rem; }
+
+/* ===== MAIN ===== */
+.main { flex: 1; padding: 1.5rem; overflow-y: auto; min-width: 0; }
+.header { display: flex; align-items: center; gap: .75rem; margin-bottom: .25rem; }
+.header .num-lg { font-size: 1.75rem; font-weight: 700; color: #58a6ff; }
+.header h2 { font-size: 1.25rem; font-weight: 600; color: #c9d1d9; }
+.subtitle { color: #8b949e; font-size: .85rem; max-width: 40rem; margin-bottom: .75rem; }
+.tag-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.tag { font-size: .7rem; padding: .125rem .5rem; border-radius: 999px; font-weight: 600; }
+.tag-config { background: #161b33; color: #79c0ff; }
+.tag-grammar { background: #163b1a; color: #7ee787; }
+.tag-docs { background: #3b2e16; color: #d29922; }
+.tag-tests { background: #2e163b; color: #d2a8ff; }
+.tag-skills { background: #3b1616; color: #ffa198; }
+.tag-code { background: #16163b; color: #79c0ff; }
+
+/* section header toggle */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .75rem; }
+.section-toggle { background: none; border: none; color: #8b949e; font-size: .7rem; font-family: inherit; cursor: pointer; display: flex; align-items: center; gap: .5rem; }
+.section-toggle:hover { color: #c9d1d9; }
+.section-toggle h3 { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; margin: 0; }
+.section-count { font-size: .75rem; color: #484f58; }
+
+/* ===== ARTIFACT CARD ===== */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: .75rem; }
+.grid .colspan2 { grid-column: span 2; }
+.card-btn {
+  display: block; width: 100%; text-align: left;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: .75rem;
+  cursor: pointer; font: inherit; color: inherit; transition: all .12s;
+}
+.card-btn:hover { border-color: #58a6ff; box-shadow: 0 0 0 1px #58a6ff; }
+.card-btn:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+
+/* Card header row: badge + name + type tag + assignee */
+.card-hdr { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; flex-wrap: wrap; }
+.card-hdr .name { font-size: .85rem; font-weight: 600; }
+.card-hdr .path { font-size: .7rem; color: #484f58; }
+
+/* Badges */
+.badge { font-size: 1rem; }
+.badge-star { color: #d29922; }
+.badge-keep { color: #3fb950; }
+.badge-discard { color: #f85149; }
+.badge-wip { color: #58a6ff; }
+.badge-blocked { color: #f85149; }
+
+/* Assignee badge */
+.assignee {
+  font-size: .65rem; padding: .1rem .4rem; border-radius: 4px; font-weight: 500;
+}
+.assignee-plan { background: #161b33; color: #79c0ff; }
+.assignee-code { background: #163b1a; color: #7ee787; }
+.assignee-review { background: #2e163b; color: #d2a8ff; }
+.assignee-docs { background: #3b2e16; color: #d29922; }
+.assignee-human { background: #3b1616; color: #ffa198; }
+
+/* Meta row */
+.meta { font-size: .75rem; color: #484f58; display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .35rem; }
+.meta .val { color: #8b949e; }
+
+/* Description */
+.desc { font-size: .8rem; color: #8b949e; margin-bottom: .5rem; }
+
+/* Collapsible extras */
+.collapse { display: none; }
+.expanded .collapse { display: block; }
+.hint { font-size: .7rem; color: #484f58; margin-top: .35rem; }
+.chevron { display: inline-block; transition: transform .12s; }
+.expanded .chevron { transform: rotate(90deg); }
+
+/* Version timeline */
+.timeline { padding-left: 1rem; border-left: 2px solid #30363d; margin: .5rem 0; }
+.tl-item { display: flex; align-items: flex-start; gap: .5rem; margin-bottom: .35rem; font-size: .75rem; position: relative; }
+.tl-dot { width: 8px; height: 8px; border-radius: 50%; background: #58a6ff; border: 2px solid #0d1117; flex-shrink: 0; margin-top: 3px; margin-left: -1rem - 1px; }
+.tl-dot-old { background: #21262d; }
+.tl-ver { color: #58a6ff; font-weight: 500; }
+.tl-msg { color: #8b949e; }
+
+/* Dep pills */
+.deps { display: flex; flex-wrap: wrap; gap: .25rem; margin: .5rem 0; }
+.dep { font-size: .7rem; padding: .15rem .4rem; border-radius: 4px; }
+.dep-green { background: #163b1a; color: #7ee787; }
+.dep-blue { background: #161b33; color: #79c0ff; }
+.dep-gold { background: #3b2e16; color: #d29922; }
+.dep-red { background: #3b1616; color: #f85149; }
+
+/* Strat cards */
+.strat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.strat { background: #161b22; border-radius: 6px; padding: .5rem; border: 1px solid #21262d; }
+.strat h4 { font-size: .7rem; color: #8b949e; margin-bottom: .2rem; }
+.strat p { font-size: .75rem; color: #c9d1d9; }
+
+/* Gaps */
+.gap { display: flex; align-items: flex-start; gap: .5rem; padding: .5rem .75rem; background: #161b22; border-radius: 6px; margin-bottom: .35rem; }
+.gap-ico { font-size: 1rem; flex-shrink: 0; }
+.gap h4 { font-size: .85rem; font-weight: 500; }
+.gap p { font-size: .75rem; color: #8b949e; margin: 0; }
+
+/* Layer deps cards */
+.lay-card { background: #161b22; border-radius: 6px; padding: .75rem; border: 1px solid #21262d; }
+.lay-card .lay-num { width: 1.25rem; height: 1.25rem; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #21262d; font-size: .7rem; flex-shrink: 0; }
+.lay-card h4 { font-size: .8rem; font-weight: 600; margin-bottom: .25rem; }
+.lay-card .detail { color: #8b949e; font-size: .75rem; }
+.lay-card .detail b { color: #8b949e; }
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .grid { grid-template-columns: 1fr; }
+  .grid .colspan2 { grid-column: span 1; }
+  .strat-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar">
+  <h2>Artifact Layers</h2>
+  <button class="nav-btn active" onclick="switchLayer(1)">
+    <span class="num">1</span> Config + Grammar <span class="cnt">16</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(2)">
+    <span class="num">2</span> Metadata Parsers <span class="cnt">5</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(3)">
+    <span class="num">3</span> Keysight Parsers <span class="cnt">3</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(4)">
+    <span class="num">4</span> FZF Display <span class="cnt">4</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(5)">
+    <span class="num">5</span> Plotting Dispatch <span class="cnt">6</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(6)">
+    <span class="num">6</span> Protocol.yaml <span class="cnt">4</span>
+  </button>
+  <button class="nav-btn" onclick="switchLayer(7)">
+    <span class="num">7</span> Pulse Analyzers <span class="cnt">5</span>
+  </button>
+
+  <div class="sidebar-divider"></div>
+
+  <h2>Status Tags</h2>
+  <div class="tag-list">
+    <div class="tag-row"><span class="badge badge-star">★</span> Highlight <span class="count">8</span></div>
+    <div class="tag-row"><span class="badge badge-keep">✓</span> Keep <span class="count">5</span></div>
+    <div class="tag-row"><span class="badge badge-discard">✗</span> Discard <span class="count">1</span></div>
+    <div class="tag-row"><span class="badge badge-wip">🔄</span> WIP <span class="count">0</span></div>
+    <div class="tag-row"><span class="badge badge-blocked">🚫</span> Blocked <span class="count">0</span></div>
+    <div class="tag-row"><span style="color:#484f58">—</span> Untagged <span class="count">2</span></div>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <h2>Assignee Summary</h2>
+  <div class="tag-list">
+    <div class="tag-row"><span class="assignee assignee-plan">plan-l1</span> plan <span class="count">4</span></div>
+    <div class="tag-row"><span class="assignee assignee-code">code</span> code <span class="count">8</span></div>
+    <div class="tag-row"><span class="assignee assignee-docs">docs</span> docs <span class="count">3</span></div>
+    <div class="tag-row"><span class="assignee assignee-human">human</span> human <span class="count">1</span></div>
+  </div>
+
+  <div class="sidebar-divider"></div>
+  <p style="font-size:.7rem;color:#484f58">Click any card to expand.<br>Click section to collapse.</p>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<main class="main" id="mainContent">
+  <!-- Layer header -->
+  <div class="header">
+    <span class="num-lg">01</span>
+    <h2>Config + Grammar</h2>
+  </div>
+  <p class="subtitle">Foundation layer: 5-file modular config system, universal filename grammar, 6-layer resolution order, device-study-instrument relationships.</p>
+  <div class="tag-bar">
+    <span class="tag tag-config">config</span>
+    <span class="tag tag-grammar">grammar</span>
+    <span class="tag tag-docs">docs</span>
+    <span class="tag tag-tests">tests</span>
+    <span class="tag tag-skills">skills</span>
+  </div>
+
+  <!-- ===== SECTION A ===== -->
+  <section id="sec-A">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-A')"><span class="chevron">▶</span><h3>A. Config Files (5-file modular system)</h3></button>
+      <span class="section-count">5 artifacts</span>
+    </div>
+    <div class="section-body">
+      <div class="grid">
+
+        <!-- config.yaml -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-keep">✓</span>
+            <span class="name">config.yaml</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-docs">docs</span>
+          </div>
+          <p class="desc">Layer 1 routing config. Sets projects_root, theme, default_dpi (600), per-technique instrument defaults.</p>
+          <div class="meta"><span class="val">282 B</span> · <span class="val">v3.21.0</span> · <span class="val">2026-06-20</span></div>
+          <div class="collapse">
+            <div class="timeline">
+              <div class="tl-item"><span class="tl-dot"></span><span class="tl-ver">v3.21.0</span> <span class="tl-msg">default_dpi 300→600, new per-technique defaults</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">v3.12.0</span> <span class="tl-msg">Initial split from monolithic config.yaml</span></div>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand version history</div>
+        </button>
+
+        <!-- config-devices.yaml -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-star">★</span>
+            <span class="name">config-devices.yaml</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-plan">plan-l1</span>
+          </div>
+          <p class="desc">Device types (volatile/non-volatile memristors) with study lists, analysis_mode, 20+ legacy-to-study patterns.</p>
+          <div class="meta"><span class="val">1.4 KB</span> · <span class="val">v3.12.0</span></div>
+          <div class="collapse">
+            <div class="deps">
+              <span class="dep dep-green">depends on: config-studies.yaml</span>
+              <span class="dep dep-blue">feeds: Layer 4 (FZF), Layer 5 (Plotting)</span>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand dependencies</div>
+        </button>
+
+        <!-- config-studies.yaml -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-star">★</span>
+            <span class="name">config-studies.yaml</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-plan">plan-l1</span>
+          </div>
+          <p class="desc">Canonical study definitions (v6). Study patterns, legacy codes, data shapes, instrument bindings, per-study plot config.</p>
+          <div class="meta"><span class="val">10.4 KB</span> · <span class="val">v6</span> · <span class="val">largest config</span></div>
+          <div class="collapse">
+            <div class="timeline">
+              <div class="tl-item"><span class="tl-dot"></span><span class="tl-ver">v6</span> <span class="tl-msg">WGFMU column maps + per-study plot: blocks</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">v5</span> <span class="tl-msg">Moved from config-devices.yaml (Phase 2)</span></div>
+            </div>
+            <div class="deps">
+              <span class="dep dep-green">feeds: Layer 4, 5, 6, 7</span>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand version history</div>
+        </button>
+
+        <!-- config-instruments.yaml -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-star">★</span>
+            <span class="name">config-instruments.yaml</span>
+            <span class="tag tag-grammar">grammar</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Instrument registry + filename grammar patterns (rNcN, bN-tN, rN-cN-iv, stp-decay) folded from standalone config-grammar.yaml.</p>
+          <div class="meta"><span class="val">5.0 KB</span> · <span class="val">Phase 3 (v3.14.0+)</span></div>
+          <div class="collapse">
+            <div class="deps">
+              <span class="dep dep-gold">supersedes: config-grammar.yaml (deleted)</span>
+              <span class="dep dep-blue">feeds: Layer 3 (Keysight parsers)</span>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand</div>
+        </button>
+
+        <!-- config-template.yaml -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-keep">✓</span>
+            <span class="name">config-template.yaml</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-docs">docs</span>
+          </div>
+          <p class="desc">Theme definitions (publication-nature, acs, tufte, dark, poster, matcha) + plot labels. Replaced 15 YAML files.</p>
+          <div class="meta"><span class="val">18.8 KB</span> · <span class="val">v3.21.0</span> · <span class="val">heaviest file</span></div>
+          <div class="collapse">
+            <div class="deps">
+              <span class="dep dep-gold">consolidated: 15 YAML → 1</span>
+              <span class="dep dep-blue">feeds: Layer 5 (Plotting dispatch)</span>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand</div>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION B ===== -->
+  <section id="sec-B">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-B')"><span class="chevron">▶</span><h3>B. Grammar System</h3></button>
+      <span class="section-count">3 artifacts</span>
+    </div>
+    <div class="section-body">
+      <div class="grid">
+
+        <!-- grammar.py (colspan 2) -->
+        <button class="card-btn colspan2" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-star">★</span>
+            <span class="name">grammar.py</span>
+            <span class="path">core/grammar.py</span>
+            <span class="tag tag-grammar">grammar</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Universal filename parsing module (v3.22.0). Canonical naming convention <code style="color:#58a6ff">DDMMYY-HHMMSS_device-id_study_remarks_flags_count.ext</code>. Right-to-left disambiguation, 10.2 KB.</p>
+          <div class="meta"><span class="val">10.2 KB</span> · <span class="val">v3.22.0</span> · <span class="val">newest artifact</span></div>
+
+          <div class="strat-grid" style="margin:.5rem 0">
+            <div class="strat"><h4>Parse Strategy</h4><p>Right-to-left: date_code → timestamp → device_id → study → remarks → flags → count</p></div>
+            <div class="strat"><h4>Fields</h4><p>7 fields with fallback modes for legacy filenames</p></div>
+          </div>
+
+          <div class="collapse">
+            <div class="deps">
+              <span class="dep dep-green">depends on: config-instruments.yaml patterns</span>
+              <span class="dep dep-blue">feeds: Layer 4 (FZF), Layer 6 (Protocol.yaml)</span>
+            </div>
+            <div class="timeline">
+              <div class="tl-item"><span class="tl-dot"></span><span class="tl-ver">v3.22.0</span> <span class="tl-msg">Universal grammar created — parse_filename() with right-to-left disambiguation</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">v3.14.0</span> <span class="tl-msg">Phase 3: grammar folded into config-instruments.yaml</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">v3.12.0</span> <span class="tl-msg">Phase 2: standalone config-grammar.yaml (now deleted)</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">pre-v3.12</span> <span class="tl-msg">Monolithic technique.py with HARDCODED_GRAMMAR</span></div>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand version history (4 versions)</div>
+        </button>
+
+        <!-- technique.py -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge" style="color:#484f58">—</span>
+            <span class="name">technique.py</span>
+            <span class="tag tag-grammar">grammar</span>
+            <span class="assignee assignee-human">human</span>
+          </div>
+          <p class="desc">Legacy technique detection monolith. HARDCODED_GRAMMAR, detect_study_or_technique(). Being phased out.</p>
+          <div class="meta"><span class="val">22.9 KB</span> · <span class="val">pre-v3.12</span></div>
+          <div class="collapse">
+            <span class="dep dep-red">deprecated: being replaced by grammar.py</span>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand</div>
+        </button>
+
+        <!-- protocol.py (grammar section) -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-keep">✓</span>
+            <span class="name">protocol.py</span>
+            <span class="path">(grammar section)</span>
+            <span class="tag tag-grammar">grammar</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Protocol YAML grammar resolution. Device field (top-level), instrument per step, grammar section read/write.</p>
+          <div class="meta"><span class="val">28.9 KB</span> · <span class="val">v3.22.0</span></div>
+          <div class="deps">
+            <span class="dep dep-green">depends on: grammar.py, config-studies.yaml</span>
+            <span class="dep dep-blue">feeds: Layer 6 (protocol.yaml storage)</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION C ===== -->
+  <section id="sec-C">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-C')"><span class="chevron">▶</span><h3>C. Config Implementation</h3></button>
+      <span class="section-count">4 artifacts</span>
+    </div>
+    <div class="section-body">
+      <div class="grid">
+
+        <!-- config.py -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-star">★</span>
+            <span class="name">config.py</span>
+            <span class="path">core/config.py</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Master config resolution engine (56 KB). 6-layer resolution, device-aware accessors, caching.</p>
+          <div class="meta"><span class="val">56.1 KB</span> · <span class="val">v3.12.0+</span> · <span class="val">biggest module</span></div>
+          <div class="collapse">
+            <div class="timeline">
+              <div class="tl-item"><span class="tl-dot"></span><span class="tl-ver">v3.22.0</span> <span class="tl-msg">Grammar integration, device/metadata accessors</span></div>
+              <div class="tl-item"><span class="tl-dot tl-dot-old"></span><span class="tl-ver">v3.12.0</span> <span class="tl-msg">7-layer resolution refactor, modular split</span></div>
+            </div>
+          </div>
+          <div class="hint"><span class="chevron">▸</span> click to expand version history</div>
+        </button>
+
+        <!-- config_defaults.py -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge" style="color:#484f58">—</span>
+            <span class="name">config_defaults.py</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Generates 4 standalone config files for `sci init`. Embedded default data + full instrument registry.</p>
+          <div class="meta"><span class="val">25.8 KB</span> · <span class="val">v3.12.0</span></div>
+        </button>
+
+        <!-- config_schema.py -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge" style="color:#484f58">—</span>
+            <span class="name">config_schema.py</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">YAML schema validators for studies, device types, instruments, grammar patterns, templates.</p>
+          <div class="meta"><span class="val">12.8 KB</span> · <span class="val">v3.12.0+</span></div>
+        </button>
+
+        <!-- plot_config.py -->
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr">
+            <span class="badge badge-keep">✓</span>
+            <span class="name">plot_config.py</span>
+            <span class="tag tag-config">config</span>
+            <span class="assignee assignee-code">code</span>
+          </div>
+          <p class="desc">Config-first plot parameter resolution. Merges theme defaults → study plot blocks → device overrides.</p>
+          <div class="meta"><span class="val">5.6 KB</span> · <span class="val">v3.21.0</span></div>
+          <span class="dep dep-blue">feeds: Layer 5 (Plotting dispatch)</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION D ===== -->
+  <section id="sec-D">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-D')"><span class="chevron">▶</span><h3>D. Tests, Docs &amp; Skills</h3></button>
+      <span class="section-count">4 artifacts</span>
+    </div>
+    <div class="section-body">
+      <div class="grid">
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr"><span class="badge badge-star">★</span><span class="name">test_config.py</span><span class="tag tag-tests">tests</span><span class="assignee assignee-code">code</span></div>
+          <p class="desc">Comprehensive test suite: loading, merging, resolution, device access, cache behavior.</p>
+          <div class="meta"><span class="val">18.6 KB</span> · <span class="val">v3.22.0</span></div>
+        </button>
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr"><span class="badge badge-star">★</span><span class="name">test_grammar.py</span><span class="tag tag-tests">tests</span><span class="assignee assignee-code">code</span></div>
+          <p class="desc">Grammar tests: parse_filename() disambiguation, field combos, edge cases.</p>
+          <div class="meta"><span class="val">17.6 KB</span> · <span class="val">v3.22.0</span></div>
+        </button>
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr"><span class="badge badge-star">★</span><span class="name">sci-config-guide skill</span><span class="tag tag-skills">skills</span><span class="assignee assignee-docs">docs</span></div>
+          <p class="desc">Global skill: 5-file modular system, 6-layer resolution, grammar patterns.</p>
+          <div class="meta"><span class="val">8.7 KB</span> · <span class="val">v3.12.0+</span></div>
+        </button>
+        <button class="card-btn" onclick="toggleCard(this)">
+          <div class="card-hdr"><span class="badge" style="color:#484f58">—</span><span class="name">api/core-config.md</span><span class="tag tag-docs">docs</span><span class="assignee assignee-docs">docs</span></div>
+          <p class="desc">API reference (v3.11 — may be stale).</p>
+          <div class="meta"><span class="val">18.1 KB</span> · <span class="val">v3.11 (stale)</span></div>
+          <div class="collapse"><span class="dep dep-red">flagged: references config-system.md (DNE)</span></div>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION E: Cross-Layer Dependencies ===== -->
+  <section id="sec-E">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-E')"><span class="chevron">▶</span><h3>E. Cross-Layer Dependencies</h3></button>
+      <span class="section-count">How Layer 1 feeds other layers</span>
+    </div>
+    <div class="section-body">
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:1rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;font-size:.8rem">
+          <div class="lay-card">
+            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+              <span class="lay-num">4</span><h4>FZF Display</h4>
+            </div>
+            <div class="detail"><b>CONSUMES:</b> config-devices.yaml device_types, config-studies.yaml metadata</div>
+            <div class="detail"><b>SHAPED BY:</b> grammar.py parse strategy → step names</div>
+          </div>
+          <div class="lay-card">
+            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+              <span class="lay-num">5</span><h4>Plotting Dispatch</h4>
+            </div>
+            <div class="detail"><b>CONSUMES:</b> config-studies.yaml plot: blocks, config-template.yaml themes</div>
+            <div class="detail"><b>SHAPED BY:</b> plot_config.py merger</div>
+          </div>
+          <div class="lay-card">
+            <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+              <span class="lay-num">6/7</span><h4>Protocol + Pulse</h4>
+            </div>
+            <div class="detail"><b>CONSUMES:</b> grammar.py → protocol.device, config-instruments → step.instrument</div>
+            <div class="detail"><b>SHAPED BY:</b> config-studies.yaml study schema</div>
+          </div>
+        </div>
+        <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid #30363d">
+          <p style="font-size:.75rem;color:#8b949e;font-weight:600;margin-bottom:.35rem">File → Layer Dependency Map</p>
+          <div style="font-size:.75rem;font-family:monospace;color:#8b949e;line-height:1.75">
+            config.yaml → <span style="color:#58a6ff">Layer 1</span><br>
+            config-devices.yaml → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">Layer 4/5</span><br>
+            config-studies.yaml → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">Layer 4/5/6/7</span><br>
+            config-instruments.yaml → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">Layer 3</span><br>
+            config-template.yaml → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">Layer 5</span><br>
+            grammar.py → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">Layer 4/6</span><br>
+            config.py → <span style="color:#58a6ff">Layer 1</span> + <span style="color:#3fb950">ALL LAYERS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION F ===== -->
+  <section id="sec-F">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-F')"><span class="chevron">▶</span><h3>F. Gaps &amp; Issues</h3></button>
+      <span class="section-count">3 items</span>
+    </div>
+    <div class="section-body">
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:.75rem">
+        <div class="gap">
+          <span class="gap-ico">⚠️</span>
+          <div><h4>Missing docs: config-system.md, schemas/config-yaml.md</h4><p>Referenced from INDEX.md and README.md but do not exist on disk.</p></div>
+        </div>
+        <div class="gap">
+          <span class="gap-ico">⚠️</span>
+          <div><h4>Stale API doc: api/core-config.md (v3.11.0)</h4><p>Documents pre-split architecture. Missing modular system, plot_config.py, grammar.py.</p></div>
+        </div>
+        <div class="gap">
+          <span class="gap-ico">⚠️</span>
+          <div><h4>Legacy technique.py not fully deprecated</h4><p>HARDCODED_GRAMMAR still active. Should be removed now that grammar.py handles universal parsing.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION G: Registered Work (planned tasks) ===== -->
+  <section id="sec-G" style="margin-top:1.5rem">
+    <div class="section-header">
+      <button class="section-toggle" onclick="toggleSec('sec-G')"><span class="chevron">▶</span><h3>G. Registered Work (Planned)</h3></button>
+      <span class="section-count">Tracked in this dashboard</span>
+    </div>
+    <div class="section-body">
+      <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:.75rem">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.8rem">
+          <!-- Planned item: Create per-layer sub-skills -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem;background:#0d1117;border-radius:6px;border:1px solid #21262d">
+            <span class="badge badge-wip">🔄</span>
+            <span>Create per-layer sub-skills</span>
+            <span class="assignee assignee-plan" style="margin-left:auto">plan-l1</span>
+          </div>
+          <!-- Planned item: Build Layer 2+ dashboards -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem;background:#0d1117;border-radius:6px;border:1px solid #21262d">
+            <span class="badge badge-wip">🔄</span>
+            <span>Build Layer 2–7 dashboards</span>
+            <span class="assignee assignee-plan" style="margin-left:auto">plan-l1</span>
+          </div>
+          <!-- Planned item: Fix technique.py deprecation -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem;background:#0d1117;border-radius:6px;border:1px solid #21262d">
+            <span class="badge" style="color:#484f58">—</span>
+            <span>Deprecate technique.py fully</span>
+            <span class="assignee assignee-code" style="margin-left:auto">code</span>
+          </div>
+          <!-- Planned item: Create config-system.md -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem;background:#0d1117;border-radius:6px;border:1px solid #21262d">
+            <span class="badge" style="color:#484f58">—</span>
+            <span>Create config-system.md doc</span>
+            <span class="assignee assignee-docs" style="margin-left:auto">docs</span>
+          </div>
+        </div>
+        <p style="font-size:.7rem;color:#484f58;margin-top:.5rem">
+          🔄 = in progress · 🚫 = blocked · — = not started · ✓ = done · ★ = highlight · ✗ = discard
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+function toggleCard(btn) { btn.classList.toggle('expanded'); }
+function toggleSec(id) {
+  const sec = document.getElementById(id);
+  const body = sec.querySelector('.section-body');
+  const chev = sec.querySelector('.chevron');
+  if (!body) return;
+  if (body.style.display === 'none') {
+    body.style.display = ''; chev.textContent = '▶';
+  } else {
+    body.style.display = 'none'; chev.textContent = '▼';
+  }
+}
+function switchLayer(n) {
+  document.querySelectorAll('.nav-btn').forEach((b,i) => b.classList.toggle('active', i === n-1));
+  const main = document.getElementById('mainContent');
+  if (n === 1) { location.reload(); return; }
+  main.innerHTML = `
+    <div style="text-align:center;padding:4rem 2rem">
+      <div style="font-size:4rem;margin-bottom:1rem;color:#21262d">0${n}</div>
+      <h2 style="font-size:1.5rem;font-weight:600;margin:0 0 1rem 0">Layer ${n}</h2>
+      <p style="color:#8b949e;max-width:24rem;margin:0 auto">
+        Artifact dashboard for Layer ${n} will be generated here.
+      </p>
+      <button onclick="location.reload()" style="margin-top:1.5rem;padding:.5rem 1.5rem;background:#238636;color:#fff;border:none;border-radius:6px;font-size:.85rem;cursor:pointer">
+        Back to Layer 1
+      </button>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

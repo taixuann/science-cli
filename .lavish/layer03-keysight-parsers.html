@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="luxury">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer 3: Keysight B1500A Parsers — science-cli Artifact Registry</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet">
+  <meta name="lavish-live-reload" content="root">
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0f1115; color: #f7f3ea; margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+    /* Layout safety — prevent horizontal overflow */
+    .dashboard-wrap { display: flex; width: 100%; max-width: 100vw; overflow-x: hidden; }
+    .main-content { flex: 1; min-width: 0; padding: 1.5rem; }
+    .sidebar { width: 16rem; min-width: 16rem; border-right: 1px solid #2a2f3a; padding: 1rem; overflow-y: auto; height: calc(100vh - 56px); }
+
+    /* Cards — everything clickable is a native button */
+    button { cursor: pointer !important; }
+    .card-btn {
+      display: block; width: 100%; text-align: left; background: #11141a;
+      border: 1px solid #303745; border-radius: 12px; padding: 1rem;
+      transition: all 0.15s ease-out; font: inherit; color: inherit;
+    }
+    .card-btn:hover { border-color: #f4c95d; box-shadow: 0 0 0 1px #f4c95d; }
+    .card-btn:focus-visible { outline: 2px solid #f4c95d; outline-offset: 2px; }
+
+    /* Badges */
+    .badge-star { color: #f4c95d; }
+    .badge-keep { color: #72c96e; }
+    .badge-discard { color: #f06464; }
+
+    /* Layer tags */
+    .layer-tag { font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+    .layer-parser { background: #1a243a; color: #8cb4e3; }
+    .layer-skill { background: #3a1a2a; color: #e39eb4; }
+    .layer-preprocessing { background: #2a3a1a; color: #b4e38c; }
+    .layer-plan { background: #2a1a3a; color: #c99ee3; }
+    .layer-arch { background: #3a2a1a; color: #e3c98c; }
+
+    /* Version timeline */
+    .version-dot {
+      width: 0.75rem; height: 0.75rem; border-radius: 50%;
+      background: #f4c95d; border: 2px solid #0f1115; flex-shrink: 0;
+    }
+    .version-dot-old { background: #4a4f5a; }
+
+    /* Sidebar nav buttons */
+    .nav-btn {
+      display: flex; align-items: center; gap: 0.5rem; width: 100%;
+      padding: 0.5rem 0.75rem; border-radius: 8px; text-align: left;
+      border: none; font: inherit; font-size: 0.875rem; background: transparent; color: #b9c0cf;
+      transition: all 0.12s ease-out;
+    }
+    .nav-btn:hover { background: #1c212b; color: #f7f3ea; }
+    .nav-btn.active { background: #1c212b; border: 1px solid #f4c95d; color: #f7f3ea; }
+
+    /* Artifact grid */
+    .artifact-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
+    .artifact-grid .col-span-2 { grid-column: span 2; }
+
+    /* Dep pills */
+    .dep-pill {
+      display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.5rem;
+      border-radius: 4px; background: #1c1f2e; color: #8ca4e3;
+    }
+    .dep-pill.dep-green { background: #172419; color: #8fe39e; }
+    .dep-pill.dep-gold { background: #25230f; color: #f4c95d; }
+    .dep-pill.dep-red { background: #2a1414; color: #f06464; }
+    .dep-pill.dep-blue { background: #1c1f2e; color: #8ca4e3; }
+    .dep-pill.dep-purple { background: #1f142a; color: #c99ee3; }
+
+    /* Collapsible */
+    .collapsed-content { display: none; }
+    .expanded .collapsed-content { display: block; }
+    .expand-arrow { transition: transform 0.15s ease-out; display: inline-block; }
+    .expanded .expand-arrow { transform: rotate(90deg); }
+
+    /* Section collapse toggle */
+    .section-toggle {
+      background: none; border: none; color: #8c96aa; font-size: 0.7rem;
+      font-family: inherit; cursor: pointer !important;
+    }
+    .section-toggle:hover { color: #f7f3ea; }
+
+    /* Gap card */
+    .gap-card {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.5rem 0.75rem; border-radius: 8px; background: #1c1f1e;
+    }
+    .gap-card.gap-red { background: #2a1414; border: 1px solid #4a2020; }
+    .gap-card.gap-green { background: #142414; border: 1px solid #204a20; }
+
+    /* Contract flow */
+    .flow-step {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem; border-radius: 8px; background: #171a21;
+      border: 1px solid #2a2f3a;
+    }
+    .flow-arrow { color: #4a4f5a; font-size: 1.25rem; flex-shrink: 0; padding-top: 0.5rem; }
+
+    /* Parser function card */
+    .fn-card {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem; border-radius: 8px; background: #171a21;
+      border: 1px solid #2a2f3a; font-size: 0.75rem;
+    }
+    .fn-card .sig { font-family: ui-monospace, monospace; color: #f4c95d; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .artifact-grid { grid-template-columns: 1fr; }
+      .artifact-grid .col-span-2 { grid-column: span 1; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar — sticky, always visible -->
+  <header style="position:sticky;top:0;z-index:50;background:#171a21;border-bottom:1px solid #2a2f3a;padding:0.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:1rem">
+      <h1 style="font-size:1.125rem;font-weight:750;letter-spacing:.02em">science-cli · Artifact Registry</h1>
+      <span style="font-size:0.875rem;color:#8c96aa">v3.22.0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.75rem">
+      <span style="font-size:0.75rem;color:#8c96aa">7 layers · 29 artifacts</span>
+      <span style="padding:0.125rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:600;background:#172419;color:#8fe39e">skill loaded</span>
+    </div>
+  </header>
+
+  <div class="dashboard-wrap">
+    <!-- Sidebar: Layer Navigator -->
+    <aside class="sidebar" style="height:calc(100vh - 56px)">
+      <h2 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem;font-weight:600">Layers</h2>
+      <nav style="display:flex;flex-direction:column;gap:0.125rem">
+        <button class="nav-btn" onclick="switchLayer(1)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">1</span>
+          Config + Grammar
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">16</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(2)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">2</span>
+          Metadata Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">5</span>
+        </button>
+        <button class="nav-btn active" onclick="switchLayer(3)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#f4c95d;color:#17130a;flex-shrink:0">3</span>
+          Keysight Parsers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">3</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(4)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">4</span>
+          FZF Display
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(5)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">5</span>
+          Plotting Dispatch
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">6</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(6)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">6</span>
+          Protocol.yaml
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">4</span>
+        </button>
+        <button class="nav-btn" onclick="switchLayer(7)">
+          <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;background:#2a2f3a;color:#b9c0cf;flex-shrink:0">7</span>
+          Pulse Analyzers
+          <span style="margin-left:auto;font-size:0.75rem;color:#8c96aa">5</span>
+        </button>
+      </nav>
+
+      <!-- Status Tags -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Status Tags</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.875rem">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-star" style="font-size:1.125rem">★</span>
+            <span style="color:#8c96aa">Highlight</span>
+            <span style="margin-left:auto;color:#8c96aa">2</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-keep" style="font-size:1.125rem">✓</span>
+            <span style="color:#8c96aa">Keep</span>
+            <span style="margin-left:auto;color:#8c96aa">7</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span class="badge-discard" style="font-size:1.125rem">✗</span>
+            <span style="color:#8c96aa">Not Impl.</span>
+            <span style="margin-left:auto;color:#8c96aa">4</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span style="color:#4a4f5a;font-size:1.125rem">—</span>
+            <span style="color:#8c96aa">Untagged</span>
+            <span style="margin-left:auto;color:#8c96aa">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Interactive</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#8c96aa">
+          <div>▸ Click any card to expand/collapse details</div>
+          <div>▸ Click section headers to collapse sections</div>
+          <div>▸ Layer nav shows tag counts</div>
+          <div>▸ Status tags are filterable</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Layer Header -->
+      <div style="margin-bottom:1.5rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem">
+          <span style="font-size:1.5rem;font-weight:700;color:#f4c95d">03</span>
+          <h2 style="font-size:1.25rem;font-weight:600;margin:0">Keysight B1500A Parsers</h2>
+        </div>
+        <p style="font-size:0.875rem;color:#8c96aa;max-width:48rem;margin:0.25rem 0 0.5rem 0">
+          Lightweight header parsers for Keysight B1500A semiconductor analyzer CSV files.
+          Exports set voltage, compliance, sweep range, and repeat count from CSV headers.
+          All <strong>heavy endurance parsing is deliberately external</strong> — handled by
+          <code style="color:#f4c95d">plot_endurance_hot.py</code> in the sci-keysight-endurance skill
+          following the pre-processing contract.
+        </p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <span class="layer-tag layer-parser">parser</span>
+          <span class="layer-tag layer-preprocessing">pre-processing</span>
+          <span class="layer-tag layer-skill">skill</span>
+          <span class="layer-tag layer-plan">plan</span>
+          <span class="layer-tag layer-arch">architecture</span>
+        </div>
+      </div>
+
+      <!-- Section A: Core Parser Files -->
+      <section style="margin-bottom:2rem" id="section-A">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-A')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">A. Core Parser Files</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">2 artifacts</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- keysight.py card -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">keysight.py</span>
+                </div>
+                <span class="layer-tag layer-parser">parser</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Lightweight header parser module. 4 functions extracting metadata from Keysight B1500A CSV headers. No heavy lifting — just regex on header lines.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;flex-wrap:wrap">
+                <span>core/metadata/parsers/keysight.py</span>
+                <span>·</span>
+                <span>2.8 KB</span><span>·</span><span>88 lines</span><span>·</span><span>v3.14.0</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="display:flex;align-items:flex-start;gap:0.5rem">
+                    <span class="version-dot" style="flex-shrink:0;margin-top:0.125rem"></span>
+                    <div><span style="color:#8c96aa">v3.14.0</span> <span style="color:#aeb6c6">4 basic header parsers created</span></div>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.25rem">
+                    <span class="dep-pill dep-green">depends on: config-instruments.yaml</span>
+                    <span class="dep-pill dep-blue">used by: Layer 2 (metadata parsers dispatcher)</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand version history</span>
+              </div>
+            </button>
+
+            <!-- plot_endurance_hot.py card -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">plot_endurance_hot.py</span>
+                </div>
+                <span class="layer-tag layer-skill">skill script</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Heavy-duty endurance CSV parser — the real workhorse. Handles 290k-line v2 WGFMU endurance files, extracts per-cycle LRS/HRS, computes R and ratio. Lives in the sci-keysight-endurance skill.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;flex-wrap:wrap">
+                <span>~/.config/opencode/skills/sci-keysight-endurance/scripts/</span>
+                <span>·</span>
+                <span>~8 KB</span><span>·</span><span>~250 lines</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="color:#f4c95d;font-weight:600">Key Capabilities</div>
+                  <div style="color:#aeb6c6">▸ v2 endurance format: parses header, raw_cycles, Measurement Result sections</div>
+                  <div style="color:#aeb6c6">▸ V_set/V_read voltage detection from header columns</div>
+                  <div style="color:#aeb6c6">▸ Per-pulse initial_count data block extraction</div>
+                  <div style="color:#aeb6c6">▸ Per-cycle LRS/HRS current → resistance → ratio computation</div>
+                  <div style="color:#aeb6c6">▸ Outputs clean CSV: cycle, r_lrs_ohm, r_hrs_ohm, ratio</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand details</span>
+              </div>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section B: Parsers Implemented -->
+      <section style="margin-bottom:2rem" id="section-B">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-B')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">B. Parsers Implemented</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">4 functions · lightweight header extraction</span>
+        </div>
+        <div class="section-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.75rem">
+
+            <div class="fn-card" onclick="this.classList.toggle('expanded')" style="cursor:pointer;transition:all 0.12s;border-color:#303745" onmouseover="this.style.borderColor='#f4c95d'" onmouseout="this.style.borderColor='#2a2f3a'">
+              <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%">
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                  <span class="badge-keep" style="font-size:1rem">✓</span>
+                  <span class="sig">parse_set_voltage()</span>
+                </div>
+                <div style="color:#aeb6c6">Extracts &ldquo;Set Voltage&rdquo; from CSV header lines. Returns <code style="color:#8cb4e3">float</code> or <code style="color:#8cb4e3">None</code>.</div>
+                <div style="color:#8c96aa;font-family:ui-monospace,monospace">Pattern: <span style="color:#4a4f5a">"Set Voltage" in line → extract float</span></div>
+              </div>
+            </div>
+
+            <div class="fn-card" onclick="this.classList.toggle('expanded')" style="cursor:pointer;transition:all 0.12s;border-color:#303745" onmouseover="this.style.borderColor='#f4c95d'" onmouseout="this.style.borderColor='#2a2f3a'">
+              <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%">
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                  <span class="badge-keep" style="font-size:1rem">✓</span>
+                  <span class="sig">parse_compliance()</span>
+                </div>
+                <div style="color:#aeb6c6">Extracts &ldquo;Compliance&rdquo; from CSV header lines. Returns <code style="color:#8cb4e3">float</code> or <code style="color:#8cb4e3">None</code>.</div>
+                <div style="color:#8c96aa;font-family:ui-monospace,monospace">Pattern: <span style="color:#4a4f5a">"Compliance" in line → extract float</span></div>
+              </div>
+            </div>
+
+            <div class="fn-card" onclick="this.classList.toggle('expanded')" style="cursor:pointer;transition:all 0.12s;border-color:#303745" onmouseover="this.style.borderColor='#f4c95d'" onmouseout="this.style.borderColor='#2a2f3a'">
+              <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%">
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                  <span class="badge-keep" style="font-size:1rem">✓</span>
+                  <span class="sig">parse_sweep_range()</span>
+                </div>
+                <div style="color:#aeb6c6">Extracts sweep start/end/step from CSV header. Returns <code style="color:#8cb4e3">dict</code> with start, end, step keys.</div>
+                <div style="color:#8c96aa;font-family:ui-monospace,monospace">Pattern: <span style="color:#4a4f5a">"Sweep Range" in line → parse three floats</span></div>
+              </div>
+            </div>
+
+            <div class="fn-card" onclick="this.classList.toggle('expanded')" style="cursor:pointer;transition:all 0.12s;border-color:#303745" onmouseover="this.style.borderColor='#f4c95d'" onmouseout="this.style.borderColor='#2a2f3a'">
+              <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%">
+                <div style="display:flex;align-items:center;gap:0.5rem">
+                  <span class="badge-keep" style="font-size:1rem">✓</span>
+                  <span class="sig">parse_repeat_count()</span>
+                </div>
+                <div style="color:#aeb6c6">Extracts number of sweeps/repeats from CSV header. Returns <code style="color:#8cb4e3">int</code> or <code style="color:#8cb4e3">None</code>.</div>
+                <div style="color:#8c96aa;font-family:ui-monospace,monospace">Pattern: <span style="color:#4a4f5a">"Repeat Count" in line → extract int</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section C: Parsers NOT Implemented -->
+      <section style="margin-bottom:2rem" id="section-C">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-C')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">C. Parsers NOT Implemented</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">4 items · intentional design decisions</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+            <div class="gap-card">
+              <span class="badge-discard" style="font-size:1rem;flex-shrink:0">✗</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">No Measurement Result section parser</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
+                  The Measurement Result section in v2 endurance files is too complex for a general-purpose tool:
+                  variable column counts, nested cycle structures, mixed raw_cycles data. Handled externally by
+                  <code style="color:#f4c95d">plot_endurance_hot.py</code>.
+                </p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span class="badge-discard" style="font-size:1rem;flex-shrink:0">✗</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">No raw_cycles placeholder replacement</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
+                  Some v2 endurance files use placeholder tokens in raw_cycles that require lookup tables.
+                  Not worth generalizing — the external script handles this case-by-case.
+                </p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span class="badge-discard" style="font-size:1rem;flex-shrink:0">✗</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">No WGFMU endurance format handling</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
+                  WGFMU produces highly instrument-specific binary-like CSV. Each lab configures WGFMU differently.
+                  A general parser would be fragile. External script handles known formats.
+                </p>
+              </div>
+            </div>
+            <div class="gap-card">
+              <span class="badge-discard" style="font-size:1rem;flex-shrink:0">✗</span>
+              <div>
+                <div style="font-size:0.875rem;font-weight:500">No per-pulse STP/PPF format handling</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
+                  STP (single-pulse) and PPF (paired-pulse) formats have different schema per study.
+                  Better to pre-process externally and feed clean columns to <code style="color:#f4c95d">sci plot</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section D: Pre-Processing Contract -->
+      <section style="margin-bottom:2rem" id="section-D">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-D')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">D. Pre-Processing Contract</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">External processing pipeline</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+            <p style="font-size:0.875rem;color:#aeb6c6;margin:0 0 1rem 0">
+              All heavy Keysight endurance CSV parsing is <strong>deliberately external</strong>.
+              The tool does not attempt to parse the 290k-line endurance files inline.
+              Instead, a pre-processing step produces clean data that <code style="color:#f4c95d">sci plot</code> reads directly.
+            </p>
+
+            <!-- Flow chart -->
+            <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem">
+              <div class="flow-step">
+                <span style="font-size:1.25rem;flex-shrink:0">🧬</span>
+                <div>
+                  <div style="font-weight:600;margin-bottom:0.125rem">1. Raw CSV</div>
+                  <div style="color:#8c96aa">~290k lines · ~176k cycles · Keysight v2 WGFMU format</div>
+                  <div style="color:#4a4f5a;font-size:0.7rem;margin-top:0.125rem">data/raw/sample.endurance.csv</div>
+                </div>
+              </div>
+              <div class="flow-step" style="border-color:#f4c95d;background:#1f1d12">
+                <span style="font-size:1.25rem;flex-shrink:0">⚡</span>
+                <div>
+                  <div style="font-weight:600;margin-bottom:0.125rem;color:#f4c95d">2. External Parser</div>
+                  <div style="color:#aeb6c6">
+                    Human or AI runs <code style="color:#f4c95d">plot_endurance_hot.py</code> from
+                    the sci-keysight-endurance skill. Parses Measurement Result sections,
+                    extracts per-cycle LRS/HRS currents, computes resistance + ratio.
+                  </div>
+                  <div style="color:#4a4f5a;font-size:0.7rem;margin-top:0.125rem">
+                    ~/.config/opencode/skills/sci-keysight-endurance/scripts/plot_endurance_hot.py
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:center;color:#4a4f5a;font-size:0.75rem">↓</div>
+              <div class="flow-step">
+                <span style="font-size:1.25rem;flex-shrink:0">📋</span>
+                <div>
+                  <div style="font-weight:600;margin-bottom:0.125rem">3. Clean CSV</div>
+                  <div style="color:#8c96aa">~10 lines · 4 columns: <code>cycle, r_lrs_ohm, r_hrs_ohm, ratio</code></div>
+                  <div style="color:#4a4f5a;font-size:0.7rem;margin-top:0.125rem">results/endurance_cleaned.csv</div>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:center;color:#4a4f5a;font-size:0.75rem">↓</div>
+              <div class="flow-step">
+                <span style="font-size:1.25rem;flex-shrink:0">📈</span>
+                <div>
+                  <div style="font-weight:600;margin-bottom:0.125rem">4. Plot Output</div>
+                  <div style="color:#8c96aa"><code style="color:#f4c95d">sci plot</code> reads clean columns → publication figure</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Contract rules -->
+            <div style="border-top:1px solid #2a2f3a;padding-top:0.75rem;margin-top:0.5rem">
+              <div style="font-size:0.75rem;font-weight:600;color:#f4c95d;margin-bottom:0.5rem">Contract Rules</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.75rem">
+                <div style="background:#172419;border-radius:6px;padding:0.5rem;color:#8fe39e">
+                  ✓ Clean CSV must have columns: <code>cycle</code>, <code>r_lrs_ohm</code>, <code>r_hrs_ohm</code>, <code>ratio</code>
+                </div>
+                <div style="background:#172419;border-radius:6px;padding:0.5rem;color:#8fe39e">
+                  ✓ Tool reads clean CSV directly — no inline parsing of raw format
+                </div>
+                <div style="background:#2a1414;border-radius:6px;padding:0.5rem;color:#f06464">
+                  ✗ Never attempt to parse 290k-line endurance files inside <code>sci plot</code>
+                </div>
+                <div style="background:#2a1414;border-radius:6px;padding:0.5rem;color:#f06464">
+                  ✗ Never add WGFMU-specific code to core parser module
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section E: Skill Files -->
+      <section style="margin-bottom:2rem" id="section-E">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-E')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">E. Skill Files</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">2 artifacts</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- sci-keysight-endurance/SKILL.md card -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">sci-keysight-endurance/SKILL.md</span>
+                </div>
+                <span class="layer-tag layer-skill">skill</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Complete documentation of the reverse-engineered v2 endurance file format. Header structure, raw_cycles section, Measurement Result sections, per-pulse data blocks, voltage detection algorithm, and LRS/HRS extraction.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;flex-wrap:wrap">
+                <span>~/.config/opencode/skills/sci-keysight-endurance/</span>
+                <span>·</span>
+                <span>650+ lines</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="color:#f4c95d;font-weight:600">Documented v2 Format Sections</div>
+                  <div style="color:#aeb6c6">▸ Header: instrument name, voltages, timestamps, column names</div>
+                  <div style="color:#aeb6c6">▸ raw_cycles: timed pulse data for each cycle (placeholders possible)</div>
+                  <div style="color:#aeb6c6">▸ Measurement Result: per-cycle LRS/HRS summary with current values</div>
+                  <div style="color:#aeb6c6">▸ initial_count: per-pulse data block for the very first pulse</div>
+                  <div style="color:#aeb6c6">▸ V_set/V_read: detected from column naming patterns in header</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand format documentation</span>
+              </div>
+            </button>
+
+            <!-- plot_endurance_hot.py (ref) card - highlighting it again -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">plot_endurance_hot.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">(reference impl)</span>
+                </div>
+                <span class="layer-tag layer-skill">script</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">The canonical reference implementation for the pre-processing contract. Reverse-engineered from real WGFMU endurance data. Use as template for any new endurance format.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa;flex-wrap:wrap">
+                <span>~/.config/opencode/skills/sci-keysight-endurance/scripts/</span>
+                <span>·</span>
+                <span>~8 KB</span><span>·</span><span>~250L</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                  <span class="dep-pill dep-purple">loaded by: sci-keysight-endurance skill</span>
+                  <span class="dep-pill dep-blue">feeds into: Layer 5 (Plotting)</span>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section F: Artifacts -->
+      <section style="margin-bottom:2rem" id="section-F">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-F')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">F. Artifacts</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">2 artifacts</span>
+        </div>
+        <div class="section-body">
+          <div class="artifact-grid">
+
+            <!-- 150626_sci-keysight-loader plan -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;display:inline-block;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">150626_sci-keysight-loader.md</span>
+                </div>
+                <span class="layer-tag layer-plan">plan</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Keysight B1500A loader plan. Documents the design decisions for the 4 basic header parsers and the pre-processing contract with external scripts.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>🟢 Done</span><span>·</span><span>v3.14.0</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#aeb6c6">
+                  <div>✅ Keysight parser module created</div>
+                  <div>✅ 4 header parsing functions implemented</div>
+                  <div>✅ Pre-processing contract defined</div>
+                  <div>⚠️ external script approach agreed (no inline endurance parsing)</div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+
+            <!-- sci-keysight-endurance skill -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="width:0.75rem;height:0.75rem;border-radius:50%;background:#72c96e;display:inline-block;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">sci-keysight-endurance skill</span>
+                </div>
+                <span class="layer-tag layer-skill">skill</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">Full endurance parsing documentation skill with bundled reference script. Covers v1+v2 format, extraction algorithm, and voltage detection.</p>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>🟢 Created</span><span>·</span><span>650+ lines</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem">
+                  <span class="dep-pill dep-green">contains: plot_endurance_hot.py reference impl</span>
+                  <span class="dep-pill dep-blue">registered in: sci-plan-workflow skill routing</span>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand</span>
+              </div>
+            </button>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- Section G: Dependencies & Version Timeline -->
+      <section style="margin-bottom:2rem" id="section-G">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-G')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">G. Dependencies &amp; Version Timeline</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">Cross-layer + evolution</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1.25rem">
+
+            <!-- Dependency Graph -->
+            <div style="margin-bottom:1rem">
+              <div style="font-size:0.75rem;font-weight:600;color:#8c96aa;margin-bottom:0.5rem">Dependency Graph</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.75rem">
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                    <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">1</span>
+                    <span style="font-weight:600;color:#d8deea">Config + Grammar</span>
+                  </div>
+                  <div style="color:#8c96aa">DEPENDS ON:</div>
+                  <div style="color:#aeb6c6">config-instruments.yaml for instrument config, file naming patterns</div>
+                </div>
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                    <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">5</span>
+                    <span style="font-weight:600;color:#d8deea">Plotting Dispatch</span>
+                  </div>
+                  <div style="color:#8c96aa">FEEDS INTO:</div>
+                  <div style="color:#aeb6c6">Clean CSV → <code style="color:#f4c95d">sci plot</code> reads columns for endurance plots</div>
+                </div>
+                <div style="background:#171a21;border-radius:8px;padding:0.75rem;border:1px solid #2a2f3a">
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                    <span style="width:1.25rem;height:1.25rem;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#2a2f3a;flex-shrink:0">7</span>
+                    <span style="font-weight:600;color:#d8deea">Pulse Analyzers</span>
+                  </div>
+                  <div style="color:#8c96aa">COULD USE:</div>
+                  <div style="color:#aeb6c6">Clean CSV columns for pulse-level endurance analysis</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Version Timeline -->
+            <div style="padding-top:0.75rem;border-top:1px solid #2a2f3a">
+              <div style="font-size:0.75rem;font-weight:600;color:#8c96aa;margin-bottom:0.5rem">Version Timeline</div>
+              <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                <div style="display:flex;align-items:flex-start;gap:0.5rem">
+                  <span class="version-dot" style="flex-shrink:0;margin-top:0.125rem"></span>
+                  <div>
+                    <span style="color:#f4c95d;font-weight:600">v3.21.0</span>
+                    <span style="color:#aeb6c6"> — pulse_endurance.py updated to detect pre-processed columns</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem">
+                  <span class="version-dot version-dot-old" style="flex-shrink:0;margin-top:0.125rem"></span>
+                  <div>
+                    <span style="color:#8c96aa">v3.14.0</span>
+                    <span style="color:#aeb6c6"> — Keysight parsers created: 4 basic header parsing functions</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:0.5rem">
+                  <span class="version-dot version-dot-old" style="flex-shrink:0;margin-top:0.125rem"></span>
+                  <div>
+                    <span style="color:#8c96aa">pre-v3.14</span>
+                    <span style="color:#aeb6c6"> — No Keysight support. All CSV parsing was manual per-study.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    function toggleCard(btn) {
+      btn.classList.toggle('expanded');
+    }
+
+    function toggleSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      const body = section.querySelector('.section-body');
+      const arrow = section.querySelector('.expand-arrow');
+      if (body.style.display === 'none') {
+        body.style.display = '';
+        arrow.textContent = '▶';
+      } else {
+        body.style.display = 'none';
+        arrow.textContent = '▼';
+      }
+    }
+
+    function switchLayer(n) {
+      // Update active nav button
+      document.querySelectorAll('.nav-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === n - 1);
+      });
+      // Navigate to the appropriate layer HTML
+      const targets = {
+        1: 'layer01-config-grammar.html',
+        2: 'layer02-metadata-parsers.html',
+        3: 'layer03-keysight-parsers.html',
+        4: 'layer04-fzf-display.html',
+        5: 'layer05-plotting-dispatch.html',
+        6: 'layer06-protocol-yaml.html',
+        7: 'layer07-pulse-analyzers.html'
+      };
+      if (n === 3) { location.reload(); return; }
+      if (targets[n]) { location.href = targets[n]; }
+    }
+  </script>
+</body>
+</html>

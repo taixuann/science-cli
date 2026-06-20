@@ -1,3 +1,11 @@
+---
+layer: [4, 5]
+type: plan
+status: planning
+tags: [waveform, fzf, plot, stdudy-scoping]
+assignee: plan
+---
+
 # Implementation Plan: Waveform 2D Detection + core/fzf/ Subpackage + (study, device) Scoping
 
 **Date**: 20/06/2026
@@ -98,7 +106,7 @@ After this plan completes:
 | `~/.config/opencode/skills/sci-config-guide/SKILL.md` | Document waveform_pattern 2D output | Low |
 | `~/.config/opencode/skills/sci-fzf-guide/SKILL.md` | Document (study, device) scoping | Low |
 | `AGENTS.md` | Update directory map: `core/fzf/` is a subpackage | Low |
-| `task.md` | New `[sci]` cards for v3.20.0 phases | Low |
+| `.lavish/ layer dashboards` | New `[sci]` artifacts for v3.20.0 phases | Low |
 
 ---
 

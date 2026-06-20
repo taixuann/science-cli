@@ -120,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - STP, endurance, IV bipolar, PPF all write waveform + analysis results
   - New `merge_analysis_to_metadata()` helper in `core/analysis_output.py`
   - Atomic write via `_atomic_write_yaml()` (temp file + os.replace)
-- **Architecture ref**: device ↔ study relationship documented in `.opencode/artifacts/160626c_device-study-relationship.md`
+- **Architecture ref**: device ↔ study relationship documented in `.lavish/artifacts/160626c_device-study-relationship.md`
   - Device types: `volatile-memristor`, `non-volatile-memristor`
   - Studies: `pulse:pulse-stp-decay`, `pulse:pulse-endurance`, `pulse:pulse-ppf`, `iv:iv-bipolar-sweep`
 

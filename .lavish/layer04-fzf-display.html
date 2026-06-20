@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer 4: FZF Display — science-cli Artifact Registry</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      overflow-y: auto;
+    }
+    .sidebar-title {
+      padding: 0 16px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #30363d;
+      margin-bottom: 8px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      color: #8b949e;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      font-family: inherit;
+    }
+    .nav-btn:hover { background: #1c2333; color: #c9d1d9; }
+    .nav-btn.active {
+      background: #1f3a5f;
+      color: #58a6ff;
+      border-right: 3px solid #58a6ff;
+    }
+    .layer-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #21262d;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .nav-btn.active .layer-number {
+      background: #1f6feb;
+      color: #fff;
+    }
+    .artifact-count {
+      margin-left: auto;
+      font-size: 11px;
+      color: #484f58;
+      background: #0d1117;
+      padding: 1px 7px;
+      border-radius: 10px;
+    }
+
+    /* ===== MAIN ===== */
+    .main {
+      flex: 1;
+      padding: 32px 40px;
+      max-width: 1100px;
+    }
+
+    /* ===== LAYER HEADER ===== */
+    .layer-header {
+      margin-bottom: 28px;
+    }
+    .layer-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 6px;
+    }
+    .layer-header .subtitle {
+      color: #8b949e;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    /* ===== STATUS BADGES ===== */
+    .status-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #30363d;
+      background: #161b22;
+    }
+    .badge-keep { color: #3fb950; border-color: #3fb95033; background: #0d2d1a; }
+    .badge-highlight { color: #d29922; border-color: #d2992233; background: #2d220d; }
+    .badge-discard { color: #f85149; border-color: #f8514933; background: #2d0d0d; }
+    .badge-planning { color: #db6d28; border-color: #db6d2833; background: #2d1a0d; }
+
+    /* ===== SECTION ===== */
+    .section {
+      margin-bottom: 32px;
+    }
+    .section-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 0;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #21262d;
+      cursor: pointer;
+      color: #c9d1d9;
+      font-family: inherit;
+      text-align: left;
+      margin-bottom: 16px;
+    }
+    .section-toggle:hover { border-bottom-color: #30363d; }
+    .section-toggle .expand-arrow {
+      font-size: 12px;
+      color: #8b949e;
+      transition: transform 0.2s;
+    }
+    .section-toggle .expand-arrow.open { transform: rotate(90deg); }
+    .section-toggle h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+    .section-toggle .count {
+      margin-left: auto;
+      font-size: 12px;
+      color: #484f58;
+    }
+
+    /* ===== CARD ===== */
+    .card-btn {
+      display: block;
+      width: 100%;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #c9d1d9;
+      font-family: inherit;
+      text-align: left;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .card-btn:hover {
+      background: #1c2333;
+      border-color: #58a6ff44;
+    }
+    .card-btn.expanded {
+      border-color: #58a6ff66;
+      background: #1c2333;
+    }
+    .card-btn .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .card-btn .card-header .badge {
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .card-btn .artifact-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+    .card-btn .layer-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #1f3a5f;
+      color: #58a6ff;
+      margin-left: auto;
+    }
+    .card-btn .layer-tag.tag-config { background: #1a3d2e; color: #3fb950; }
+    .card-btn .layer-tag.tag-code  { background: #1f3a5f; color: #58a6ff; }
+    .card-btn .layer-tag.tag-plan  { background: #3d1a1a; color: #f85149; }
+    .card-btn .layer-tag.tag-arch  { background: #2e1a3d; color: #bc8cff; }
+    .desc {
+      color: #8b949e;
+      font-size: 13px;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .meta {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #484f58;
+      flex-wrap: wrap;
+    }
+    .meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .hint {
+      font-size: 11px;
+      color: #484f58;
+      margin-top: 8px;
+    }
+    .card-btn.expanded .hint { display: none; }
+
+    /* ===== COLLAPSED CONTENT ===== */
+    .collapsed-content {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #21262d;
+    }
+    .card-btn.expanded .collapsed-content { display: block; }
+
+    .collapsed-content h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #8b949e;
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+    .collapsed-content h4:first-child { margin-top: 0; }
+    .collapsed-content p, .collapsed-content li {
+      font-size: 13px;
+      color: #c9d1d9;
+      line-height: 1.5;
+    }
+    .collapsed-content ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .collapsed-content ul li {
+      padding: 2px 0 2px 16px;
+      position: relative;
+    }
+    .collapsed-content ul li::before {
+      content: '·';
+      position: absolute;
+      left: 4px;
+      color: #484f58;
+    }
+
+    /* ===== VERSION TIMELINE ===== */
+    .timeline {
+      position: relative;
+      padding-left: 24px;
+      margin: 8px 0;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: #30363d;
+    }
+    .timeline-item {
+      position: relative;
+      padding: 0 0 14px 0;
+    }
+    .timeline-item:last-child { padding-bottom: 0; }
+    .timeline-item .dot {
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #1f6feb;
+      border: 2px solid #0d1117;
+    }
+    .timeline-item .dot.old { background: #484f58; }
+    .timeline-item .dot.future { background: #3fb950; }
+    .timeline-item .tl-version {
+      font-weight: 600;
+      color: #f0f6fc;
+      font-size: 13px;
+    }
+    .timeline-item .tl-desc {
+      font-size: 13px;
+      color: #8b949e;
+    }
+
+    /* ===== DEPENDENCY TABLE ===== */
+    .dep-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .dep-table th, .dep-table td {
+      padding: 8px 12px;
+      border: 1px solid #21262d;
+      text-align: left;
+    }
+    .dep-table th {
+      background: #0d1117;
+      color: #8b949e;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .dep-table td { color: #c9d1d9; }
+    .dep-table tr:hover td { background: #1c2333; }
+    .dep-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      margin: 1px 2px;
+    }
+    .dep-l1 { background: #1a3d2e; color: #3fb950; }
+    .dep-l2 { background: #2e1a3d; color: #bc8cff; }
+    .dep-l3 { background: #1a2e3d; color: #79c0ff; }
+    .dep-l4 { background: #1f3a5f; color: #58a6ff; }
+    .dep-l5 { background: #1a3d2e; color: #3fb950; }
+    .dep-l6 { background: #3d2e1a; color: #d29922; }
+    .dep-l7 { background: #3d1a2e; color: #f85149; }
+    .dep-all { background: #21262d; color: #8b949e; }
+
+    /* ===== KEY-VALUE GRID ===== */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      margin: 8px 0;
+    }
+    .kv-item {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .kv-item .kv-key {
+      font-size: 11px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .kv-item .kv-val {
+      font-size: 13px;
+      color: #f0f6fc;
+      font-weight: 500;
+    }
+
+    /* ===== DATA FLOW DIAGRAM ===== */
+    .flow-diagram {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 14px 16px;
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      margin: 8px 0;
+      font-size: 12px;
+    }
+    .flow-node {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .flow-node.src   { background: #1a3d2e; color: #3fb950; }
+    .flow-node.mid   { background: #1f3a5f; color: #58a6ff; }
+    .flow-node.dst   { background: #3d2e1a; color: #d29922; }
+    .flow-arrow {
+      color: #484f58;
+      font-size: 16px;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      body { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        min-width: unset;
+        height: auto;
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 12px;
+        gap: 4px;
+        border-right: none;
+        border-bottom: 1px solid #30363d;
+      }
+      .sidebar-title { display: none; }
+      .nav-btn { width: auto; padding: 6px 10px; border-radius: 6px; }
+      .nav-btn.active { border-right: none; border-bottom: 2px solid #58a6ff; }
+      .artifact-count { display: none; }
+      .main { padding: 20px; }
+      .main { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar">
+  <div class="sidebar-title">Architecture Layers</div>
+  <button class="nav-btn" onclick="switchLayer(1)"><span class="layer-number">1</span> Config + Grammar <span class="artifact-count">16</span></button>
+  <button class="nav-btn" onclick="switchLayer(2)"><span class="layer-number">2</span> Metadata Parsers <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(3)"><span class="layer-number">3</span> Keysight Parsers <span class="artifact-count">—</span></button>
+  <button class="nav-btn active" onclick="switchLayer(4)"><span class="layer-number">4</span> FZF Display <span class="artifact-count">5</span></button>
+  <button class="nav-btn" onclick="switchLayer(5)"><span class="layer-number">5</span> Plotting Dispatch <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(6)"><span class="layer-number">6</span> Protocol.yaml <span class="artifact-count">—</span></button>
+  <button class="nav-btn" onclick="switchLayer(7)"><span class="layer-number">7</span> Pulse Analyzers <span class="artifact-count">—</span></button>
+</nav>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+
+  <!-- Layer Header -->
+  <div class="layer-header">
+    <h1>Layer 4: FZF Display</h1>
+    <p class="subtitle">STUDY_COLUMN_REGISTRY · build_fzf_display · status badges · per-study metadata columns</p>
+  </div>
+
+  <!-- Status Summary Badges -->
+  <div class="status-bar">
+    <span class="status-badge badge-keep">✓ keep (4)</span>
+    <span class="status-badge badge-highlight">★ highlight (2)</span>
+    <span class="status-badge badge-discard">✗ discard (0)</span>
+    <span class="status-badge badge-planning">🟢 Complete</span>
+  </div>
+
+  <!-- ===== KEY DATA FLOW ===== -->
+  <div class="section" id="section-flow">
+    <button class="section-toggle" onclick="toggleSection('section-flow')">
+      <span class="expand-arrow open">▶</span>
+      <h3>Key Data Flow</h3>
+      <span class="count">pipeline</span>
+    </button>
+    <div class="section-body">
+      <div class="flow-diagram">
+        <span class="flow-node src">protocol.yaml</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node mid">metadata analyzers (L2)</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node mid">STUDY_COLUMN_REGISTRY</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node dst">build_fzf_display()</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node dst">fzf columns</span>
+      </div>
+      <div class="flow-diagram">
+        <span class="flow-node src">grammar.parse_filename() (L1)</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node mid">GLOBAL_COLUMNS</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-node dst">fzf header fields</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION A: CODE FILES ===== -->
+  <div class="section" id="section-A">
+    <button class="section-toggle" onclick="toggleSection('section-A')">
+      <span class="expand-arrow open">▶</span>
+      <h3>A. Code Files</h3>
+      <span class="count">3 artifacts</span>
+    </button>
+    <div class="section-body">
+
+      <!-- core/fzf/__init__.py -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">core/fzf/__init__.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc">Package init — re-exports public API from the <code>core/fzf/</code> subpackage. Minimal facade that exposes <code>build_fzf_display</code>, <code>STUDY_COLUMN_REGISTRY</code>, and status badge helpers.</p>
+        <div class="meta">
+          <span>644B</span>
+          <span>~15 lines</span>
+          <span>v1</span>
+          <span>✓ keep</span>
+        </div>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <h4>Exports</h4>
+          <ul>
+            <li><code>build_fzf_display</code> — from display.py</li>
+            <li><code>STUDY_COLUMN_REGISTRY</code> — from columns.py</li>
+            <li><code>GLOBAL_COLUMNS</code> — from columns.py</li>
+            <li><code>get_columns_for</code> — from columns.py</li>
+            <li>Status badge helpers</li>
+          </ul>
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l4">L4</span> — imports from columns.py and display.py</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- core/fzf/columns.py -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">core/fzf/columns.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc"><strong>STUDY_COLUMN_REGISTRY</strong> — the central registry mapping <code>(study, device_type)</code> tuples to per-study metadata column keys. Implements <code>get_columns_for()</code> fall-through logic and defines <code>GLOBAL_COLUMNS</code> (Step, DateTime, Device-ID, Study, Remarks, Flags, Count).</p>
+        <div class="meta">
+          <span>7.1KB</span>
+          <span>~180 lines</span>
+          <span>v2</span>
+          <span>★ highlight</span>
+        </div>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <h4>Key Components</h4>
+          <ul>
+            <li><code>STUDY_COLUMN_REGISTRY</code> — dict keyed by <code>(study, device_type)</code></li>
+            <li><code>get_columns_for(study, device_type)</code> — fall-through: exact match → study match (any device) → GLOBAL_COLUMNS</li>
+            <li><code>GLOBAL_COLUMNS</code> — Step, DateTime, Device-ID, Study, Remarks, Flags, Count</li>
+            <li>Uses <code>grammar.parse_filename()</code> for global field extraction</li>
+          </ul>
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l1">L1/Grammar</span> — GLOBAL_COLUMNS calls <code>grammar.parse_filename()</code></li>
+            <li><span class="dep-badge dep-l6">L6/Protocol</span> — reads <code>step.metadata</code> from protocol.yaml</li>
+          </ul>
+          <h4>Fall-Through Resolution</h4>
+          <ol style="color:#c9d1d9; font-size:13px; padding-left:20px; margin-top:4px;">
+            <li>Exact <code>(study, device_type)</code> match → registered columns</li>
+            <li><code>(study, None)</code> match → study-level fallback columns</li>
+            <li><code>GLOBAL_COLUMNS</code> → default for unregistered studies</li>
+          </ol>
+          <h4>Version Timeline</h4>
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="dot"></span>
+              <span class="tl-version">v2</span>
+              <span class="tl-desc"><code>(study, device_type)</code> tuple keying + <code>get_columns_for()</code> fall-through</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v1</span>
+              <span class="tl-desc">Initial study-keyed registry (single-key, no device scope)</span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+      <!-- core/fzf/display.py -->
+      <button class="card-btn expanded" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">core/fzf/display.py</span>
+          <span class="layer-tag tag-code">code</span>
+        </div>
+        <p class="desc"><strong>build_fzf_display()</strong> — the main FZF display builder. Accepts <code>device_type</code> parameter for scoped column selection. Produces the formatted fzf output rows with status badges and per-study metadata columns.</p>
+        <div class="meta">
+          <span>12.0KB</span>
+          <span>~300 lines</span>
+          <span>v2</span>
+          <span>★ highlight</span>
+        </div>
+        <div class="hint">▸ collapse</div>
+        <div class="collapsed-content">
+          <h4>Key Functions</h4>
+          <ul>
+            <li><code>build_fzf_display(device_type=None)</code> — main entry point</li>
+            <li>Reads step list from protocol.yaml</li>
+            <li>Resolves columns via <code>get_columns_for(study, device_type)</code></li>
+            <li>Prepends status badge (★ ✓ ✗ —) to every row</li>
+            <li>Compact display: registered columns use <code>width_meta=12</code> (vs default 20)</li>
+            <li>Fallback: unregistered studies show all metadata keys in dict insertion order</li>
+            <li>Backwards compat: no <code>study_name</code> arg behaves identically to pre-v3.19</li>
+          </ul>
+          <h4>Cross-Layer Dependencies</h4>
+          <ul>
+            <li><span class="dep-badge dep-l4">L4</span> — imports <code>get_columns_for()</code> from columns.py</li>
+            <li><span class="dep-badge dep-l6">L6/Protocol</span> — reads step metadata from protocol.yaml</li>
+          </ul>
+          <h4>Status Badges</h4>
+          <p>Badges are prepended to every fzf row. Source: <code>&lt;project&gt;/results/.status.json</code>. Clicking cycles through tags.</p>
+          <table class="dep-table" style="margin-top:6px;">
+            <thead>
+              <tr><th>Tag</th><th>Badge</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>keep</code></td><td>✓</td><td>Important, keep for further analysis</td></tr>
+              <tr><td><code>highlight</code></td><td>★</td><td>Featured in dashboards</td></tr>
+              <tr><td><code>discard</code></td><td>✗</td><td>Marked for removal</td></tr>
+              <tr><td><code>star</code></td><td>⭐</td><td>Legacy: same as highlight</td></tr>
+              <tr><td><code>clear</code></td><td>—</td><td>Untagged</td></tr>
+            </tbody>
+          </table>
+          <h4>Version Timeline</h4>
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="dot"></span>
+              <span class="tl-version">v2 (current)</span>
+              <span class="tl-desc">device_type parameter + status badges + per-study metadata columns</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v1</span>
+              <span class="tl-desc">Basic fzf builder, no device scoping, no badges</span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION B: KEY FEATURES ===== -->
+  <div class="section" id="section-B">
+    <button class="section-toggle" onclick="toggleSection('section-B')">
+      <span class="expand-arrow open">▶</span>
+      <h3>B. Key Features</h3>
+      <span class="count">4 features</span>
+    </button>
+    <div class="section-body">
+
+      <!-- Feature: STUDY_COLUMN_REGISTRY -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">STUDY_COLUMN_REGISTRY + get_columns_for()</span>
+          <span class="layer-tag tag-arch">feature</span>
+        </div>
+        <p class="desc">Central dict keyed by <code>(study, device_type)</code> tuples with 3-level fall-through resolution. Each entry maps to a list of metadata keys extracted from <code>protocol.yaml step.metadata</code>.</p>
+        <div class="meta">
+          <span>columns.py</span>
+          <span>v2</span>
+          <span>✓ deployed</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Resolution Order</h4>
+          <ol style="color:#c9d1d9; font-size:13px; padding-left:20px; margin-top:4px;">
+            <li>Exact <code>(study, device_type)</code> match</li>
+            <li><code>(study, None)</code> wildcard fallback</li>
+            <li>GLOBAL_COLUMNS fallback for unregistered studies</li>
+          </ol>
+          <h4>GLOBAL_COLUMNS</h4>
+          <p>Step, DateTime, Device-ID, Study, Remarks, Flags, Count — populated via <code>grammar.parse_filename()</code>.</p>
+        </div>
+      </button>
+
+      <!-- Feature: build_fzf_display -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">build_fzf_display(device_type=...)</span>
+          <span class="layer-tag tag-arch">feature</span>
+        </div>
+        <p class="desc">Accepts optional <code>device_type</code> parameter for scoped column selection. When omitted, behaves identically to pre-v3.19 behavior (all metadata keys).</p>
+        <div class="meta">
+          <span>display.py</span>
+          <span>v2</span>
+          <span>✓ deployed</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Backwards Compatibility</h4>
+          <p>Callers that do not pass <code>study_name</code> or <code>device_type</code> get all metadata keys in dict insertion order — exactly the pre-v3.19 behavior. No breaking changes to the public API.</p>
+          <h4>Width Optimization</h4>
+          <p>Registered columns use <code>width_meta=12</code> to keep pulse waveforms narrow. Unregistered columns default to <code>width_meta=20</code>.</p>
+        </div>
+      </button>
+
+      <!-- Feature: Status badges -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">Status Badges (★ ✓ ✗ —)</span>
+          <span class="layer-tag tag-arch">feature</span>
+        </div>
+        <p class="desc">Prepend row-level status indicators to every fzf entry. Server sync: dashboard polls <code>/api/status</code> every 2s; click badge to cycle through tags. Storage: <code>&lt;project&gt;/results/.status.json</code> (auto-migrates from <code>.stars.json</code>).</p>
+        <div class="meta">
+          <span>display.py + .status.json</span>
+          <span>v1</span>
+          <span>✓ deployed</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Tag ↔ Badge Mapping</h4>
+          <table class="dep-table" style="margin-top:6px;">
+            <thead>
+              <tr><th>Tag</th><th>Badge</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>keep</code></td><td style="color:#3fb950;font-weight:700;">✓</td><td>Important, keep for further analysis</td></tr>
+              <tr><td><code>highlight</code></td><td style="color:#d29922;font-weight:700;">★</td><td>Featured in dashboards</td></tr>
+              <tr><td><code>discard</code></td><td style="color:#f85149;font-weight:700;">✗</td><td>Marked for removal</td></tr>
+              <tr><td><code>star</code></td><td style="color:#d29922;">⭐</td><td>Legacy: same as highlight</td></tr>
+              <tr><td><code>clear</code></td><td style="color:#484f58;">—</td><td>Untagged</td></tr>
+            </tbody>
+          </table>
+          <h4>Migration</h4>
+          <p>Legacy <code>.stars.json</code> auto-migrates to <code>.status.json</code> on first access. No data loss.</p>
+        </div>
+      </button>
+
+      <!-- Feature: Per-study metadata columns -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">Per-Study Metadata Columns</span>
+          <span class="layer-tag tag-arch">feature</span>
+        </div>
+        <p class="desc">Every fzf-based file picker (<code>sci results</code>, <code>sci plot</code>, <code>sci analyze</code>, <code>sci pulse list</code>) now shows study-specific metadata columns instead of one-size-fits-all rows.</p>
+        <div class="meta">
+          <span>columns.py → all fzf commands</span>
+          <span>v1</span>
+          <span>✓ deployed</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Column Resolution</h4>
+          <p><code>get_step_columns(project_root, step_name, study_name)</code> reads <code>step.metadata</code> from <code>protocol.yaml</code> and returns only the registry's keys in registry order.</p>
+          <h4>Commands Using Per-Study Columns</h4>
+          <ul>
+            <li><code>sci results</code> — file picker with status badges</li>
+            <li><code>sci plot</code> — file picker with metadata columns</li>
+            <li><code>sci analyze</code> — file picker with metadata columns</li>
+            <li><code>sci pulse list</code> — pulse step listing with metadata columns</li>
+          </ul>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION C: COMMITS ===== -->
+  <div class="section" id="section-C">
+    <button class="section-toggle" onclick="toggleSection('section-C')">
+      <span class="expand-arrow open">▶</span>
+      <h3>C. Key Commits</h3>
+      <span class="count">2 commits</span>
+    </button>
+    <div class="section-body">
+
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">ab99652</span>
+          <span class="layer-tag tag-code">commit</span>
+        </div>
+        <p class="desc">Refactor fzf into <code>core/fzf/</code> subpackage — moved column and display logic out of monolithic <code>display.py</code> into a proper subpackage with <code>__init__.py</code>, <code>columns.py</code>, and <code>display.py</code>.</p>
+        <div class="meta">
+          <span>ab99652</span>
+          <span>structural refactor</span>
+          <span>✓ merged</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>What Changed</h4>
+          <ul>
+            <li>Created <code>core/fzf/__init__.py</code> — public API exports</li>
+            <li>Created <code>core/fzf/columns.py</code> — STUDY_COLUMN_REGISTRY + GLOBAL_COLUMNS</li>
+            <li>Created <code>core/fzf/display.py</code> — build_fzf_display implementation</li>
+            <li>Updated all imports across the codebase</li>
+          </ul>
+          <h4>Before</h4>
+          <p>Monolithic fzf logic scattered across <code>display.py</code> (old location).</p>
+          <h4>After</h4>
+          <p>Clean subpackage: <code>core/fzf/</code> with clear separation of concerns.</p>
+        </div>
+      </button>
+
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">fe72834</span>
+          <span class="layer-tag tag-code">commit</span>
+        </div>
+        <p class="desc">Add <code>(study, device)</code> scoping for fzf display + metadata extraction — introduced <code>(study, device_type)</code> tuple keying in STUDY_COLUMN_REGISTRY and the <code>get_columns_for()</code> fall-through resolution.</p>
+        <div class="meta">
+          <span>fe72834</span>
+          <span>feature: device scoping</span>
+          <span>✓ merged</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>What Changed</h4>
+          <ul>
+            <li>STUDY_COLUMN_REGISTRY re-keyed from <code>study → columns</code> to <code>(study, device_type) → columns</code></li>
+            <li>Implemented <code>get_columns_for(study, device_type)</code> with 3-level fall-through</li>
+            <li>Updated <code>build_fzf_display()</code> to accept <code>device_type</code> parameter</li>
+            <li>Added metadata extraction from protocol.yaml step metadata</li>
+          </ul>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION D: ARTIFACTS (PLANS) ===== -->
+  <div class="section" id="section-D">
+    <button class="section-toggle" onclick="toggleSection('section-D')">
+      <span class="expand-arrow open">▶</span>
+      <h3>D. Key Artifacts (Plans)</h3>
+      <span class="count">3 artifacts</span>
+    </button>
+    <div class="section-body">
+
+      <!-- 190626_per-study-fzf-columns -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">190626_per-study-fzf-columns.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">Per-study fzf column design — plan for STUDY_COLUMN_REGISTRY, column resolution, metadata extraction from protocol.yaml, and backwards compatibility.</p>
+        <div class="meta">
+          <span>19/06/2026</span>
+          <span>🟢 Done</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Deliverables</h4>
+          <ul>
+            <li>STUDY_COLUMN_REGISTRY schema design</li>
+            <li>get_step_columns() implementation plan</li>
+            <li>Backwards-compat strategy for pre-v3.19 callers</li>
+            <li>Per-study column registration for all 13 studies</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- 160626b_plot-fzf-metadata -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">160626b_plot-fzf-metadata.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">FZF + metadata linkage — plan for connecting metadata extraction (L2) to the FZF display pipeline.</p>
+        <div class="meta">
+          <span>16/06/2026</span>
+          <span>🟢 Done</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Deliverables</h4>
+          <ul>
+            <li>Metadata flow from protocol.yaml → fzf columns</li>
+            <li>Metadata analyzer registration hooks</li>
+            <li>Column width optimization for pulse waveforms</li>
+          </ul>
+        </div>
+      </button>
+
+      <!-- 170626_plot-fzf-device-architecture -->
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">✓</span>
+          <span class="artifact-name">170626_plot-fzf-device-architecture.md</span>
+          <span class="layer-tag tag-plan">plan</span>
+        </div>
+        <p class="desc">Device-aware fzf display — plan for <code>(study, device_type)</code> tuple keying, fall-through resolution, and the device_type parameter on build_fzf_display().</p>
+        <div class="meta">
+          <span>17/06/2026</span>
+          <span>🟢 Done</span>
+        </div>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <h4>Key Deliverables</h4>
+          <ul>
+            <li>(study, device_type) tuple keying design</li>
+            <li>get_columns_for() 3-level fall-through</li>
+            <li>device_type parameter on build_fzf_display()</li>
+            <li>Backwards compat: no device_type = pre-v3.19 behavior</li>
+          </ul>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION E: VERSION TIMELINE ===== -->
+  <div class="section" id="section-E">
+    <button class="section-toggle" onclick="toggleSection('section-E')">
+      <span class="expand-arrow open">▶</span>
+      <h3>E. Version Timeline</h3>
+      <span class="count">combined</span>
+    </button>
+    <div class="section-body">
+
+      <button class="card-btn" onclick="toggleCard(this)">
+        <div class="card-header">
+          <span class="badge">★</span>
+          <span class="artifact-name">FZF Display Evolution</span>
+          <span class="layer-tag tag-code">timeline</span>
+        </div>
+        <p class="desc">From monolithic fzf display to the full device-aware per-study column system</p>
+        <div class="hint">▸ click to expand</div>
+        <div class="collapsed-content">
+          <div class="timeline">
+            <div class="timeline-item">
+              <span class="dot"></span>
+              <span class="tl-version">v3.20 (current)</span>
+              <span class="tl-desc"><code>(study, device_type)</code> tuple keying, <code>get_columns_for()</code> fall-through, <code>build_fzf_display(device_type=...)</code></span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.19</span>
+              <span class="tl-desc">Per-study fzf columns + status badges + STUDY_COLUMN_REGISTRY</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">v3.18</span>
+              <span class="tl-desc">Subpackage refactor: core/fzf/ created (ab99652)</span>
+            </div>
+            <div class="timeline-item">
+              <span class="dot old"></span>
+              <span class="tl-version">pre-v3.18</span>
+              <span class="tl-desc">Monolithic fzf display, no per-study columns, no badges</span>
+            </div>
+          </div>
+        </div>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION F: CROSS-LAYER DEPENDENCIES ===== -->
+  <div class="section" id="section-F">
+    <button class="section-toggle" onclick="toggleSection('section-F')">
+      <span class="expand-arrow open">▶</span>
+      <h3>F. Cross-Layer Dependencies</h3>
+      <span class="count">5 artifacts</span>
+    </button>
+    <div class="section-body">
+      <table class="dep-table">
+        <thead>
+          <tr>
+            <th>Artifact</th>
+            <th>Layer</th>
+            <th>Depends On</th>
+            <th>Feeds Into</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>core/fzf/columns.py</code></td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span></td>
+            <td><span class="dep-badge dep-l1">L1/Grammar</span> (parse_filename for GLOBAL_COLUMNS)<br><span class="dep-badge dep-l6">L6/Protocol</span> (step metadata)</td>
+            <td><span class="dep-badge dep-l4">L4</span> display.py</td>
+          </tr>
+          <tr>
+            <td><code>core/fzf/display.py</code></td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span></td>
+            <td><span class="dep-badge dep-l4">L4</span> columns.py</td>
+            <td><code>sci results</code>, <code>sci plot</code>, <code>sci analyze</code>, <code>sci pulse list</code></td>
+          </tr>
+          <tr>
+            <td><code>core/fzf/__init__.py</code></td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span></td>
+            <td><span class="dep-badge dep-l4">L4</span> columns.py, display.py</td>
+            <td>All fzf callers (results, plot, analyze, pulse)</td>
+          </tr>
+          <tr>
+            <td><code>protocol.yaml</code><br><small>(step metadata)</small></td>
+            <td><span class="dep-badge dep-l6">L6/Protocol</span></td>
+            <td><span class="dep-badge dep-l2">L2/Parsers</span> (metadata analyzers)</td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span> (columns via get_step_columns)</td>
+          </tr>
+          <tr>
+            <td><code>grammar.py parse_filename()</code></td>
+            <td><span class="dep-badge dep-l1">L1/Grammar</span></td>
+            <td>—</td>
+            <td><span class="dep-badge dep-l4">L4/FZF</span> (GLOBAL_COLUMNS fields)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== JAVASCRIPT ===== -->
+<script>
+  function toggleCard(btn) {
+    btn.classList.toggle('expanded');
+    var hint = btn.querySelector('.hint');
+    if (hint) {
+      hint.textContent = btn.classList.contains('expanded') ? '▸ collapse' : '▸ click to expand';
+    }
+  }
+
+  function toggleSection(sectionId) {
+    var section = document.getElementById(sectionId);
+    if (!section) return;
+    var body = section.querySelector('.section-body');
+    var arrow = section.querySelector('.expand-arrow');
+    if (!body) return;
+    if (body.style.display === 'none') {
+      body.style.display = '';
+      if (arrow) arrow.classList.add('open');
+    } else {
+      body.style.display = 'none';
+      if (arrow) arrow.classList.remove('open');
+    }
+  }
+
+  function switchLayer(n) {
+    var urls = [
+      '',  /* 0-index unused */
+      'layer01-config-grammar.html',
+      'layer02-metadata-parsers.html',
+      'layer03-keysight-parsers.html',
+      'layer04-fzf-display.html',
+      'layer05-plotting-dispatch.html',
+      'layer06-protocol-yaml.html',
+      'layer07-pulse-analyzers.html'
+    ];
+    if (n >= 1 && n <= 7) {
+      window.location.href = urls[n];
+    }
+  }
+
+  /* Keyboard shortcuts: 1-7 to jump to layer, E to expand/collapse all sections */
+  document.addEventListener('keydown', function(e) {
+    var n = parseInt(e.key);
+    if (n >= 1 && n <= 7) {
+      switchLayer(n);
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      var allBodies = document.querySelectorAll('.section-body');
+      var allArrows = document.querySelectorAll('.expand-arrow');
+      var anyHidden = false;
+      allBodies.forEach(function(b) { if (b.style.display === 'none') anyHidden = true; });
+      allBodies.forEach(function(b) {
+        b.style.display = anyHidden ? '' : 'none';
+      });
+      allArrows.forEach(function(a) {
+        if (anyHidden) a.classList.add('open'); else a.classList.remove('open');
+      });
+    }
+  });
+</script>
+
+</body>
+</html>
