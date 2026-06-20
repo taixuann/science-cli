@@ -872,6 +872,93 @@ def read_step_metadata(project_root: Path, step_name: str) -> dict:
     return {}
 
 
+def write_file_metadata(
+    protocol_path: Path, step_name: str, filename: str, metadata_dict: dict
+) -> bool:
+    """Add or update the ``metadata`` dict for a file entry within a step.
+
+    Loads the protocol YAML, finds the step matching *step_name*, locates the
+    file entry matching *filename* within that step's ``files`` list, and
+    merges *metadata_dict* into the file entry's ``metadata`` sub-dict
+    (creating it if absent).
+
+    If the file entry is currently a plain string (e.g. ``"data.csv"``), it
+    is promoted to a dict with a ``file`` key and the given metadata is
+    attached.
+
+    Writes the file back atomically using :func:`_atomic_write_yaml` to
+    prevent corruption on partial writes.
+
+    Parameters
+    ----------
+    protocol_path:
+        Path to the protocol YAML file.
+    step_name:
+        Name of the step containing the file entry.
+    filename:
+        Filename to match (matched against the ``file`` key or the raw
+        string in the files list).
+    metadata_dict:
+        Dict of key-value pairs to merge into the file entry's ``metadata``
+        sub-dict. Existing keys with the same name are overwritten.
+
+    Returns
+    -------
+    bool
+        ``True`` if the step and file entry were found and updated,
+        ``False`` otherwise (step not found, file not found, or I/O error).
+    """
+    path = Path(protocol_path)
+    if not path.exists():
+        return False
+
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    steps = data.get("steps", [])
+    if not isinstance(steps, list):
+        return False
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("name") != step_name:
+            continue
+
+        # Found the step — now find the file entry by filename
+        files = step.get("files", [])
+        if not isinstance(files, list):
+            return False
+
+        for i, entry in enumerate(files):
+            if isinstance(entry, str):
+                # Plain string entry — match and promote to dict
+                if entry == filename:
+                    files[i] = {
+                        "file": filename,
+                        "metadata": dict(metadata_dict),
+                    }
+                    _atomic_write_yaml(path, data)
+                    return True
+            elif isinstance(entry, dict):
+                # Dict entry — match by "file" key and merge metadata
+                if entry.get("file") == filename:
+                    entry.setdefault("metadata", {}).update(metadata_dict)
+                    _atomic_write_yaml(path, data)
+                    return True
+
+        # File not found in this step
+        return False
+
+    # Step not found
+    return False
+
+
 def get_pulse_steps_with_metadata(
     project_root: Path, study_filter: str = "",
 ) -> list[dict]:

@@ -284,6 +284,28 @@ def _load_with_device_config(
                 if pattern_meta:
                     analysis_meta["waveform_pattern"] = pattern_meta.get("waveform_pattern")
                     analysis_meta.update({k: v for k, v in pattern_meta.items() if k != "waveform_pattern"})
+                    # Persist waveform_pattern to protocol.yaml if present
+                    if analysis_meta.get("waveform_pattern"):
+                        try:
+                            from science_cli.core.protocol import write_file_metadata
+
+                            fp = Path(filepath)
+                            protocol_candidates = list(fp.parent.parent.glob("*.yaml"))
+                            protocol_yaml = next(
+                                (p for p in protocol_candidates if p.name != "results.yaml" and not p.name.startswith(".")),
+                                None,
+                            )
+                            if protocol_yaml:
+                                step_name_proto = fp.parent.name
+                                filename = fp.name
+                                write_file_metadata(
+                                    protocol_yaml,
+                                    step_name_proto,
+                                    filename,
+                                    {"waveform_pattern": analysis_meta["waveform_pattern"]},
+                                )
+                        except Exception:
+                            pass  # non-critical — don't let write failure break data loading
         except Exception:
             pass  # non-critical — fall back to scalars-only
     if raman_meta:

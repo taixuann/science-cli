@@ -194,6 +194,18 @@
           <div>▸ Function tables are always visible</div>
         </div>
       </div>
+
+      <!-- In-Progress Tasks -->
+      <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
+        <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">In Progress</h3>
+        <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <span style="color:#f4c95d">🔄</span>
+            <span>WGFMU Waveform Parser</span>
+            <span style="margin-left:auto;font-size:0.65rem;color:#8c96aa">assignee: code-medium</span>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <!-- Main Content -->
@@ -792,16 +804,64 @@
               </div>
             </div>
             <div class="gap-card">
-              <span style="font-size:1rem;flex-shrink:0;color:#72c96e">ℹ</span>
+              <span style="font-size:1rem;flex-shrink:0;color:#f4c95d">🔄</span>
               <div>
-                <div style="font-size:0.875rem;font-weight:500">No known gaps</div>
+                <div style="font-size:0.875rem;font-weight:500;color:#f4c95d">WGFMU Waveform Column Parser (WIP)</div>
                 <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">
-                  All essential instrument parsers implemented. No coverage gaps identified in the current
-                  instrument fleet (Keysight, Keithley, Raman, generic waveform). If new instruments are added,
-                  a corresponding parser module should be created and registered in the __init__ dispatcher.
+                  <strong>Gap:</strong> ~14 STP files have Waveform1_time/voltage columns containing the
+                  programmed pulse pattern (0V, 0.5V, 1.75V). Currently not parsed. <strong>Plan:</strong>
+                  Tier 1: parse Waveform columns for exact segment widths + voltages. Tier 2: existing
+                  histogram fallback for the ~110 files without Waveform columns. See
+                  <code style="color:#f4c95d">210626a_wgfmu-waveform-parser.md</code>.
                 </p>
+                <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                  <span class="dep-pill dep-gold">🔄 WIP</span>
+                  <span class="dep-pill dep-purple">assignee: code-medium</span>
+                  <span class="dep-pill dep-blue">Layer 2 + Layer 3</span>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section H: Plan Artifacts -->
+      <section style="margin-bottom:2rem" id="section-H">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-H')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">H. Plan Artifacts</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">1 active plan</span>
+        </div>
+        <div class="section-body" style="display:none">
+          <div class="artifact-grid">
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span style="display:inline-block;width:0.75rem;height:0.75rem;border-radius:50%;background:#f4c95d;margin-right:0.25rem"></span>
+                  <span style="font-size:0.875rem;font-weight:600">210626a_wgfmu-waveform-parser.md</span>
+                </div>
+                <span class="layer-tag layer-analyzer">analyzer</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0.5rem 0">
+                <strong>WGFMU Waveform Column Parser.</strong> Two-tier approach: Tier 1 parses
+                Waveform1_time/voltage columns for exact pulse segment widths (wait, set_rise, set, read, hold).
+                Tier 2 falls back to existing histogram detection. Target: all 127 STP files covered.
+              </p>
+              <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-bottom:0.5rem">
+                <span class="dep-pill dep-purple">assignee: code-medium</span>
+                <span class="dep-pill dep-blue">Layer 2 + Layer 3</span>
+                <span class="dep-pill dep-gold">2 tasks · ~2h</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="font-size:0.75rem;color:#aeb6c6;line-height:1.6">
+                  <div>task-001: Add parse_wgfmu_waveform_segments() to keysight.py</div>
+                  <div>task-002: Update extract_waveform_metadata() for Tier 1→Tier 2 dispatch</div>
+                </div>
+              </div>
+              <div style="font-size:0.75rem;color:#f4c95d;font-weight:600">🟡 Planning — User approved for dispatch</div>
+            </button>
           </div>
         </div>
       </section>

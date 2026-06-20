@@ -199,6 +199,64 @@ def _init_dedicated_plotters():
 DESCRIBE_FLAG = {"name": "--describe", "nargs": "?", "const": True, "help": "Show file metadata and analysis parameters (universal). Optional comma-separated field filter."}
 
 
+def _build_waveform_segments_table(points: list[list[float]]):
+    """Build a Rich Table of waveform segments from a 2D [time, voltage] array.
+
+    Iterates through consecutive points, detecting where voltage changes to
+    define segment boundaries. Each segment shows start time, end time,
+    width, and voltage (in microseconds, rounded to 3 decimals).
+    """
+    from rich.table import Table as RichTable
+
+    if not points or len(points) < 2:
+        return None
+
+    segments: list[dict] = []
+    seg_start_t = points[0][0]
+    seg_start_v = points[0][1]
+
+    for i in range(1, len(points)):
+        t, v = points[i]
+        if v != seg_start_v:
+            # Voltage change — close current segment
+            segments.append({
+                "start": seg_start_t,
+                "end": t,
+                "voltage": seg_start_v,
+            })
+            seg_start_t = t
+            seg_start_v = v
+
+    # Close the last segment
+    segments.append({
+        "start": seg_start_t,
+        "end": points[-1][0],
+        "voltage": seg_start_v,
+    })
+
+    # Build the table
+    table = RichTable(title="Waveform Segments", border_style="cyan")
+    table.add_column("Start", style="bold white", justify="right")
+    table.add_column("End", style="bold white", justify="right")
+    table.add_column("Width", style="bold white", justify="right")
+    table.add_column("Voltage", style="dim", justify="right")
+
+    for seg in segments:
+        start_us = seg["start"] * 1e6
+        end_us = seg["end"] * 1e6
+        width_us = (seg["end"] - seg["start"]) * 1e6
+        voltage = round(seg["voltage"], 3)
+
+        table.add_row(
+            f"{start_us:.2f} µs",
+            f"{end_us:.2f} µs",
+            f"{width_us:.2f} µs",
+            f"{voltage:.3f} V",
+        )
+
+    return table
+
+
 def _show_describe(filepath: str, study_name: str, fields_str: str | None = None) -> dict:
     """Show file metadata/analysis for any study without plotting.
 
@@ -233,18 +291,30 @@ def _show_describe(filepath: str, study_name: str, fields_str: str | None = None
     analysis = info.get("analysis", {})
     merged = {**metadata, **analysis}
 
+    # ── Extract waveform_pattern for dedicated segment display ──
+    waveform_segments_table = None
+    waveform_pattern = analysis.get("waveform_pattern")
+    if waveform_pattern and isinstance(waveform_pattern, list) and len(waveform_pattern) >= 2:
+        merged.pop("waveform_pattern", None)
+        waveform_segments_table = _build_waveform_segments_table(waveform_pattern)
+
     if fields_str:
         fields = [f.strip() for f in fields_str.split(",") if f.strip()]
         selected = {k: v for k, v in merged.items() if k in fields}
-        if not selected:
+        show_waveform = "waveform_pattern" in fields
+        if not selected and not show_waveform:
             console.print(f"[yellow]No matching fields found. Available: {', '.join(merged.keys())}[/yellow]")
             return merged
-        table = RichTable(title=f"Describe: {Path(filepath).name}", border_style="cyan")
-        table.add_column("Field", style="bold white")
-        table.add_column("Value", style="dim")
-        for k, v in selected.items():
-            table.add_row(k, str(v))
-        console.print(table)
+        if selected:
+            table = RichTable(title=f"Describe: {Path(filepath).name}", border_style="cyan")
+            table.add_column("Field", style="bold white")
+            table.add_column("Value", style="dim")
+            for k, v in selected.items():
+                table.add_row(k, str(v))
+            console.print(table)
+        if show_waveform and waveform_segments_table:
+            console.print()
+            console.print(waveform_segments_table)
         return merged
 
     if merged:
@@ -254,6 +324,9 @@ def _show_describe(filepath: str, study_name: str, fields_str: str | None = None
         for k, v in merged.items():
             table.add_row(k, str(v))
         console.print(table)
+        if waveform_segments_table:
+            console.print()
+            console.print(waveform_segments_table)
     else:
         file_info = info.get("file_info", {})
         console.print("[yellow]No metadata available for this file/study combination.[/yellow]")

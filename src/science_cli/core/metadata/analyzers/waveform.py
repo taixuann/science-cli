@@ -177,21 +177,53 @@ def extract_waveform_metadata(
     study_name: str | None = None,
     device_type: str | None = None,
 ) -> dict:
-    """Orchestrator: return waveform_pattern (2D) + derived scalars.
+    """Orchestrator: Tier 1 (Waveform columns) → Tier 2 (histogram).
 
-    Used when a study has data_shape.kind == "waveform_2d". Combines:
-      - waveform_pattern: 2D [[t, v], ...] for plotting/illustration
-      - derived scalars: v_set_v, v_read_v, set_width_us, read_width_us,
-                         rise_us, fall_us, repeat_pattern, n_repeats
+    Returns ``waveform_pattern`` (2D array) and ``waveform_programmed`` flag,
+    using the most reliable data source available.
 
-    The device_type parameter is reserved for future per-device specialization
-    (e.g. volatile vs non-volatile memristor may emphasize different regions).
+    Tier 1:
+        If ``Waveform1_voltage`` exists in *df*, attempt programmed-pattern
+        parse via :func:`parse_wgfmu_waveform_segments`. Returns the raw
+        ``[[t, v], ...]`` array directly from the instrument's Waveform
+        columns — the ground truth for what was programmed.
+        Only ``waveform_pattern`` and ``waveform_programmed`` are set;
+        derived scalars (v_set_v, widths, etc.) are **not** computed
+        because the exact programmed values are available in the 2D array.
+
+    Tier 2:
+        Fall back to the existing histogram-based detection
+        (:func:`detect_waveform_pattern_2d` + :func:`analyze_waveform_params`)
+        when Waveform columns are absent. Includes derived scalars
+        (v_set_v, v_read_v, widths, repeat_pattern) for backwards compat.
+
+    Returns:
+        dict with keys:
+        - ``waveform_programmed``: True (Tier 1) or False (Tier 2)
+        - ``waveform_pattern``: 2D ``[[t, v], ...]`` array
+        - Tier 2 only: ``v_set_v``, ``v_read_v``, ``set_width_us``,
+          ``read_width_us``, ``rise_us``, ``fall_us``, ``repeat_pattern``,
+          ``n_repeats``
     """
+    # --- Tier 1: try programmed WGFMU Waveform columns ---
+    from science_cli.core.metadata.parsers.keysight import (
+        parse_wgfmu_waveform_segments,
+    )
+
+    tier1 = parse_wgfmu_waveform_segments(df)
+    if tier1 is not None:
+        return {
+            "waveform_pattern": tier1["waveform_2d"],
+            "waveform_programmed": True,
+        }
+
+    # --- Tier 2: histogram-based fallback (full scalars for backwards compat) ---
     pattern = detect_waveform_pattern_2d(df)
     scalars = analyze_waveform_params(df, raw_lines=None, inputs={})
     repeats = detect_repeat_pattern(df)
     return {
         "waveform_pattern": pattern,
+        "waveform_programmed": False,
         **scalars,
         **repeats,
     }

@@ -86,3 +86,62 @@ def parse_repeat_count(lines: list[str]) -> int | None:
             except (TypeError, ValueError):
                 return None
     return None
+
+
+# ---------------------------------------------------------------------------
+# WGFMU Waveform column parser (Tier 1 programmed-pattern detection)
+# ---------------------------------------------------------------------------
+
+def parse_wgfmu_waveform_segments(df: pd.DataFrame) -> dict | None:
+    """Parse WGFMU Waveform columns into raw (time, voltage) pairs.
+
+    Tier 1: Direct column parse when ``Waveform1_voltage`` exists.
+
+    Extracts the **programmed** pulse pattern from the optional
+    ``Waveform1_time`` / ``Waveform1_voltage`` columns embedded alongside
+    measured data in Keysight WGFMU (B1500A) CSV files.
+
+    Returns just the raw ``[[t, v], ...]`` array — no segment merging,
+    no voltage rounding, no labeled fields or width calculations.
+    Downstream analyzers handle any further interpretation.
+
+    Args:
+        df: DataFrame with columns ``Waveform1_time``, ``Waveform1_voltage``.
+
+    Returns:
+        dict with keys:
+        - ``waveform_programmed``: True
+        - ``waveform_2d``: list of ``[t, v]`` pairs sorted by time
+          (with duplicates removed).
+        Returns ``None`` if ``Waveform1_voltage`` column not found.
+    """
+    if "Waveform1_voltage" not in df.columns:
+        return None
+
+    wf_time = "Waveform1_time"
+    wf_volt = "Waveform1_voltage"
+
+    wf_df = df[[wf_time, wf_volt]].copy()
+
+    # Handle empty/whitespace cells — some files have fewer waveform points
+    wf_df[wf_volt] = pd.to_numeric(wf_df[wf_volt], errors='coerce')
+    wf_df[wf_time] = pd.to_numeric(wf_df[wf_time], errors='coerce')
+    wf_df = wf_df.dropna(subset=[wf_time, wf_volt])
+
+    if wf_df.empty:
+        return None
+
+    wf_df = wf_df.sort_values(wf_time).drop_duplicates()
+
+    array_2d = [
+        [float(t), float(v)]
+        for t, v in zip(wf_df[wf_time], wf_df[wf_volt])
+    ]
+
+    if not array_2d:
+        return None
+
+    return {
+        "waveform_programmed": True,
+        "waveform_2d": array_2d,
+    }
