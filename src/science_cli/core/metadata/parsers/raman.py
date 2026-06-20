@@ -1,7 +1,7 @@
 """Raman spectroscopy header parsing — Horiba LabRAM file metadata.
 
-Extracted from ``core/data_loader.py`` into its own module for the
-metadata subsystem. Re-exported from ``data_loader.py`` for backward
+Renamed from ``core/metadata/raman_header.py`` as part of parsers/ + analyzers/
+split. The function name ``extract_raman_metadata`` is preserved for backwards
 compatibility.
 """
 

@@ -1,6 +1,8 @@
 """Waveform pulse analysis — detect voltage plateaus, compute pulse parameters.
 
-Separated from keysight.py to stay under 250-line limit.
+DataFrame-compute functions live here; header-parse functions live in
+``parsers/waveform.py``. Moved from ``core/metadata/waveform.py`` as part of
+parsers/ + analyzers/ split.
 """
 
 from __future__ import annotations
@@ -121,15 +123,6 @@ def analyze_waveform_params(
                 result["read_width_us"] = float(t_us[-1] - read_stable_t)
     result["repeat_pattern"] = _detect_repeat_pattern(t_raw)
     return result
-
-
-def parse_setup_pulses(raw_lines: list[str]) -> dict | None:
-    for line in raw_lines:
-        if "SetupTitle" in line:
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) > 1 and ("stp" in parts[1].lower() or "pulse" in parts[1].lower()):
-                return {"setup_title": parts[1]}
-    return None
 
 
 def _detect_repeat_pattern(t: np.ndarray) -> str:

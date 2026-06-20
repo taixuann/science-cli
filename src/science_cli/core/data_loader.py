@@ -335,8 +335,8 @@ def fit_file(filepath: str, model: str = "linear", xcol: str = "", ycol: str = "
 
 
 def extract_raman_metadata(filepath: str | Path) -> dict:
-    """Re-exported from :mod:`science_cli.core.metadata.raman_header`."""
-    from science_cli.core.metadata.raman_header import extract_raman_metadata as _fn
+    """Re-exported from :mod:`science_cli.core.metadata.parsers.raman`."""
+    from science_cli.core.metadata.parsers.raman import extract_raman_metadata as _fn
     return _fn(filepath)
 
 

@@ -2,6 +2,8 @@
 
 Keithley files have less structured header metadata than Keysight B1500A.
 These parsers extract what's available from the free-form text header.
+
+Moved from ``core/metadata/keithley.py`` as part of parsers/ + analyzers/ split.
 """
 
 from __future__ import annotations
