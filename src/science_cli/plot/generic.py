@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -204,6 +206,18 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
     x_col = columns.get("x")
     y_col = columns.get("y")
     y2_col = columns.get("y2")
+
+    # Drop rows where x or y is NaN (NaN breaks matplotlib line plots)
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.dropna(subset=[x_col] if x_col else [])
+    # Also drop NaN in y column (current) — some WGFMU rows have voltage-only data
+    if y_col and y_col in df.columns:
+        df = df.dropna(subset=[y_col])
+
+    # Sort by x to prevent time-backwards jumps from creating lines through origin
+    if x_col and x_col in df.columns:
+        df = df.sort_values(x_col).reset_index(drop=True)
+
     x_data = _get_column(df, x_col)
     y_data = _get_column(df, y_col)
 
