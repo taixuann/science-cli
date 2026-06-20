@@ -49,7 +49,7 @@ def load_data_file(
     # Try device-aware loading if technique + device or study_name provided
     device_cfg = _resolve_device_config(technique, device, study_name)
     if device_cfg:
-        return _load_with_device_config(path, device_cfg, technique, device)
+        return _load_with_device_config(path, device_cfg, technique, device, study_name=study_name)
 
     # Fall back to extension-based auto-detection
     ext = path.suffix.lower()
@@ -137,6 +137,7 @@ def _load_with_device_config(
     device_cfg: dict,
     technique: str,
     device: str,
+    study_name: str = "",
 ) -> tuple[pd.DataFrame, dict]:
     """Load a file using explicit device configuration.
 
@@ -230,6 +231,24 @@ def _load_with_device_config(
         "technique": technique,
         "instrument_config": device_cfg,
     }
+
+    # If study has data_shape == waveform_2d, also produce 2D pattern + scalars
+    if study_name and analysis_meta is not None:
+        try:
+            from science_cli.core.config import load_global_config
+            studies = load_global_config().get("studies", {})
+            _tech_name = study_name.split(":")[0] if ":" in study_name else ""
+            _study_short = study_name.split(":")[1] if ":" in study_name else study_name
+            study_cfg = (studies.get(_tech_name, {}).get(_study_short) or {})
+            if study_cfg.get("data_shape", {}).get("kind") == "waveform_2d":
+                from science_cli.core.metadata.analyzers.waveform import extract_waveform_metadata
+                device_type = device_cfg.get("device_type") or device
+                pattern_meta = extract_waveform_metadata(df, study_name, device_type)
+                if pattern_meta:
+                    analysis_meta["waveform_pattern"] = pattern_meta.get("waveform_pattern")
+                    analysis_meta.update({k: v for k, v in pattern_meta.items() if k != "waveform_pattern"})
+        except Exception:
+            pass  # non-critical — fall back to scalars-only
     if raman_meta:
         meta["raman_metadata"] = raman_meta
     if parsed_meta:

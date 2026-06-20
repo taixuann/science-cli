@@ -150,6 +150,53 @@ def detect_repeat_pattern(df) -> dict:
     }
 
 
+def detect_waveform_pattern_2d(df, max_points: int = 200) -> list[list[float]]:
+    """Detect pulse waveform and return canonical 2D [[t, v], ...] array.
+
+    Time in seconds, voltage in volts. Sorted by time.
+    Subsampled to max_points evenly-spaced points to keep protocol.yaml small.
+    Returns [] if no time/voltage column found.
+    """
+    voltage_col = _find_voltage_column(df)
+    time_col = _find_time_column(df)
+    if voltage_col is None or time_col is None:
+        return []
+    t = df[time_col].values.astype(float)
+    v = df[voltage_col].values.astype(float)
+    idx = np.argsort(t)
+    t, v = t[idx], v[idx]
+    if len(t) > max_points:
+        step = len(t) // max_points
+        t = t[::step][:max_points]
+        v = v[::step][:max_points]
+    return [[float(ti), float(vi)] for ti, vi in zip(t, v)]
+
+
+def extract_waveform_metadata(
+    df,
+    study_name: str | None = None,
+    device_type: str | None = None,
+) -> dict:
+    """Orchestrator: return waveform_pattern (2D) + derived scalars.
+
+    Used when a study has data_shape.kind == "waveform_2d". Combines:
+      - waveform_pattern: 2D [[t, v], ...] for plotting/illustration
+      - derived scalars: v_set_v, v_read_v, set_width_us, read_width_us,
+                         rise_us, fall_us, repeat_pattern, n_repeats
+
+    The device_type parameter is reserved for future per-device specialization
+    (e.g. volatile vs non-volatile memristor may emphasize different regions).
+    """
+    pattern = detect_waveform_pattern_2d(df)
+    scalars = analyze_waveform_params(df, raw_lines=None, inputs={})
+    repeats = detect_repeat_pattern(df)
+    return {
+        "waveform_pattern": pattern,
+        **scalars,
+        **repeats,
+    }
+
+
 def invert_current_sign(df):
     result = df.copy()
     for col in result.columns:
