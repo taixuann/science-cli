@@ -74,7 +74,15 @@ studies:
               - compliance_current
               - compliance_voltage
               description: Compliance detection from IV data
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: voltage
+          y: current
+        axis:
+          xlabel: "Voltage (V)"
+          ylabel: "Current (A)"
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
     iv-breakdown:
       label: "Breakdown \u2014 ramped voltage to breakdown"
       patterns:
@@ -92,7 +100,15 @@ studies:
         - voltage_v
         - current_a
       instruments: {}
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: voltage
+          y: current
+        axis:
+          xlabel: "Voltage (V)"
+          ylabel: "Current (A)"
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
     iv-leakage:
       label: "Leakage \u2014 low-bias leakage current"
       patterns:
@@ -110,6 +126,14 @@ studies:
         - current_a
       instruments: {}
       plot:
+        layout: single
+        columns:
+          x: voltage
+          y: current
+        axis:
+          xlabel: "Voltage (V)"
+          ylabel: "Current (A)"
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
         figure: {}
         axes:
           yscale: log
@@ -179,7 +203,20 @@ studies:
               - set_width_us
               - read_width_us
               description: Extracted pulse parameters from waveform definition
-      plot: {}
+      plot:
+        layout: dual_axis
+        columns:
+          x: time
+          y: current
+          y2: voltage
+        axis:
+          xlabel: "Time (µs)"
+          ylabel: "Current (A)"
+          ylabel2: "Voltage (V)"
+        filter:
+          field: voltage
+          min: 0.05
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
 
     pulse-ppf:
       label: "Paired-Pulse Facilitation"
@@ -218,7 +255,15 @@ studies:
             x: time
             y: current
           current_sign: -1  # Keysight outputs negative current for bipolar switching
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: time
+          y: current
+        axis:
+          xlabel: "Time (µs)"
+          ylabel: "Current (A)"
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
 
     pulse-endurance:
       label: Pulse Endurance Cycling
@@ -270,6 +315,12 @@ studies:
             y: current
           current_sign: -1  # Keysight outputs negative current for bipolar switching
       plot:
+        layout: single
+        columns:
+          x: cycle
+          y_hrs: r_hrs_ohm
+          y_lrs: r_lrs_ohm
+          y_ratio: ratio
         figure:
           figsize: [3.46, 2.75]
         axes:
@@ -349,6 +400,14 @@ studies:
             voltage: MeasResult1_value
             current: MeasResult2_value
       plot:
+        layout: single
+        columns:
+          x: time
+          y: current
+        axis:
+          xlabel: "Time (s)"
+          ylabel: "Current (A)"
+        current_sign: -1  # Keysight outputs negative current for bipolar switching
         figure: {}
         axes:
           xscale: log
@@ -376,7 +435,14 @@ studies:
       instruments:
         horiba-usth:
           header_lines: 45
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: wavelength_nm
+          y: intensity
+        axis:
+          xlabel: "Wavelength (nm)"
+          ylabel: "Intensity (counts)"
 
   uv-vis:
     uv-vis-spectrum:
@@ -401,7 +467,14 @@ studies:
       instruments:
         spectrometer-iop:
           header_lines: 1
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: wavelength_nm
+          y: absorbance
+        axis:
+          xlabel: "Wavelength (nm)"
+          ylabel: "Absorbance (a.u.)"
 
   ec:
     ec-cv:
@@ -421,7 +494,14 @@ studies:
       instruments:
         autolab-usth:
           header_lines: 0
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: potential_v
+          y: current_a
+        axis:
+          xlabel: "Potential (V)"
+          ylabel: "Current (A)"
 
     ec-ca:
       label: Chronoamperometry
@@ -440,7 +520,14 @@ studies:
       instruments:
         autolab-usth:
           header_lines: 0
-      plot: {}
+      plot:
+        layout: single
+        columns:
+          x: time_s
+          y: current_a
+        axis:
+          xlabel: "Time (s)"
+          ylabel: "Current (A)"
 
     ec-eis:
       label: Electrochemical Impedance Spectroscopy
@@ -461,6 +548,13 @@ studies:
         autolab-usth:
           header_lines: 0
       plot:
+        layout: dual_panel
+        columns:
+          x: z_real
+          y: z_imag
+        axis:
+          xlabel: "Z' (Ω)"
+          ylabel: "-Z'' (Ω)"
         figure: {}
         axes:
           grid: true
@@ -491,6 +585,13 @@ studies:
         - height_nm
       instruments: {}
       plot:
+        layout: single
+        columns:
+          x: x_um
+          y: y_um
+        axis:
+          xlabel: "X (µm)"
+          ylabel: "Y (µm)"
         figure:
           figsize: [12, 5]
         cmap: viridis

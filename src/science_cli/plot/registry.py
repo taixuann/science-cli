@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from science_cli.plot.generic import _overlay_generic, _plot_generic
+
 
 def _get_legacy_and_studies() -> tuple[dict, dict]:
     """Lazy load legacy_to_study and studies from global config (avoids circular import)."""
@@ -45,27 +47,6 @@ class StudyPlotter:
 
 
 STUDY_PLOTTERS: dict[str, StudyPlotter] = {}
-
-def _fallback_plot(filepath: str, flags: dict) -> None:
-    from science_cli.cli.commands.plot import _do_plot
-    _do_plot(filepath, flags)
-
-def _fallback_overlay(files: list, flags: dict) -> None:
-    from pathlib import Path
-
-    from science_cli.core.data_loader import load_data_file
-    from science_cli.plot.overlays import plot_overlay
-    curves = []
-    for fp in files:
-        try:
-            df, info = load_data_file(fp)
-            cols = [c for c in df.columns if c not in ("Index", "index")]
-            if len(cols) >= 2:
-                curves.append({"x": df[cols[0]].values, "y": df[cols[1]].values, "label": Path(fp).stem})
-        except Exception:
-            continue
-    if curves:
-        plot_overlay(curves, flags)
 
 def resolve_study_plotter(
     study_name: str,
@@ -165,29 +146,26 @@ _OVERLAY_LAYOUTS: dict[str, str] = {
     "ec:ec-eis": "nyquist_bode",
 }
 
-# Populate all studies with fallback plotters (lazy-loaded from global config)
+# Populate all studies with generic config-driven plotters
 _, _studies_for_plotters = _get_legacy_and_studies()
 for technique, technique_studies in _studies_for_plotters.items():
     for study_name, study_cfg in technique_studies.items():
         full_name = f"{technique}:{study_name}"
         if full_name not in STUDY_PLOTTERS:
             STUDY_PLOTTERS[full_name] = StudyPlotter(
-                plot_fn=_fallback_plot,
-                overlay_fn=_fallback_overlay,
+                plot_fn=_plot_generic,
+                overlay_fn=_overlay_generic,
                 flags=STUDY_FLAGS.get(full_name, []),
                 overlay_layout=_OVERLAY_LAYOUTS.get(full_name, "single_axis"),
             )
 
 # Override with dedicated plotters below (imports are deferred — inside functions)
 def _init_dedicated_plotters():
-    """Install dedicated plot/overlay functions for studies that have them.
+    """Install dedicated plot/overlay functions for studies that need custom plotters.
+    Only complex studies that generic.py cannot handle get overrides here.
     Called lazily — imports happen inside this function to avoid circular deps."""
     from science_cli.plot.afm import _plot_afm_single
-    from science_cli.plot.ca import _overlay_ca, _plot_ca_single
-    from science_cli.plot.cv import _overlay_cv, _plot_cv_single
     from science_cli.plot.eis import _overlay_eis, _plot_eis_single
-    from science_cli.plot.iv import _overlay_iv_bipolar, _plot_iv_bipolar, _plot_iv_breakdown
-    from science_cli.plot.ppf import _overlay_ppf, _plot_ppf_single
     from science_cli.plot.pulse_endurance import (
         _overlay_endurance_nonvolatile,
         _overlay_endurance_volatile,
@@ -195,22 +173,8 @@ def _init_dedicated_plotters():
         _plot_endurance_nonvolatile,
         _plot_endurance_volatile,
     )
-    from science_cli.plot.raman import _overlay_raman, _plot_raman_single
-    from science_cli.plot.stp import _overlay_stp_decay, _plot_stp_decay
-    from science_cli.plot.uv_vis import _overlay_uv_vis, _plot_uv_vis_single
 
-    # IV bipolar
-    STUDY_PLOTTERS["iv:iv-bipolar-sweep"].plot_fn = _plot_iv_bipolar
-    STUDY_PLOTTERS["iv:iv-bipolar-sweep"].overlay_fn = _overlay_iv_bipolar
-    # IV breakdown
-    STUDY_PLOTTERS["iv:iv-breakdown"].plot_fn = _plot_iv_breakdown
-    # STP
-    STUDY_PLOTTERS["pulse:pulse-stp-decay"].plot_fn = _plot_stp_decay
-    STUDY_PLOTTERS["pulse:pulse-stp-decay"].overlay_fn = _overlay_stp_decay
-    # PPF
-    STUDY_PLOTTERS["pulse:pulse-ppf"].plot_fn = _plot_ppf_single
-    STUDY_PLOTTERS["pulse:pulse-ppf"].overlay_fn = _overlay_ppf
-    # Pulse endurance — base plotter + device-type variants
+    # Pulse endurance — pre-processed CSV, dual-panel, device variants
     STUDY_PLOTTERS["pulse:pulse-endurance"].plot_fn = _plot_endurance
     STUDY_PLOTTERS["pulse:pulse-endurance"].device_variants = {
         "volatile-memristor": DevicePlotterVariant(
@@ -222,22 +186,10 @@ def _init_dedicated_plotters():
             overlay_fn=_overlay_endurance_nonvolatile,
         ),
     }
-    # Raman
-    STUDY_PLOTTERS["raman:raman-spectrum"].plot_fn = _plot_raman_single
-    STUDY_PLOTTERS["raman:raman-spectrum"].overlay_fn = _overlay_raman
-    # UV-Vis
-    STUDY_PLOTTERS["uv-vis:uv-vis-spectrum"].plot_fn = _plot_uv_vis_single
-    STUDY_PLOTTERS["uv-vis:uv-vis-spectrum"].overlay_fn = _overlay_uv_vis
-    # EIS
+    # EIS — dual-panel Nyquist + Bode
     STUDY_PLOTTERS["ec:ec-eis"].plot_fn = _plot_eis_single
     STUDY_PLOTTERS["ec:ec-eis"].overlay_fn = _overlay_eis
-    # CV
-    STUDY_PLOTTERS["ec:ec-cv"].plot_fn = _plot_cv_single
-    STUDY_PLOTTERS["ec:ec-cv"].overlay_fn = _overlay_cv
-    # CA
-    STUDY_PLOTTERS["ec:ec-ca"].plot_fn = _plot_ca_single
-    STUDY_PLOTTERS["ec:ec-ca"].overlay_fn = _overlay_ca
-    # AFM
+    # AFM — image-type plot
     STUDY_PLOTTERS["afm:afm-topography"].plot_fn = _plot_afm_single
 
 

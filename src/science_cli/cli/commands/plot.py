@@ -847,7 +847,7 @@ def _dispatch_technique_plot(
         plotter = resolve_study_plotter(study_name, device_type=device_type)
     if plotter is None and technique:
         plotter = resolve_study_plotter(technique, device_type=device_type)
-    if plotter is not None and plotter.plot_fn.__name__ != '_fallback_plot':
+    if plotter is not None:
         plotter.plot_fn(filepath, flags)
     else:
         _do_plot(filepath, flags, technique, study_name=study_name, device_type=device_type)
@@ -1002,7 +1002,7 @@ def _do_overlap(
         plotter = resolve_study_plotter(study_name, device_type=device_type)
     if plotter is None and technique:
         plotter = resolve_study_plotter(technique, device_type=device_type)
-    if plotter is not None and plotter.overlay_fn.__name__ != '_fallback_overlay':
+    if plotter is not None:
         plotter.overlay_fn(files, flags)
         return
     _generic_overlay(files, flags, technique, study_name=study_name)
