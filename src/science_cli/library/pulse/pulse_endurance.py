@@ -200,7 +200,9 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("Cycle")
     ax.set_ylabel("R$_{\\mathrm{HRS}}$ / R$_{\\mathrm{LRS}}$ Ratio")
-    ax.legend(fontsize=8)
+    # Tight x-limit around data range
+    ax.set_xlim(cycles[valid].min() * 0.9, cycles[valid].max() * 1.1)
+    ax.legend(fontsize=8, loc="upper right")
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "ratio-vs-cycles")
@@ -294,7 +296,9 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("Cycle")
     ax.set_ylabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
-    ax.legend(fontsize=8)
+    # Tight x-limit around data range
+    ax.set_xlim(cycles[valid].min() * 0.9, cycles[valid].max() * 1.1)
+    ax.legend(fontsize=8, loc="upper right")
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "i-ratio-vs-cycles")
@@ -383,7 +387,11 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     ax.set_xlabel("R$_{\\mathrm{HRS}}$ / R$_{\\mathrm{LRS}}$ Ratio")
     ax.set_ylabel("Count")
-    ax.legend(fontsize=8, loc="upper left")
+    # Tight x-limit around data range with 5% padding
+    x_min, x_max = ratios.min(), ratios.max()
+    x_pad = (x_max - x_min) * 0.05
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    ax.legend(fontsize=8, loc="upper right")
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "ratio-histogram")
@@ -461,7 +469,11 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     ax.set_xlabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
     ax.set_ylabel("Count")
-    ax.legend(fontsize=8, loc="upper left")
+    # Tight x-limit around data range with 5% padding
+    x_min, x_max = i_ratios.min(), i_ratios.max()
+    x_pad = (x_max - x_min) * 0.05
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    ax.legend(fontsize=8, loc="upper right")
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "current-ratio-histogram")
