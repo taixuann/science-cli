@@ -86,11 +86,36 @@ def _save_analysis_plot(fig, csv_path: Path, kind: str) -> None:
     Console().print(f"[bold green]\u2713[/bold green] Saved: {save_path}")
 
 
+def _to_native(obj):
+    """Recursively convert numpy scalars/arrays to native Python types.
+
+    PyYAML dumps numpy types as ``!!python/object/apply`` tags which
+    break ``yaml.safe_load()`` on re-read.  Always convert before
+    writing to protocol.yaml.
+    """
+    import numpy as np
+
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_to_native(v) for v in obj]
+    return obj
+
+
 def _update_protocol_metadata(csv_path: Path, metadata: dict) -> None:
     """Update the protocol.yaml step metadata with analysis results.
 
     Locates the protocol YAML file from csv_path, finds the step
-    containing this file, and updates step.metadata.
+    containing this file, and updates step.metadata.  All values
+    are converted to native Python types to avoid numpy-YAML tags.
     """
     import yaml
 
@@ -106,6 +131,10 @@ def _update_protocol_metadata(csv_path: Path, metadata: dict) -> None:
 
     if not proto_yaml.exists():
         return
+
+    # Convert numpy values *before* writing — this is the single fix
+    # that prevents !!python/object/apply tags from appearing in YAML.
+    metadata = _to_native(metadata)
 
     with open(proto_yaml) as f:
         config = yaml.safe_load(f)

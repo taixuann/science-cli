@@ -223,54 +223,53 @@ def analyze_handler(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    raw_dir = proj / "data" / "raw"
-    if not raw_dir.exists():
-        console.print("[red]data/raw/ not found.[/red]")
-        return
-
-    files = sorted(raw_dir.iterdir())
-    if not files:
-        console.print("[yellow]No files in data/raw/[/yellow]")
-        return
-
-    # Build study-aware file → (protocol, step, study) map from protocol YAMLs
+    # Collect files from step folders (symlinks) — organized by protocol/step
+    from collections import defaultdict
     paths = ProjectPaths(proj)
-    file_step_map: dict[str, tuple[str, str, str]] = {}
+    step_entries: list[dict] = []
+    # step_entry = {display, path, study}
+    status = load_status(proj)
     for py in paths.list_protocol_yamls():
         pname = py.stem
         with open(py) as f:
             proto_data = yaml.safe_load(f) or {}
         for s in proto_data.get("steps", []):
             study = s.get("study", "")
+            step_name = s["name"]
+            step_folder = py.parent / step_name
+            if not step_folder.exists():
+                continue
+            step_files = []
             for entry in s.get("files", []):
                 fname = entry["file"] if isinstance(entry, dict) else entry
-                file_step_map[fname] = (pname, s["name"], study)
+                step_file = step_folder / fname
+                if step_file.exists():
+                    step_files.append(step_file)
+            step_files.sort()
+            for sf in step_files:
+                fname = sf.name
+                metadata = get_step_columns(proj, step_name, study)
+                rel_key = f"{pname}/{step_name}/{fname}"
+                badge = status_badge_for_file(rel_key, status)
+                display = build_fzf_display(
+                    pname, step_name, fname,
+                    metadata=metadata, study_name=study, status_badge=badge,
+                )
+                step_entries.append({
+                    "display": display,
+                    "path": str(sf),
+                    "study": study,
+                })
 
-    # Build display lines with per-study columns + status badge
-    status = load_status(proj)
+    if not step_entries:
+        console.print("[yellow]No files found in any protocol step.[/yellow]")
+        return
+
+    display_items = [e["display"] for e in step_entries]
+    display_to_path = {e["display"].strip(): e["path"] for e in step_entries}
+    display_to_study = {e["display"].strip(): e["study"] for e in step_entries}
+
     use_all = flags.get("all", False)
-    display_items: list[str] = []
-    display_to_path: dict[str, str] = {}
-    display_to_study: dict[str, str] = {}
-    for f in files:
-        name = f.name
-        if name in file_step_map:
-            proto, step, study = file_step_map[name]
-            metadata = get_step_columns(proj, step, study)
-            rel_key = f"{proto}/{step}/{name}"
-            badge = status_badge_for_file(rel_key, status)
-            display = build_fzf_display(
-                proto, step, name,
-                metadata=metadata, study_name=study, status_badge=badge,
-            )
-            display_to_path[display.strip()] = str(f)
-            display_to_study[display.strip()] = study
-            display_items.append(display)
-        else:
-            display_to_path[name] = str(f)
-            display_to_study[name] = ""
-            display_items.append(name)
-
     selected = fzf_select(
         display_items,
         prompt="Select file(s) to analyze (Tab for multi, Ctrl+A to select all):",
@@ -283,7 +282,6 @@ def analyze_handler(args: list) -> None:
     from science_cli.core.interactive_menu import dispatch as menu_dispatch
 
     # Group files by study → one menu per study
-    from collections import defaultdict
     by_study: dict[str, list[Path]] = defaultdict(list)
     no_study: list[str] = []
 
@@ -291,7 +289,7 @@ def analyze_handler(args: list) -> None:
         key = sel.strip()
         filepath = display_to_path.get(key)
         if filepath is None:
-            filepath = str(raw_dir / key)
+            continue
         study = display_to_study.get(key, "")
         if study:
             by_study[study].append(Path(filepath))
@@ -303,7 +301,6 @@ def analyze_handler(args: list) -> None:
         _analyze_direct([fp], args)
 
     # Files with study → one menu per unique study
-    # Pass flags like --overwrite through to the handler
     extra_kwargs: dict = {}
     if flags.get("overwrite"):
         extra_kwargs["overwrite"] = True
