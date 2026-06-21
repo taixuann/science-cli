@@ -521,6 +521,35 @@ def _plot_generic(
 
     fig.tight_layout()
 
+    # ── Describe overlay: plot metadata title + annotation ──
+    describe_title = flags.get("describe_title")
+    describe_annotation = flags.get("describe_annotation")
+
+    if describe_title or describe_annotation:
+        if describe_title:
+            fig.suptitle(describe_title, fontsize=9, y=0.98)
+
+        if describe_annotation:
+            fig.text(
+                0.5,
+                0.01,
+                describe_annotation,
+                ha="center",
+                va="bottom",
+                fontsize=6,
+                family="monospace",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="#f0f0f0",
+                    alpha=0.8,
+                ),
+            )
+
+        # Re-tighten layout to accommodate the new elements
+        fig.tight_layout(
+            rect=[0, 0.05, 1, 0.93] if describe_annotation else [0, 0, 1, 0.93]
+        )
+
     out_dir = _get_results_dir(filepath)
     stem = Path(filepath).stem
     short = study_name.split(":")[-1]

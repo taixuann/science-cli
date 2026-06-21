@@ -723,14 +723,86 @@ def _plot_direct(files: list, rest_args: list) -> None:
 
     describe = flags.get("describe")
     if describe is not False and describe is not None:
-        # Show text describe table
+        # 1. Show text describe in terminal (existing behavior)
         from science_cli.plot.registry import _show_describe
+        info_acc = {}
         for fp in resolved:
             study = study_name or _detect_study(Path(fp).name)
             fields = describe if isinstance(describe, str) else None
-            _show_describe(fp, study or "", fields)
-        # Also enable the waveform subfigure on the plot
-        flags["show_waveform"] = True
+            info = _show_describe(fp, study or "", fields)
+            info_acc[fp] = info
+
+        # 2. Build describe_title + describe_annotation from first file's info
+        first_info = info_acc.get(resolved[0], {})
+        # first_info is a merged dict (metadata + analysis flattened)
+
+        # Build title string
+        title_parts = []
+
+        # For pulse-endurance: V_HRS/V_LRS from merged data
+        v_hrs = first_info.get("v_hrs") or first_info.get("v_set", "")
+        v_lrs = first_info.get("v_lrs") or first_info.get("v_read", "")
+        if v_hrs:
+            title_parts.append(f"V_HRS={v_hrs}")
+        if v_lrs:
+            title_parts.append(f"V_LRS={v_lrs}")
+
+        if not title_parts:
+            # General: include study/device info
+            if study_name:
+                title_parts.append(
+                    study_name.split(":")[-1].replace("-", " ").title()
+                )
+
+        if title_parts:
+            flags["describe_title"] = " | ".join(title_parts)
+
+        # Build annotation string (for STP: waveform 2D array)
+        waveform_pattern = first_info.get("waveform_pattern", [])
+        if (
+            waveform_pattern
+            and isinstance(waveform_pattern, list)
+            and len(waveform_pattern) >= 2
+        ):
+            times = [p[0] for p in waveform_pattern]
+            volts = [p[1] for p in waveform_pattern]
+            n_show = min(8, len(times))
+            step = max(1, len(times) // n_show)
+            t_show = [
+                f"{times[i] * 1e6:.1f}"
+                for i in range(0, len(times), step)
+            ][:n_show]
+            v_show = [
+                f"{volts[i]:.3f}"
+                for i in range(0, len(volts), step)
+            ][:n_show]
+            flags["describe_annotation"] = (
+                f"t=[{','.join(t_show)}]µs\nV=[{','.join(v_show)}]V"
+            )
+
+        # Also keep scalar metadata values in annotation
+        scalar_fields = {}
+        for k, v in first_info.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                if k not in ("waveform_pattern",) and not k.startswith(
+                    "waveform_"
+                ):
+                    pretty = k.replace("_v", "").replace("_", " ").title()
+                    scalar_fields[pretty] = v
+
+        if scalar_fields:
+            scalar_line = "  ".join(
+                f"{name}={val}"
+                for name, val in list(scalar_fields.items())[:6]
+            )
+            if scalar_line:
+                if flags.get("describe_annotation"):
+                    flags["describe_annotation"] += "\n" + scalar_line
+                else:
+                    flags["describe_annotation"] = scalar_line
+
+        # NO: flags["show_waveform"] = True  (REMOVED — metadata is now
+        # embedded in the figure via describe_title/describe_annotation)
 
     if len(resolved) == 1:
         _dispatch_technique_plot(resolved[0], flags, technique, study_name=study_name, device_type=device_type)
@@ -1030,6 +1102,23 @@ def _do_plot(
             axw.text(0.5, 0.5, "No waveform data available",
                      ha="center", va="center", transform=axw.transAxes,
                      fontsize=9, color="gray")
+
+    # ── Describe overlay for _do_plot (parallel to generic.py) ──
+    describe_title = flags.get("describe_title")
+    describe_annotation = flags.get("describe_annotation")
+    if describe_title or describe_annotation:
+        if describe_title:
+            fig.suptitle(describe_title, fontsize=9, y=0.98)
+        if describe_annotation:
+            fig.text(
+                0.5, 0.01, describe_annotation,
+                ha="center", va="bottom",
+                fontsize=6, family="monospace",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#f0f0f0", alpha=0.8),
+            )
+        fig.tight_layout(
+            rect=[0, 0.05, 1, 0.93] if describe_annotation else [0, 0, 1, 0.93]
+        )
 
     out_dir = _get_results_dir(filepath)
     stem = Path(filepath).stem

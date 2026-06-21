@@ -3,7 +3,7 @@
 **Date**: 21/06/2026
 **Status**: 🟢 Done
 **Layer**: 7 (Pulse Analyzers) + 5 (Plotting Dispatch)
-**Version**: v3.23.0 (proposed)
+**Version**: v3.24.2 (final) — see `210626_stp-segment-decay.md` for segment-aware extraction (v3.24.1) and `--describe` redesign (v3.24.2)
 
 ---
 

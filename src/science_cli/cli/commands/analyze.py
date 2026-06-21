@@ -223,14 +223,19 @@ def analyze_handler(args: list) -> None:
         console.print("[yellow]No project open.[/yellow]")
         return
 
-    # Collect files from step folders (symlinks) — organized by protocol/step
+    # Collect files from step folders (symlinks) — filtered to active protocol
     from collections import defaultdict
+    from science_cli.core.session import load_session
     paths = ProjectPaths(proj)
+    sess = load_session()
+    active_protocol = sess.get("last_protocol", "")
     step_entries: list[dict] = []
     # step_entry = {display, path, study}
     status = load_status(proj)
     for py in paths.list_protocol_yamls():
         pname = py.stem
+        if active_protocol and pname != active_protocol:
+            continue  # only show files from the active protocol
         with open(py) as f:
             proto_data = yaml.safe_load(f) or {}
         for s in proto_data.get("steps", []):
