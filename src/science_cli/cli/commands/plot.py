@@ -650,17 +650,26 @@ def _plot_interactive(extra_args: list | None = None) -> None:
     )
 
     if all_mode:
+        # Check if any selected file has an interactive plot menu — if so,
+        # show the menu once and apply to all files
+        first_study = None
+        for f in resolved:
+            s = _detect_study(Path(f).name) or auto_study
+            if s:
+                first_study = s
+                break
+        if first_study:
+            try:
+                from science_cli.core.interactive_menu import dispatch
+                resolved_paths = [Path(f) for f in resolved]
+                dispatch(study_key=first_study, menu_type="plot", file_paths=resolved_paths)
+                console.print(f"[dim]Applied plot to {len(resolved)} file(s)[/dim]")
+                return
+            except (KeyError, ImportError, ModuleNotFoundError):
+                pass  # No interactive menu — fall through to default
         for f in resolved:
             tech = _detect_technique(Path(f).name) or auto_technique
             study = _detect_study(Path(f).name) or auto_study
-            # Check if study has interactive plot menu — if so, dispatch handles it
-            if study:
-                try:
-                    from science_cli.core.interactive_menu import dispatch
-                    dispatch(study_key=study, menu_type="plot", file_path=Path(f))
-                    continue  # handled by menu dispatch, skip _do_plot
-                except (KeyError, ImportError, ModuleNotFoundError):
-                    pass  # No interactive menu — fall through to default
             _do_plot(f, all_flags, tech, study_name=study, device_type=device_type)
     else:
         _do_overlap(resolved, all_flags, auto_technique, study_name=auto_study, device_type=device_type)

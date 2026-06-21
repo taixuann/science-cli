@@ -42,11 +42,20 @@ def _get_config_path() -> Path:
     return Path(__file__).parent.parent.parent.parent / "config" / "config-studies.yaml"
 
 
+def _normalize_study_key(study_name: str) -> str:
+    """Strip technique prefix (e.g. 'pulse:pulse-endurance' -> 'pulse-endurance').
+
+    Config-studies.yaml stores studies by their short name (e.g. 'pulse-endurance'),
+    but filename detection returns prefixed names (e.g. 'pulse:pulse-endurance').
+    """
+    return study_name.split(":", 1)[-1] if ":" in study_name else study_name
+
+
 def load_study_menu(study_name: str, menu_type: str) -> dict:
     """Load interactive menu config for a study from config-studies.yaml.
 
     Args:
-        study_name: e.g. "pulse-endurance"
+        study_name: e.g. "pulse-endurance" or "pulse:pulse-endurance"
         menu_type: "plot" or "analyze"
 
     Returns:
@@ -59,28 +68,42 @@ def load_study_menu(study_name: str, menu_type: str) -> dict:
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
+    # Normalize: strip "pulse:" prefix from the study key
+    search_key = _normalize_study_key(study_name)
+
     # Search all technique groups for the study
     for group in config.get("studies", {}).values():
-        if study_name in group:
-            study_cfg = group[study_name]
+        if search_key in group:
+            study_cfg = group[search_key]
             interactive = study_cfg.get("interactive", {})
             menu = interactive.get(menu_type)
             if menu is None:
-                raise KeyError(f"No interactive.{menu_type} menu for '{study_name}'")
+                raise KeyError(f"No interactive.{menu_type} menu for '{search_key}'")
             return menu
 
-    raise KeyError(f"Study '{study_name}' not found in config-studies.yaml")
+    raise KeyError(f"Study '{search_key}' not found in config-studies.yaml")
 
 
-def dispatch(study_key: str, menu_type: str, file_path: Path, **kwargs: Any) -> None:
-    """Show menu, dynamically import and call the selected handler.
+def dispatch(
+    study_key: str,
+    menu_type: str,
+    file_paths: Path | list[Path],
+    **kwargs: Any,
+) -> None:
+    """Show menu, dynamically import and call the selected handler on each file.
+
+    The menu is shown once (not per file). The chosen handler is applied
+    to every file in ``file_paths``.
 
     Args:
-        study_key: e.g. "pulse-endurance"
+        study_key: e.g. "pulse-endurance" or "pulse:pulse-endurance"
         menu_type: "plot" or "analyze"
-        file_path: Path to the selected data file
+        file_paths: Path or list of Paths to the selected data file(s)
         **kwargs: Extra arguments passed to the handler
     """
+    if isinstance(file_paths, Path):
+        file_paths = [file_paths]
+
     menu = load_study_menu(study_key, menu_type)
     choice = show_menu(menu["menu_title"], menu["options"])
     selected = menu["options"][choice - 1]
@@ -91,6 +114,6 @@ def dispatch(study_key: str, menu_type: str, file_path: Path, **kwargs: Any) -> 
     module = import_module(module_path)
     handler = getattr(module, func_name)
 
-    # Call with file_path + any extra kwargs
-    kwargs["file_path"] = file_path
-    handler(**kwargs)
+    for fp in file_paths:
+        kwargs["file_path"] = fp
+        handler(**kwargs)
