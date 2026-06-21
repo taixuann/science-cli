@@ -139,3 +139,173 @@ def analyze_endurance_to_yaml(
         instrument=instrument,
         devices=devices,
     )
+
+
+# ── Menu-driven analysis handlers (called by interactive_menu.dispatch) ──
+
+def _get_results_dir_relative(csv_path: Path) -> Path:
+    """Determine a suitable output directory relative to the CSV file path.
+
+    Tries protocol/<proto>/<step>/results/, then falls back to
+    project/results/ or a results/ folder next to the CSV.
+    """
+    parts = csv_path.parts
+    try:
+        proto_idx = parts.index("protocol")
+        proto_name = parts[proto_idx + 1]
+        step_name = parts[proto_idx + 2]
+        results_dir = Path(*parts[:proto_idx + 3]) / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        return results_dir
+    except (ValueError, IndexError):
+        pass
+    # Fallback: results/ next to CSV's project root
+    for parent in csv_path.parents:
+        if (parent / "results").exists() or parent.name == "protocol":
+            out = parent / "results"
+            out.mkdir(parents=True, exist_ok=True)
+            return out
+    # Last resort
+    out = csv_path.parent / "results"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _save_and_close(fig, csv_path: Path, suffix: str) -> None:
+    """Save a figure and close it, replicating the _save_fig pattern."""
+    out_dir = _get_results_dir_relative(csv_path)
+    stem = csv_path.stem
+    save_path = out_dir / f"{stem}{suffix}.pdf"
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    import matplotlib.pyplot as plt
+    plt.close(fig)
+    from rich.console import Console
+    Console().print(f"[bold green]✓[/bold green] Saved: {save_path}")
+
+
+def ratio_histogram(file_path: Path = None, **kwargs) -> None:
+    """Generate histogram of R_HRS / R_LRS ratio distribution.
+
+    Reads from extracted-list CSV, saves plot to results/ directory.
+    Updates protocol.yaml with ratio statistics.
+    """
+    import pandas as pd
+    import matplotlib as mpl
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from science_cli.core.session import get_active_theme
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
+
+    csv_path = Path(file_path)
+    with open(csv_path) as f:
+        v_set = float(f.readline().split(",")[1])
+        v_read = float(f.readline().split(",")[1])
+
+    df = pd.read_csv(csv_path, skiprows=2)
+    ratios = df["ratio"].dropna()
+
+    fig, ax = plt.subplots(figsize=(3.46, 2.75))
+
+    ax.hist(ratios, bins=50, log=True,
+            color="#CC7700", alpha=0.7, edgecolor="black", linewidth=0.5)
+    ax.axvline(ratios.mean(), color="red", linestyle="--", linewidth=1.0,
+               label=f"Mean: {ratios.mean():.0f}")
+    ax.axvline(ratios.median(), color="blue", linestyle=":", linewidth=1.0,
+               label=f"Median: {ratios.median():.0f}")
+
+    ax.set_xlabel("R_HRS / R_LRS Ratio")
+    ax.set_ylabel("Count")
+    ax.set_yscale("log")
+    ax.legend(fontsize=8)
+    ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
+
+    _save_and_close(fig, csv_path, "_ratio_histogram")
+
+    # Update protocol.yaml metadata
+    _update_protocol_metadata(csv_path, {
+        "ratio_mean": float(ratios.mean()),
+        "ratio_median": float(ratios.median()),
+        "ratio_std": float(ratios.std()),
+    })
+
+
+def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
+    """Generate histogram of I_LRS / I_HRS ratio distribution."""
+    import pandas as pd
+    import matplotlib as mpl
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from science_cli.core.session import get_active_theme
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
+
+    csv_path = Path(file_path)
+    with open(csv_path) as f:
+        v_set = float(f.readline().split(",")[1])
+        v_read = float(f.readline().split(",")[1])
+
+    df = pd.read_csv(csv_path, skiprows=2)
+    i_ratios = df["i_ratio"].dropna()
+
+    fig, ax = plt.subplots(figsize=(3.46, 2.75))
+
+    ax.hist(i_ratios, bins=50, log=True,
+            color="#2176AE", alpha=0.7, edgecolor="black", linewidth=0.5)
+    ax.axvline(i_ratios.mean(), color="red", linestyle="--", linewidth=1.0,
+               label=f"Mean: {i_ratios.mean():.0f}")
+    ax.axvline(i_ratios.median(), color="blue", linestyle=":", linewidth=1.0,
+               label=f"Median: {i_ratios.median():.0f}")
+
+    ax.set_xlabel("I_LRS / I_HRS Ratio")
+    ax.set_ylabel("Count")
+    ax.set_yscale("log")
+    ax.legend(fontsize=8)
+    ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
+
+    _save_and_close(fig, csv_path, "_current_ratio_histogram")
+
+    _update_protocol_metadata(csv_path, {
+        "i_ratio_mean": float(i_ratios.mean()),
+        "i_ratio_median": float(i_ratios.median()),
+        "i_ratio_std": float(i_ratios.std()),
+    })
+
+
+def _update_protocol_metadata(csv_path: Path, metadata: dict) -> None:
+    """Update the protocol.yaml step metadata with analysis results.
+
+    Locates the protocol YAML file from csv_path, finds the step
+    containing this file, and updates step.metadata.
+    """
+    import yaml
+
+    # Navigate: csv_path is in <project>/protocol/<name>/<step>/
+    # protocol.yaml is at <project>/protocol/<name>/<name>.yaml
+    parts = csv_path.parts
+    try:
+        proto_idx = parts.index("protocol")
+        proto_name = parts[proto_idx + 1]
+        proto_yaml = Path(*parts[:proto_idx + 2]) / f"{proto_name}.yaml"
+    except (ValueError, IndexError):
+        return  # Can't determine protocol path
+
+    if not proto_yaml.exists():
+        return
+
+    with open(proto_yaml) as f:
+        config = yaml.safe_load(f)
+
+    # Find step containing this file
+    step_folder = csv_path.parent.name
+    for step in config.get("steps", []):
+        if step.get("name", "").replace(" ", "_") == step_folder:
+            if "metadata" not in step:
+                step["metadata"] = {}
+            step["metadata"].update(metadata)
+            break
+
+    with open(proto_yaml, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)

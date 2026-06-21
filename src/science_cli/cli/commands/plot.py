@@ -51,6 +51,24 @@ def _resolve_file(name: str) -> str:
         for f in raw_dir.iterdir():
             if name.lower() in f.name.lower():
                 return str(f)
+        # Fallback: scan protocol step folders
+        from science_cli.core.paths import ProjectPaths
+        paths = ProjectPaths(proj)
+        for py in paths.list_protocol_yamls():
+            pname = py.stem
+            with open(py) as f:
+                import yaml
+                proto_data = yaml.safe_load(f) or {}
+            for s in proto_data.get("steps", []):
+                step_dir = paths.step_dir(pname, s["name"])
+                if not step_dir.exists():
+                    continue
+                for entry in s.get("files", []):
+                    fname = entry["file"] if isinstance(entry, dict) else entry
+                    if fname == name:
+                        found = step_dir / fname
+                        if found.exists():
+                            return str(found)
     return ""
 
 
@@ -427,6 +445,25 @@ def _plot_interactive(extra_args: list | None = None) -> None:
                 fname = entry["file"] if isinstance(entry, dict) else entry
                 file_step_map[fname] = (pname, s["name"], study)
 
+    # Also scan protocol step folders for files listed in protocol.yaml
+    # but not found in data/raw/ (e.g. _extracted-list.csv in 5_pulse-endurance/)
+    raw_names = {f.name for f in files}
+    for py in paths.list_protocol_yamls():
+        pname = py.stem
+        with open(py) as f:
+            proto_data = __import__("yaml").safe_load(f) or {}
+        for s in proto_data.get("steps", []):
+            step_dir = paths.step_dir(pname, s["name"])
+            if not step_dir.exists():
+                continue
+            for entry in s.get("files", []):
+                fname = entry["file"] if isinstance(entry, dict) else entry
+                if fname not in raw_names:
+                    step_file = step_dir / fname
+                    if step_file.exists():
+                        files.append(step_file)
+                        raw_names.add(fname)
+
     from science_cli.core.session import load_session
     sess = load_session()
     active_proto = sess.get("last_protocol", "")
@@ -616,6 +653,14 @@ def _plot_interactive(extra_args: list | None = None) -> None:
         for f in resolved:
             tech = _detect_technique(Path(f).name) or auto_technique
             study = _detect_study(Path(f).name) or auto_study
+            # Check if study has interactive plot menu — if so, dispatch handles it
+            if study:
+                try:
+                    from science_cli.core.interactive_menu import dispatch
+                    dispatch(study_key=study, menu_type="plot", file_path=Path(f))
+                    continue  # handled by menu dispatch, skip _do_plot
+                except (KeyError, ImportError, ModuleNotFoundError):
+                    pass  # No interactive menu — fall through to default
             _do_plot(f, all_flags, tech, study_name=study, device_type=device_type)
     else:
         _do_overlap(resolved, all_flags, auto_technique, study_name=auto_study, device_type=device_type)
@@ -662,14 +707,16 @@ def _plot_direct(files: list, rest_args: list) -> None:
         flags=flags,
     )
 
-    describe_str = flags.get("describe")
-    if describe_str is not False and describe_str is not None:
+    describe = flags.get("describe")
+    if describe is not False and describe is not None:
+        # Show text describe table
         from science_cli.plot.registry import _show_describe
         for fp in resolved:
             study = study_name or _detect_study(Path(fp).name)
-            fields = describe_str if isinstance(describe_str, str) else None
+            fields = describe if isinstance(describe, str) else None
             _show_describe(fp, study or "", fields)
-        return
+        # Also enable the waveform subfigure on the plot
+        flags["show_waveform"] = True
 
     if len(resolved) == 1:
         _dispatch_technique_plot(resolved[0], flags, technique, study_name=study_name, device_type=device_type)
@@ -894,7 +941,12 @@ def _do_plot(
     import matplotlib.pyplot as plt
 
     apply_theme(get_active_theme())
-    fig, ax = plt.subplots(figsize=_figsize(flags))
+
+    show_waveform = flags.get("show_waveform", False)
+    if show_waveform:
+        fig, (ax, axw) = plt.subplots(1, 2, figsize=(_figsize(flags)[0] * 2, _figsize(flags)[1]))
+    else:
+        fig, ax = plt.subplots(figsize=_figsize(flags))
 
     x, y, xlabel, ylabel = _resolve_xy_columns(df, info, technique)
     if len(x) == 0 or len(y) == 0:
@@ -953,6 +1005,17 @@ def _do_plot(
         ax.plot(x, y, linewidth=linewidth, **plot_kw)
 
     _apply_figure_kw(ax, flags, Path(filepath).stem)
+
+    # ── Waveform subfigure (right panel) ──
+    if show_waveform:
+        from science_cli.plot.generic import _plot_waveform_panel
+        waveform_pattern = info.get("analysis", {}).get("waveform_pattern")
+        if waveform_pattern and isinstance(waveform_pattern, list) and len(waveform_pattern) >= 2:
+            _plot_waveform_panel(axw, waveform_pattern)
+        else:
+            axw.text(0.5, 0.5, "No waveform data available",
+                     ha="center", va="center", transform=axw.transAxes,
+                     fontsize=9, color="gray")
 
     out_dir = _get_results_dir(filepath)
     stem = Path(filepath).stem

@@ -374,6 +374,29 @@ studies:
             color: "#0055CC"
             fontweight: bold
 
+      interactive:
+        plot:
+          menu_title: "Select plot type for pulse-endurance:"
+          options:
+            - name: "Resistance vs Cycles"
+              handler: "science_cli.plot.pulse_endurance.plot_resistance"
+              description: "R_HRS, R_LRS, ratio over cycle number"
+            - name: "Current vs Cycles"
+              handler: "science_cli.plot.pulse_endurance.plot_current"
+              description: "I_LRS (V_set), I_HRS (V_read) over cycle number"
+            - name: "Both"
+              handler: "science_cli.plot.pulse_endurance.plot_both"
+              description: "Both resistance and current as separate files"
+        analyze:
+          menu_title: "Select analysis for pulse-endurance:"
+          options:
+            - name: "Ratio Histogram"
+              handler: "science_cli.library.pulse.endurance.ratio_histogram"
+              description: "Distribution of R_HRS / R_LRS ratio values"
+            - name: "Current Ratio Histogram"
+              handler: "science_cli.library.pulse.endurance.current_ratio_histogram"
+              description: "Distribution of I_LRS / I_HRS ratio values"
+
     pulse-retention:
       label: Pulse Retention Time
       patterns:

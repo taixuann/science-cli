@@ -22,9 +22,13 @@ def _load_preprocessed(filepath: str) -> tuple | None:
     """Detect and load pre-processed endurance CSV (cycle, r_hrs_ohm, r_lrs_ohm, ratio).
 
     Returns (cycle, r_hrs, r_lrs, ratio) or None if columns don't match.
+
+    The new 9-column extracted-list format has a 2-line voltage header
+    (V_LRS,<value> and V_HRS,<value>) before the CSV column names, so we
+    must skip those 2 header rows.
     """
     try:
-        df = pd.read_csv(filepath)
+        df = pd.read_csv(filepath, skiprows=2)
     except Exception:
         return None
     cols = set(df.columns)
@@ -369,3 +373,84 @@ def _overlay_generic_endurance(files: list, flags: dict) -> None:
 _overlay_endurance = _overlay_generic_endurance
 _overlay_endurance_volatile = _overlay_generic_endurance
 _overlay_endurance_nonvolatile = _overlay_generic_endurance
+
+
+# ── Menu-driven handlers (called by interactive_menu.dispatch) ──────
+
+def _load_extracted_list(csv_path: Path) -> tuple | None:
+    """Load extracted-list CSV with 2-line voltage header.
+
+    Returns (df, v_set, v_read) or None on failure.
+    The first line is V_LRS,<value>, second line is V_HRS,<value>,
+    followed by the CSV column headers.
+    """
+    try:
+        with open(csv_path) as f:
+            line1 = f.readline().strip()
+            line2 = f.readline().strip()
+        v_set = float(line1.split(",")[1])
+        v_read = float(line2.split(",")[1])
+        df = pd.read_csv(csv_path, skiprows=2)
+        return df, v_set, v_read
+    except Exception:
+        return None
+
+
+def plot_resistance(file_path: Path = None, **kwargs) -> None:
+    """Plot R_HRS, R_LRS, ratio vs cycles.
+
+    Called by interactive_menu dispatch.
+    Delegates to the existing _plot_endurance which handles
+    the pre-processed 3-panel resistance plot.
+    """
+    _plot_endurance(str(file_path), {})
+
+
+def plot_current(file_path: Path = None, **kwargs) -> None:
+    """Plot I_LRS, I_HRS vs cycles.
+
+    Loads extracted-list CSV, plots i_lrs_A and i_hrs_A columns
+    as current vs cycle (log-log, single panel) with voltage annotations.
+    """
+    import matplotlib as mpl
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from science_cli.core.session import get_active_theme
+    from science_cli.theme import apply_theme
+    apply_theme(get_active_theme())
+
+    loaded = _load_extracted_list(file_path)
+    if loaded is None:
+        from rich.console import Console
+        Console().print("[red]Failed to load extracted-list CSV for current plot.[/red]")
+        return
+    df, v_set, v_read = loaded
+
+    fig, ax = plt.subplots(figsize=(3.46, 2.75))
+
+    ax.plot(df["cycle"], df["i_lrs_A"], "o-", color="#0055CC",
+            markersize=4, linewidth=1.0, alpha=0.8, label="I_LRS")
+    ax.plot(df["cycle"], df["i_hrs_A"], "s-", color="#CC0000",
+            markersize=4, linewidth=1.0, alpha=0.8, label="I_HRS")
+
+    ax.set_xlabel("Cycle")
+    ax.set_ylabel("Current (A)")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.grid(True, alpha=0.25)
+    ax.legend()
+
+    # Annotate voltages
+    ax.annotate(f"V_set = {v_set:.2f}V", xy=(0.02, 0.98), xycoords="axes fraction",
+                fontsize=8, va="top", color="#0055CC")
+    ax.annotate(f"V_read = {v_read:.2f}V", xy=(0.02, 0.88), xycoords="axes fraction",
+                fontsize=8, va="top", color="#CC0000")
+
+    _save_fig(fig, str(file_path), {}, suffix="_current")
+
+
+def plot_both(file_path: Path = None, **kwargs) -> None:
+    """Plot both resistance and current as separate files."""
+    plot_resistance(file_path=file_path, **kwargs)
+    plot_current(file_path=file_path, **kwargs)

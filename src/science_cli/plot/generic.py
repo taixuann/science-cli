@@ -131,6 +131,61 @@ def _apply_axis_settings(ax, cfg: dict, ax2=None) -> None:
         ax.set_ylim(axes_cfg["ylim"])
 
 
+# ---------------------------------------------------------------------------
+# Waveform panel
+# ---------------------------------------------------------------------------
+
+
+def _plot_waveform_panel(ax, waveform_pattern: list) -> None:
+    """Draw a step plot of waveform segments on the given axes.
+
+    Args:
+        ax: Matplotlib axes to draw on.
+        waveform_pattern: 2D array like ``[[t, v], ...]`` where each
+            row is ``[time_s, voltage_V]``.
+    """
+    times = [row[0] for row in waveform_pattern]
+    voltages = [row[1] for row in waveform_pattern]
+
+    # Step plot with markers at segment boundaries
+    ax.step(
+        times, voltages,
+        where="post",
+        color="#1f77b4",
+        linewidth=1.5,
+        marker="o",
+        markersize=3,
+    )
+
+    # Colored fill under the curve
+    ax.fill_between(times, voltages, step="post", alpha=0.15, color="#1f77b4")
+
+    # Horizontal dashed lines at each unique voltage level with text labels
+    unique_voltages = sorted(set(voltages))
+    for v in unique_voltages:
+        ax.axhline(y=v, color="gray", linestyle="--", linewidth=0.5, alpha=0.4)
+        ax.text(
+            times[-1] if len(times) > 1 else 0,
+            v,
+            f"  {v:.3f} V",
+            va="center",
+            fontsize=7,
+            color="gray",
+        )
+
+    ax.set_xlabel("Time (s)", fontsize=9)
+    ax.set_ylabel("Voltage (V)", fontsize=9)
+    ax.set_title("Waveform Segments", fontsize=10, fontweight="bold")
+
+    # Y-limits: slightly above max voltage, slightly below min
+    v_min = min(voltages)
+    v_max = max(voltages)
+    v_range = v_max - v_min if v_max != v_min else 0.1
+    ax.set_ylim(v_min - 0.15 * v_range, v_max + 0.25 * v_range)
+
+    ax.grid(True, alpha=0.2)
+
+
 def _add_annotations(ax, cfg: dict, x=None, y=None) -> None:
     """Add text annotations from config near data points."""
     annotations = cfg.get("annotations", {})
@@ -155,7 +210,12 @@ def _add_annotations(ax, cfg: dict, x=None, y=None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> None:
+def _plot_generic(
+    filepath: str,
+    flags: dict,
+    study_name: str | None = None,
+    info: dict | None = None,
+) -> None:
     """Config-driven single-file plot executor.
 
     Args:
@@ -164,6 +224,9 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
         study_name: Qualified study name, e.g. ``"iv:iv-bipolar-sweep"``.
             If ``None``, auto-detected from ``filepath`` via
             ``detect_study_from_filename()``.
+        info: Optional info dict from data loader (contains
+            ``analysis.waveform_pattern``). If ``None`` and
+            ``show_waveform`` is set, data is loaded internally.
     """
     if study_name is None:
         from science_cli.core.config import detect_study_from_filename
@@ -185,11 +248,16 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
     cfg = _unflatten(plot_flat)
     layout = cfg.get("layout", "single")
 
+    show_waveform = flags.get("show_waveform", False)
+
     try:
-        df, _info = load_data_file(filepath, study_name=study_name)
+        df, info_internal = load_data_file(filepath, study_name=study_name)
     except Exception as e:
         console.print(f"[red]Failed to load data: {e}[/red]")
         return
+
+    # Use provided info dict, fall back to internally loaded one
+    _info = info if info is not None else info_internal
 
     sign = float(cfg.get("current_sign", 1))
 
@@ -229,15 +297,44 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
         or mpl.rcParams.get("figure.figsize", (3.46, 2.75))
     )
 
-    if layout == "dual_axis":
+    if show_waveform:
+        # 1×2 layout: main plot (left) + waveform subfigure (right)
+        fig, (ax1, axw) = plt.subplots(
+            1, 2,
+            figsize=(figsize[0] * 2, figsize[1]),
+        )
+        # Left axes: normal plot
+        if layout == "dual_axis":
+            ax2 = ax1.twinx()
+            _plot_dual_axis(x_vals, y_vals, df, y2_col, cfg, ax1, ax2)
+            _apply_axis_settings(ax1, cfg, ax2)
+        else:
+            _plot_single(x_vals, y_vals, cfg, ax1)
+            _apply_axis_settings(ax1, cfg)
+        _add_annotations(ax1, cfg, x_vals, y_vals)
+        apply_figure_kw(ax1, flags, Path(filepath).stem)
+
+        # Right axes: waveform subfigure
+        waveform_pattern = _info.get("analysis", {}).get("waveform_pattern")
+        if waveform_pattern and isinstance(waveform_pattern, list) and len(waveform_pattern) >= 2:
+            _plot_waveform_panel(axw, waveform_pattern)
+        else:
+            axw.text(0.5, 0.5, "No waveform data available",
+                     ha="center", va="center", transform=axw.transAxes,
+                     fontsize=9, color="gray")
+    elif layout == "dual_axis":
         fig, ax1 = plt.subplots(figsize=figsize)
         ax2 = ax1.twinx()
         _plot_dual_axis(x_vals, y_vals, df, y2_col, cfg, ax1, ax2)
         _apply_axis_settings(ax1, cfg, ax2)
+        _add_annotations(ax1, cfg, x_vals, y_vals)
+        apply_figure_kw(ax1, flags, Path(filepath).stem)
     elif layout == "single":
         fig, ax1 = plt.subplots(figsize=figsize)
         _plot_single(x_vals, y_vals, cfg, ax1)
         _apply_axis_settings(ax1, cfg)
+        _add_annotations(ax1, cfg, x_vals, y_vals)
+        apply_figure_kw(ax1, flags, Path(filepath).stem)
     else:
         # dual_panel, grid_2x2 -- fall back to single with warning
         import logging
@@ -250,9 +347,9 @@ def _plot_generic(filepath: str, flags: dict, study_name: str | None = None) -> 
         fig, ax1 = plt.subplots(figsize=figsize)
         _plot_single(x_vals, y_vals, cfg, ax1)
         _apply_axis_settings(ax1, cfg)
+        _add_annotations(ax1, cfg, x_vals, y_vals)
+        apply_figure_kw(ax1, flags, Path(filepath).stem)
 
-    _add_annotations(ax1, cfg, x_vals, y_vals)
-    apply_figure_kw(ax1, flags, Path(filepath).stem)
     fig.tight_layout()
 
     out_dir = _get_results_dir(filepath)

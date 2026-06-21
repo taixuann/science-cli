@@ -660,18 +660,66 @@ def _analyze_pulse_endurance(
     When ``device_type`` is "non-volatile-memristor":
         future: HRS/LRS separation, window margin, retention drift.
 
-    Currently a stub — delegates to the generic message.
+    Supports two input formats:
+        - Pre-processed CSV with ``cycle``, ``r_hrs_ohm``, ``r_lrs_ohm`` columns
+        - Raw WGFMU Measurement Result CSV (prints a pre-processing hint)
+
+    Format is detected by peeking at the first line, since the device config
+    uses different ``header_lines`` for each format.
     """
-    if device_type:
+    from science_cli.library.pulse.endurance import analyze_endurance_to_yaml
+
+    import pandas as pd
+
+    fp = Path(filepath)
+    step_dir = fp.parent
+
+    # Peek at first line to detect pre-processed format
+    with open(fp, encoding="utf-8", errors="replace") as fh:
+        first_line = fh.readline().strip()
+
+    first_cols = {c.strip().strip('"').lower() for c in first_line.split(",")}
+    is_preprocessed = {"cycle", "r_hrs_ohm", "r_lrs_ohm"}.issubset(first_cols)
+
+    if not is_preprocessed:
+        # Raw WGFMU format — no need to load data, just print a hint
         console.print(
-            f"[dim]Pulse endurance analysis ({device_type}) "
-            f"not yet implemented. Use 'pulse analyze' instead.[/dim]"
+            "[yellow]Raw WGFMU endurance format detected. "
+            "Pre-process the CSV first with 'sci pulse preprocess'.[/yellow]"
         )
-    else:
-        console.print(
-            "[yellow]Pulse endurance analysis not yet implemented. "
-            "Use 'pulse analyze' instead.[/yellow]"
-        )
+        return
+
+    # Pre-processed: simple CSV read (device config's header_lines=147
+    # is for raw WGFMU and would eat data rows)
+    df = pd.read_csv(fp)
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        except (ValueError, TypeError):
+            pass
+
+    if df.empty:
+        console.print("[red]Empty or unparseable endurance CSV.[/red]")
+        return
+
+    r_hrs = df["r_hrs_ohm"].values
+    r_lrs = df["r_lrs_ohm"].values
+    cycles = df["cycle"].values
+
+    result_path = analyze_endurance_to_yaml(
+        r_on=r_lrs,
+        r_off=r_hrs,
+        cycles=cycles,
+        step_dir=step_dir,
+        instrument="keysight-b1500a",
+        devices=device_type or "volatile-memristor",
+        metadata={},
+        project_root=fp.parent.parent.parent,
+        step_name=fp.parent.name,
+    )
+    console.print(f"\n[bold]Pulse Endurance Analysis: {fp.name}[/bold]")
+    console.print(f"  [dim]YAML → {result_path}[/dim]")
+    console.print(f"  Cycles: {len(cycles)}")
 
 
 def _analyze_pulse_retention(filepath: str, flags: dict) -> None:
@@ -679,11 +727,87 @@ def _analyze_pulse_retention(filepath: str, flags: dict) -> None:
 
 
 def _analyze_pulse_stp(filepath: str, flags: dict) -> None:
-    console.print("[yellow]STP decay analysis not yet implemented. Use 'pulse analyze' instead.[/yellow]")
+    """Analyze STP (short-term plasticity) decay data.
+
+    Loads time/current columns, inverts current sign, and runs
+    mono/biexponential decay fitting via :func:`analyze_stp_decay_to_yaml`.
+    """
+    import numpy as np
+
+    from science_cli.core.data_loader import load_data_file
+    from science_cli.library.pulse.stp import analyze_stp_decay_to_yaml
+
+    df, info = load_data_file(filepath, study_name="pulse:pulse-stp-decay")
+
+    cols = info.get("columns", [])
+    if "time" not in cols or "current" not in cols:
+        console.print("[red]STP data must have 'time' and 'current' columns.[/red]")
+        return
+
+    time_array = df["time"].values
+    current_array = df["current"].values * -1  # current_sign
+
+    # Remove any NaN entries
+    mask = ~(np.isnan(time_array) | np.isnan(current_array))
+    time_array, current_array = time_array[mask], current_array[mask]
+
+    fp = Path(filepath)
+    step_dir = fp.parent
+    metadata = info.get("metadata", {})
+    project_root = fp.parent.parent.parent  # protocol/ directory
+
+    result_path = analyze_stp_decay_to_yaml(
+        time_array,
+        current_array,
+        step_dir,
+        metadata=metadata,
+        project_root=project_root,
+        step_name=fp.parent.name,
+        instrument="keysight-b1500a",
+    )
+
+    console.print(f"\n[bold]STP Decay Analysis: {fp.name}[/bold]")
+    console.print(f"  Results saved: [green]{result_path}[/green]")
 
 
 def _analyze_pulse_ppf(filepath: str, flags: dict) -> None:
-    console.print("[yellow]PPF analysis not yet implemented. Use 'pulse analyze' instead.[/yellow]")
+    """Analyze PPF (paired-pulse facilitation) data.
+
+    Expects pre-processed data with ``interval_ms`` and ``ratio`` columns.
+    Delegates to :func:`science_cli.library.pulse.ppf.analyze_ppf_to_yaml`.
+    """
+    from science_cli.core.data_loader import load_data_file
+    from science_cli.library.pulse.ppf import analyze_ppf_to_yaml
+
+    df, info = load_data_file(filepath, study_name="pulse:pulse-ppf")
+
+    # Check for pre-processed columns
+    if "interval_ms" not in df.columns or "ratio" not in df.columns:
+        console.print(
+            "[yellow]PPF analysis requires pre-processed data with "
+            "'interval_ms' and 'ratio' columns. "
+            "Use 'pulse analyze' instead.[/yellow]"
+        )
+        return
+
+    intervals = df["interval_ms"].values
+    ratios = df["ratio"].values
+
+    fp = Path(filepath)
+    step_dir = fp.parent
+    project_root = fp.parent.parent.parent
+
+    result_path = analyze_ppf_to_yaml(
+        intervals_ms=intervals,
+        ratios=ratios,
+        step_dir=step_dir,
+        metadata=info.get("metadata", {}),
+        project_root=project_root,
+        step_name=fp.parent.name,
+        instrument="keysight-b1500a",
+    )
+
+    console.print(f"  [green]PPF analysis saved to: {result_path}[/green]")
 
 
 def _analyze_afm(filepath: str, flags: dict) -> None:
@@ -782,6 +906,18 @@ def _analyze_with_technique(
         return
 
     filepath = str(raw_dir / selected[0])
+
+    # Check if the selected file's study has an interactive analyze menu
+    selected_name = selected[0]
+    file_study = file_step_map.get(selected_name, ("", "", ""))[2] if selected_name in file_step_map else ""
+    resolved_study = study_name or file_study
+    if resolved_study:
+        try:
+            from science_cli.core.interactive_menu import dispatch
+            dispatch(study_key=resolved_study, menu_type="analyze", file_path=Path(filepath))
+            return  # handled by menu dispatch
+        except (KeyError, ImportError, ModuleNotFoundError):
+            pass  # No interactive menu — fall through to default analyzer
 
     analyzer_name = TECHNIQUE_ANALYZERS.get(technique)
     if analyzer_name:
