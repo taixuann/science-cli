@@ -5,6 +5,18 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.24.3] — 2026-06-21
+
+### Fixed
+- **Voltage-plateau segmentation** for STP decay analysis — `detect_stp_segments()` rewritten to use 3-level voltage classification (baseline<0.15V, read 0.15-0.9V, set>=0.9V) producing **non-overlapping** plateau regions per time-wrap cycle instead of time-gap splitting
+  - Each voltage level transition (0→V_read, V_read→V_set, V_set→V_read) creates a dedicated segment showing context before the jump + full plateau
+  - Time-wrap boundaries isolate multi-cycle Keysight CSV files (common in pulse-endurance data)
+  - No duplicate/overlapping segments verified on 3 test files (015.csv: 10 segs, 006.csv: 6 segs, 190626: 14 segs)
+- **`_load_stp_data()`** now returns 5-tuple including `wf_voltage` (programmed Waveform1_voltage) for callers
+- **`_fit_segment()`** skips segments with <5 points (prevents crash on tiny 4-point plateaus)
+- **NaN guard** in `waveform.py:_detect_voltage_levels()` — prevents histogram crash when voltage column is all-NaN
+- **Dead `_single_segment()` function removed**
+
 ## [3.24.2] — 2026-06-21
 
 ### Changed
