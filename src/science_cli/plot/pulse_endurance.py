@@ -152,20 +152,27 @@ def _plot_endurance(filepath: str, flags: dict) -> None:
     if pp is not None:
         cycle, r_hrs, r_lrs, ratio = pp
         figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0] * 2, figsize[1] * 1.8),
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] * 1.6),
                                         gridspec_kw={"height_ratios": [1.5, 1]})
-        color_hrs = flags.get("color-hrs", plot_cfg.get("series.hrs.color", "#CC0000"))
-        color_lrs = flags.get("color-lrs", plot_cfg.get("series.lrs.color", "#0055CC"))
-        color_r = flags.get("color-ratio", plot_cfg.get("series.ratio.color", "#CC7700"))
-        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
-        ax1.plot(cycle, r_hrs, color=color_hrs, linewidth=lw, alpha=0.85, label="HRS")
-        ax1.plot(cycle, r_lrs, color=color_lrs, linewidth=lw, alpha=0.85, label="LRS")
+        # Read all style from config (not hardcoded)
+        for ax, xs, ys, cfg_key, label in [
+            (ax1, cycle, r_hrs, "hrs", "HRS"),
+            (ax1, cycle, r_lrs, "lrs", "LRS"),
+            (ax2, cycle, ratio, "ratio", None),
+        ]:
+            color = flags.get(f"color-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.color", "#000"))
+            mk = flags.get(f"marker-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.marker", "o"))
+            ms = float(flags.get(f"markersize-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.markersize", 6)))
+            ls = plot_cfg.get(f"series.{cfg_key}.linestyle", "none")
+            al = float(plot_cfg.get(f"series.{cfg_key}.alpha", 0.7))
+            kw = dict(marker=mk, markersize=ms, linestyle=ls, color=color, alpha=al)
+            if label:
+                kw["label"] = label
+            ax.plot(xs, ys, **kw)
         ax1.set_xscale("log"); ax1.set_yscale("log")
         ax1.set_ylabel("Resistance (Ω)"); ax1.legend(); ax1.grid(True, alpha=0.2)
-        ax2.plot(cycle, ratio, color=color_r, linewidth=lw, alpha=0.85)
         ax2.set_xscale("log"); ax2.set_yscale("log")
         ax2.set_xlabel("Cycle"); ax2.set_ylabel("HRS / LRS")
-        fig.suptitle("Endurance", fontsize=11)
         fig.tight_layout()
         _save_fig(fig, filepath, flags)
         return
@@ -220,24 +227,31 @@ def _plot_endurance_volatile(filepath: str, flags: dict) -> None:
 
     if is_preprocessed:
         # 2-panel: HRS + LRS (top), ratio (bottom)
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0] * 2, figsize[1] * 1.8),
+        figsize = parse_figsize(flags) or tuple(plot_cfg.get("figure.figsize", [3.46, 2.75]))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] * 1.6),
                                         gridspec_kw={"height_ratios": [1.5, 1]})
 
-        color_hrs = flags.get("color-hrs", plot_cfg.get("series.hrs.color", "#CC0000"))
-        color_lrs = flags.get("color-lrs", plot_cfg.get("series.lrs.color", "#0055CC"))
-        color_ratio = flags.get("color-ratio", plot_cfg.get("series.ratio.color", "#CC7700"))
+        for ax, xs, ys, cfg_key, label in [
+            (ax1, cycle, r_hrs, "hrs", "HRS"),
+            (ax1, cycle, r_lrs, "lrs", "LRS"),
+            (ax2, cycle, ratio, "ratio", None),
+        ]:
+            color = flags.get(f"color-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.color", "#000"))
+            mk = flags.get(f"marker-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.marker", "o"))
+            ms = float(flags.get(f"markersize-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.markersize", 6)))
+            ls = plot_cfg.get(f"series.{cfg_key}.linestyle", "none")
+            al = float(plot_cfg.get(f"series.{cfg_key}.alpha", 0.7))
+            kw = dict(marker=mk, markersize=ms, linestyle=ls, color=color, alpha=al)
+            if label:
+                kw["label"] = label
+            ax.plot(xs, ys, **kw)
 
-        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
-
-        ax1.plot(cycle, r_hrs, color=color_hrs, linewidth=lw, alpha=0.85, label="HRS")
-        ax1.plot(cycle, r_lrs, color=color_lrs, linewidth=lw, alpha=0.85, label="LRS")
         ax1.set_xscale("log")
         ax1.set_yscale("log")
         ax1.set_ylabel("Resistance (Ω)")
         ax1.legend()
         ax1.grid(True, alpha=0.2)
 
-        ax2.plot(cycle, ratio, color=color_ratio, linewidth=lw, alpha=0.85)
         ax2.set_xscale("log")
         ax2.set_yscale("log")
         ax2.set_xlabel("Cycle")
@@ -288,16 +302,18 @@ def _plot_endurance_nonvolatile(filepath: str, flags: dict) -> None:
     if pp is not None:
         cycle, r_hrs, r_lrs, ratio = pp
         figsize_cfg = plot_cfg.get("figure.figsize", [3.46, 2.75])
-        figsize = parse_figsize(flags) or (figsize_cfg[0] * 2, figsize_cfg[1])
+        figsize = parse_figsize(flags) or (figsize_cfg[0] * 1.5, figsize_cfg[1] * 0.6)
         fig, (ax_hi, ax_lo) = plt.subplots(1, 2, figsize=figsize)
-        color_hi = flags.get("color-hi", plot_cfg.get("series.hrs.color", "#CC0000"))
-        color_lo = flags.get("color-lo", plot_cfg.get("series.lrs.color", "#0055CC"))
-        lw = float(flags.get("linewidth", plot_cfg.get("series.hrs.linewidth", 1.0)))
-        for ax, cy, rv, cl, title, ylbl in [
-            (ax_hi, cycle, r_hrs, color_hi, "High Resistance State", "R_high (Ω)"),
-            (ax_lo, cycle, r_lrs, color_lo, "Low Resistance State", "R_low (Ω)"),
+        for ax, xs, ys, cfg_key, title, ylbl in [
+            (ax_hi, cycle, r_hrs, "hrs", "High Resistance State", "R_high (Ω)"),
+            (ax_lo, cycle, r_lrs, "lrs", "Low Resistance State", "R_low (Ω)"),
         ]:
-            ax.plot(cy, rv, color=cl, linewidth=lw, alpha=0.85, label=title.split()[0])
+            color = flags.get(f"color-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.color", "#000"))
+            mk = flags.get(f"marker-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.marker", "o"))
+            ms = float(flags.get(f"markersize-{cfg_key}", plot_cfg.get(f"series.{cfg_key}.markersize", 6)))
+            ls = plot_cfg.get(f"series.{cfg_key}.linestyle", "none")
+            al = float(plot_cfg.get(f"series.{cfg_key}.alpha", 0.7))
+            ax.plot(xs, ys, marker=mk, markersize=ms, linestyle=ls, color=color, alpha=al, label=title.split()[0])
             ax.set_xscale("log"); ax.set_yscale("log")
             ax.set_xlabel("Cycle"); ax.set_ylabel(ylbl); ax.set_title(title)
             ax.legend(); ax.grid(True, alpha=0.2)
@@ -429,10 +445,10 @@ def plot_current(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    ax.plot(df["cycle"], df["i_lrs_A"], "o-", color="#0055CC",
-            markersize=4, linewidth=1.0, alpha=0.8, label="I_LRS")
-    ax.plot(df["cycle"], df["i_hrs_A"], "s-", color="#CC0000",
-            markersize=4, linewidth=1.0, alpha=0.8, label="I_HRS")
+    ax.plot(df["cycle"], df["i_lrs_A"], marker="o", markersize=10,
+            linestyle="none", color="#0055CC", alpha=0.7, label="I_LRS")
+    ax.plot(df["cycle"], df["i_hrs_A"], marker="s", markersize=10,
+            linestyle="none", color="#CC0000", alpha=0.7, label="I_HRS")
 
     ax.set_xlabel("Cycle")
     ax.set_ylabel("Current (A)")

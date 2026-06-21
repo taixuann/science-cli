@@ -345,23 +345,23 @@ studies:
             label: "HRS"
             color: "#CC0000"
             marker: "o"
-            markersize: 4
-            linewidth: 1.0
-            alpha: 0.8
+            markersize: 10
+            linestyle: "none"
+            alpha: 0.7
           lrs:
             label: "LRS"
             color: "#0055CC"
             marker: "s"
-            markersize: 4
-            linewidth: 1.0
-            alpha: 0.8
+            markersize: 10
+            linestyle: "none"
+            alpha: 0.7
           ratio:
             label: "Ratio"
             color: "#CC7700"
             marker: "^"
-            markersize: 4
-            linewidth: 1.0
-            alpha: 0.8
+            markersize: 10
+            linestyle: "none"
+            alpha: 0.7
         annotations:
           hrs:
             text: "HRS"
