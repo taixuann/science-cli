@@ -1,16 +1,16 @@
 ---
 layer: [3, 5, 6, 7]
 type: plan
-status: in-progress
+status: done
 tags: [stp, pulse, segment, decay, analyzer]
 depends_on: [210626_compact-waveform]
-assignee: code
+assignee: docs
 ---
 
 # Implementation Plan: STP Segment-Aware Decay Analysis
 
 **Date**: 21/06/2026
-**Status**: 🟠 In Progress
+**Status**: ✅ Done (v3.24.1)
 **Layer**: 3 (Keysight Parsers) + 5 (Plotting) + 6 (Protocol) + 7 (Pulse Analyzers)
 
 ## Context Summary

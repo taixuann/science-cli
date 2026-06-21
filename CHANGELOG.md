@@ -5,6 +5,25 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.24.1] — 2026-06-21
+
+### Added
+- **STP segment-aware decay analysis** — `detect_stp_segments()` splits multi-cycle pulse files by time gaps (>10× median dt AND >50 µs absolute); continuous/high-density files with all gaps <10 µs are NOT split
+- **`_fit_segment()`** — fits a single segment's decay (monoexponential or biexponential via `analyze_stp_decay`)
+- **`analyze_all()` per-segment refactor** — fits each segment independently, generates overview plot (`stp-decay-diagnostic_overview_{stem}.pdf`) with overlaid segments + fit markers + tau dots, prints Rich Table per-segment summary
+- **`--overwrite` flag** for `sci analyze --study pulse:pulse-stp-decay` to re-analyze files that already have `extracted_decay` metadata
+- **Per-segment metadata in protocol.yaml** — `_tag_with_segment_metadata()` stores structured dict (`extracted_decay.segments`, `extracted_decay.segment_001`, etc.) with model, tau(s), current, decay%, R² per segment
+- **`_has_extracted_decay()`** — checks protocol.yaml for existing `extracted_decay` tags before running analysis (skip unless `--overwrite`)
+- **Interactive menu for STP decay** — `config/config-studies.yaml` now has `interactive.analyze` section for `pulse:pulse-stp-decay` with 2 options: (1) "Extract decay — fit segments, plot overview" and (2) "Overlay decay curves"
+- **`pulse_stp_decay.py`** — new dedicated module in `library/pulse/` for segment-aware STP decay analysis
+
+### Changed
+- `_tag_with_extracted_decay()` renamed to `_tag_with_segment_metadata()` — stores per-segment results dict instead of simple boolean
+
+### Tests
+- 602 passed, 4 pre-existing failures (unchanged)
+- `detect_stp_segments()` passes 4/4 test cases (continuous, multi-cycle, high-density, tiny)
+
 ## [3.24.0] — 2026-06-21
 
 ### Added
