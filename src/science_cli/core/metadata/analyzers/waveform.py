@@ -31,6 +31,10 @@ def _find_time_column(df):
 
 
 def _detect_voltage_levels(v, n_bins=100, n_levels=3):
+    # Guard against NaN or inf in voltage data
+    v = v[~np.isnan(v) & ~np.isinf(v)]
+    if len(v) < 5 or np.ptp(v) < 1e-12:
+        return []
     hist, edges = np.histogram(v, bins=n_bins)
     peaks = []
     for i in range(len(hist)):

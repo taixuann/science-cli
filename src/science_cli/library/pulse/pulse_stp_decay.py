@@ -78,8 +78,10 @@ def _get_project_root(csv_path: Path) -> Path | None:
 def _load_stp_data(file_path: Path):
     """Load time/current from an STP decay CSV.
 
-    Returns (time_s, current_A, voltage_V, metadata_dict) or raises.
+    Returns (time_s, current_A, voltage_V, metadata_dict, wf_voltage) or raises.
+    ``wf_voltage`` is the programmed Waveform1_voltage (if available) or None.
     """
+    import pandas as pd
     from science_cli.core.data_loader import load_data_file
 
     df, info = load_data_file(str(file_path), study_name="pulse:pulse-stp-decay")
@@ -91,83 +93,114 @@ def _load_stp_data(file_path: Path):
     current_array = df["current"].values.astype(float) * -1  # current_sign
     voltage_array = df.get("voltage", df.get("MeasResult1_value", np.full_like(time_array, np.nan))).values.astype(float)
 
+    # Try to get programmed Waveform1_voltage from the raw DataFrame
+    wf_voltage: np.ndarray | None = None
+    for col in df.columns:
+        cl = col.lower().strip()
+        if "waveform1_voltage" in cl:
+            wf_voltage = pd.to_numeric(df[col], errors="coerce").values.astype(float)
+            break
+
     # Remove NaN
     mask = ~(np.isnan(time_array) | np.isnan(current_array))
-    return time_array[mask], current_array[mask], voltage_array[mask], info.get("metadata", {})
+    time_c = time_array[mask]
+    current_c = current_array[mask]
+    voltage_c = voltage_array[mask]
+    wf_c = wf_voltage[mask] if wf_voltage is not None else None
+    return time_c, current_c, voltage_c, info.get("metadata", {}), wf_c
 
 
 # ── T1: Segment Detection ──
 
 
-def detect_stp_segments(time_s: np.ndarray) -> list[dict]:
-    """Split STP time data by large gaps (>10x median dt, AND >1 us absolute).
+def detect_stp_segments(
+    time_s: np.ndarray,
+    voltage_array: np.ndarray | None = None,
+    pre_jump_points: int = 5,
+) -> list[dict]:
+    """Split STP data into non-overlapping segments by voltage plateaus.
+
+    Each voltage level transition (e.g. 0→0.5V, 0.5V→1.75V, 1.75V→0.5V)
+    creates a new segment covering that plateau within a single time-cycle.
+    Segments are non-overlapping. For multi-cycle files (time wraps), each
+    cycle's plateaus are isolated.
 
     Args:
-        time_s: Time array in seconds.
+        time_s: Time array (seconds).
+        voltage_array: Measured voltage (MeasResult1_value).
+        pre_jump_points: Context hint saved in segment metadata (ignored
+            for boundary computation — context is applied at plot time).
 
     Returns:
-        List of dicts with keys: segment_id (1-based), start (index), end (index),
-        n_points, duration_s.
-        Segments with <5 points are excluded.
-        High-density files where >90% of gaps are <1 us are NOT split.
+        List of dict: segment_id, start, end, n_points, duration_s, v_level.
     """
-    if len(time_s) < 5:
-        return [{
-            "segment_id": 1, "start": 0, "end": len(time_s),
-            "n_points": len(time_s), "duration_s": float(time_s[-1] - time_s[0]),
-        }]
+    if len(time_s) < 10:
+        return [_single_seg_leaf(len(time_s), time_s)]
 
+    v = voltage_array.copy() if voltage_array is not None else None
+    if v is None or np.sum(~np.isnan(v)) < 5:
+        return [_single_seg_leaf(len(time_s), time_s)]
+
+    v[np.isnan(v)] = 0.0
+
+    # ── Time-wrap boundaries ──
     diffs = np.diff(time_s)
-    median_dt = float(np.median(diffs)) if len(diffs) > 0 else 0.0
-    max_dt = float(np.max(diffs)) if len(diffs) > 0 else 0.0
-
-    # Continuous/high-density guard: if ALL gaps are <10 µs, don't split.
-    # Real multi-cycle files have gaps of seconds (11s, 801s).
-    # Random jitter or high-density sampling has gaps <10 µs.
-    if max_dt < 10e-6:
-        return [{
-            "segment_id": 1, "start": 0, "end": len(time_s),
-            "n_points": len(time_s), "duration_s": float(time_s[-1] - time_s[0]),
-        }]
-
-    # Find split points: gaps > 10x median dt AND > 50 µs absolute
-    threshold = max(10.0 * median_dt, 50e-6)
-    gap_indices = np.where(diffs > threshold)[0]
-
-    if len(gap_indices) == 0:
-        return [{
-            "segment_id": 1, "start": 0, "end": len(time_s),
-            "n_points": len(time_s), "duration_s": float(time_s[-1] - time_s[0]),
-        }]
+    wraps = np.where(diffs < -1e-8)[0]
+    bounds = sorted({0, len(time_s)} | {int(w + 1) for w in wraps if int(w + 1) < len(time_s)})
 
     segments: list[dict] = []
-    start = 0
-    for gi in gap_indices:
-        end = gi + 1
-        n_pts = end - start
-        if n_pts >= 5:
+    for ci in range(len(bounds) - 1):
+        cs, ce = bounds[ci], bounds[ci + 1]
+        if ce - cs < 5:
+            continue
+
+        vc = v[cs:ce].copy()
+
+        # 3-level classification
+        lev = np.zeros(ce - cs, dtype=int)
+        lev[(vc > 0.15) & (vc < 0.9)] = 1
+        lev[vc >= 0.9] = 2
+        for i in range(1, len(lev) - 1):
+            if lev[i] != lev[i - 1] and lev[i] != lev[i + 1]:
+                lev[i] = lev[i - 1]
+
+        tr = np.where(np.diff(lev) != 0)[0]
+        if len(tr) < 1:
+            if ce - cs >= 3:
+                _add_seg(segments, cs, ce, time_s, vc)
+            continue
+
+        # Non-overlapping regions: [0, tr[0]+1], [tr[0]+1, tr[1]+1], ..., [tr[-1]+1, len]
+        r_starts = [0] + [int(t + 1) for t in tr]
+        r_ends = [int(t + 1) for t in tr] + [ce - cs]
+
+        for rs, re in zip(r_starts, r_ends):
+            if re - rs < 3:
+                continue
+            v_lvl = float(np.median(vc[rs:min(rs + 5, re)])) if re > rs else 0.0
             segments.append({
-                "segment_id": len(segments) + 1,
-                "start": start,
-                "end": end,
-                "n_points": n_pts,
-                "duration_s": float(time_s[end - 1] - time_s[start]),
+                "segment_id": 0, "start": cs + rs, "end": cs + re,
+                "n_points": re - rs,
+                "duration_s": float(time_s[cs + re - 1] - time_s[cs + rs]),
+                "v_level": v_lvl,
             })
-        start = end
 
-    # Last segment
-    n_pts = len(time_s) - start
-    if n_pts >= 5:
-        segments.append({
-            "segment_id": len(segments) + 1,
-            "start": start,
-            "end": len(time_s),
-            "n_points": n_pts,
-            "duration_s": float(time_s[-1] - time_s[start]),
-        })
+    for i, s in enumerate(segments, 1):
+        s["segment_id"] = i
+    return segments if segments else [_single_seg_leaf(len(time_s), time_s)]
 
-    return segments
 
+def _single_seg_leaf(n: int, t: np.ndarray) -> list[dict]:
+    return [{"segment_id": 1, "start": 0, "end": n, "n_points": n,
+             "duration_s": float(t[-1] - t[0]) if n >= 2 else 0.0, "v_level": 0.0}]
+
+
+def _add_seg(segs: list, cs: int, ce: int, t: np.ndarray, vc: np.ndarray) -> None:
+    v_lvl = float(np.median(vc[:min(5, ce - cs)])) if ce > cs else 0.0
+    segs.append({"segment_id": 0, "start": cs, "end": ce,
+                  "n_points": ce - cs,
+                  "duration_s": float(t[ce - 1] - t[cs]),
+                  "v_level": v_lvl})
 
 def _has_extracted_decay(file_path: Path, project_root: Path) -> bool:
     """Check if a file already has extracted_decay tags in protocol.yaml (T4).
@@ -194,6 +227,16 @@ def _has_extracted_decay(file_path: Path, project_root: Path) -> bool:
                     if isinstance(extracted, bool) and extracted:
                         return True
     return False
+
+
+def _to_native(val):
+    """Convert numpy scalar to native Python type for safe YAML serialization."""
+    import numpy as np
+    if isinstance(val, np.generic):
+        return val.item()
+    if isinstance(val, float) and (val != val):
+        return None
+    return val
 
 
 def _tag_with_segment_metadata(
@@ -226,17 +269,21 @@ def _tag_with_segment_metadata(
             "model": seg.get("model", "unknown"),
         }
         if seg.get("tau1_ms") is not None:
-            entry["tau1_ms"] = seg["tau1_ms"]
+            entry["tau1_ms"] = _to_native(seg["tau1_ms"])
         if seg.get("tau2_ms") is not None:
-            entry["tau2_ms"] = seg["tau2_ms"]
+            entry["tau2_ms"] = _to_native(seg["tau2_ms"])
+        if seg.get("a1") is not None:
+            entry["a1"] = _to_native(seg["a1"])
+        if seg.get("a2") is not None:
+            entry["a2"] = _to_native(seg["a2"])
         if seg.get("initial_current_ua") is not None:
-            entry["initial_current_ua"] = seg["initial_current_ua"]
+            entry["initial_current_ua"] = _to_native(seg["initial_current_ua"])
         if seg.get("steady_state_current_ua") is not None:
-            entry["steady_state_current_ua"] = seg["steady_state_current_ua"]
+            entry["steady_state_current_ua"] = _to_native(seg["steady_state_current_ua"])
         if seg.get("decay_pct") is not None:
-            entry["decay_pct"] = seg["decay_pct"]
+            entry["decay_pct"] = _to_native(seg["decay_pct"])
         if seg.get("r_squared") is not None:
-            entry["r_squared"] = seg["r_squared"]
+            entry["r_squared"] = _to_native(seg["r_squared"])
         extracted[key] = entry
 
     # Find protocol YAML + step name from file
@@ -391,86 +438,159 @@ def _plot_decay_zoom(ax, time_s, current_A, result) -> None:
     ax.set_title("Decay Phase (Zoom)", fontsize=10)
 
 
+def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: dict, color) -> None:
+    """Plot a single voltage-plateau segment with context before the jump.
+
+    Shows:
+    - Current (scatter) on left axis
+    - Voltage (line) on right axis, with the jump clearly visible
+    - The pre-jump context window marked
+    - Tau markers and annotation box for the decay fit
+    """
+    s, e = seg["start"], seg["end"]
+    t_seg_us = time_s[s:e] * 1e6
+    i_seg_ua = np.abs(current_A[s:e]) * 1e6
+    v_seg = voltage_V[s:e]
+
+    # Voltage on right axis (with the jump context visible)
+    ax2 = ax.twinx()
+    ax2.plot(t_seg_us, v_seg, "-", color="#0055CC", linewidth=1, alpha=0.7, label="V(t)")
+    ax2.set_ylabel("Voltage (V)", color="#0055CC", fontsize=8)
+    ax2.tick_params(axis="y", colors="#0055CC", labelsize=7)
+    # Add horizontal line at the plateau voltage level
+    v_level = seg.get("v_level", 0)
+    if v_level > 0.01:
+        ax2.axhline(y=v_level, color="#0055CC", linestyle="--", linewidth=0.5, alpha=0.3)
+        ax2.text(t_seg_us[-1], v_level, f" {v_level:.2f}V", fontsize=6, color="#0055CC", alpha=0.5, va="bottom")
+
+    # Current data (scatter)
+    ax.plot(t_seg_us, i_seg_ua, ".", color=color, markersize=2.5, alpha=0.6, label="I(t)")
+
+    # Mark the pre-jump context region
+    pre_jump = min(5, len(t_seg_us) // 4)
+    if pre_jump > 1:
+        ax.axvspan(t_seg_us[0], t_seg_us[pre_jump], alpha=0.06, color="gray")
+        ax.text(t_seg_us[pre_jump // 2], ax.get_ylim()[1] * 0.95, "context",
+                fontsize=5, color="gray", alpha=0.5, ha="center")
+
+    # Decay fit on the plateau (skip the fast jump region)
+    if "error" not in result and result.get("tau1_ms") is not None:
+        # Find the plateau region: voltage is stable near v_level
+        if v_level > 0.01:
+            plateau_mask = np.abs(v_seg - v_level) < 0.3 * v_level
+            plateau_idx = np.where(plateau_mask)[0]
+        else:
+            plateau_idx = np.arange(len(v_seg))
+
+        if len(plateau_idx) > 5:
+            p_start = plateau_idx[0] if plateau_idx[0] > pre_jump else pre_jump
+            p_end = plateau_idx[-1] + 1
+            p_slice = slice(p_start, min(p_end, len(t_seg_us)))
+
+            t_plateau = time_s[s:e][p_slice]
+            i_plateau = np.abs(current_A[s:e][p_slice])
+
+            if len(t_plateau) >= 5:
+                t_fit = np.linspace(t_plateau[0], t_plateau[-1], 300)
+                t_fit_norm = t_fit - t_plateau[0]
+                steady = result.get("steady_state_current_ua", i_plateau[-1]) * 1e-6
+                tau1 = result["tau1_ms"] * 1e-3  # ms -> s
+                a1_val = result.get("a1") or (i_plateau[0] - steady)
+
+                if result["model"] == "monoexponential":
+                    i_fit = a1_val * np.exp(-t_fit_norm / tau1) + steady
+                else:
+                    a2 = result.get("a2") or (i_plateau[0] - steady) * 0.3
+                    tau2 = (result.get("tau2_ms") or tau1 * 1000) * 1e-3
+                    i_fit = (a1_val * np.exp(-t_fit_norm / tau1) +
+                             a2 * np.exp(-t_fit_norm / tau2)) + steady
+
+                ax.plot(t_fit * 1e6, i_fit * 1e6, "-", color=color, linewidth=1.5, alpha=0.9, label="Fit")
+
+                # Green dot at tau₁
+                tau1_s = result["tau1_ms"] * 1e-3
+                tau1_idx = int(tau1_s / (t_plateau[-1] - t_plateau[0]) * len(t_fit)) if t_plateau[-1] > t_plateau[0] else 0
+                if 0 <= tau1_idx < len(t_fit):
+                    ax.plot(t_fit[tau1_idx] * 1e6, i_fit[tau1_idx] * 1e6, "o", color="green", markersize=7,
+                            markeredgecolor="white", markeredgewidth=0.8, zorder=5,
+                            label=f"τ₁={result['tau1_ms']:.1f}ms")
+
+                # Orange dot at tau₂
+                if result.get("tau2_ms"):
+                    tau2_s = result["tau2_ms"] * 1e-3
+                    tau2_idx = int(tau2_s / (t_plateau[-1] - t_plateau[0]) * len(t_fit)) if t_plateau[-1] > t_plateau[0] else 0
+                    if 0 <= tau2_idx < len(t_fit):
+                        ax.plot(t_fit[tau2_idx] * 1e6, i_fit[tau2_idx] * 1e6, "o", color="orange", markersize=7,
+                                markeredgecolor="white", markeredgewidth=0.8, zorder=5,
+                                label=f"τ₂={result['tau2_ms']:.1f}ms")
+
+                # Annotation box
+                r2 = result.get("r_squared", 0)
+                tau1_val = result["tau1_ms"]
+                tau2_val = result.get("tau2_ms")
+                txt = f"Seg {seg['segment_id']}: {result['model']}\n"
+                txt += f"τ₁={tau1_val:.1f}ms"
+                if tau2_val:
+                    txt += f"  τ₂={tau2_val:.1f}ms"
+                txt += f"\nI₀={result.get('initial_current_ua', 0):.1f}µA  I∞={result.get('steady_state_current_ua', 0):.1f}µA"
+                txt += f"\nDecay={result.get('decay_pct', 0):.1f}%  R²={r2:.4f}"
+
+                ax.text(0.97, 0.97, txt, transform=ax.transAxes, fontsize=7,
+                        verticalalignment="top", horizontalalignment="right",
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.12, edgecolor=color))
+
+    ax.set_xlabel("Time (µs)")
+    ax.set_ylabel("Current (µA)")
+    ax.legend(fontsize=6, loc="lower left", ncol=2)
+    v_lvl = seg.get("v_level", 0)
+    title = f"V={v_lvl:.2f}V" if v_lvl > 0.01 else "Baseline"
+    ax.set_title(f"Segment {seg['segment_id']}: {title} — {seg['n_points']} pts",
+                 fontsize=9)
+
+
 def _plot_segment_overview(
     fig, time_s, current_A, voltage_V, segments: list[dict], segment_results: list[dict],
 ) -> None:
-    """Plot all segments overlaid with fit lines, tau markers, and annotation boxes (T2).
+    """Plot each segment in its own subpanel for clear visual inspection (T2 redesign).
 
-    Each segment gets a different color. Fit line is overlaid as a solid line.
-    Green dot at tau1, orange dot at tau2 (if biexp).
-    Annotation box per segment with model, tau, R².
+    Grid layout:
+    - 1 segment: 1×1
+    - 2 segments: 1×2
+    - 3-4 segments: 2×2
+    - 5-6 segments: 3×2
+    - 7+ segments: N×2 (auto rows)
+
+    Each subpanel shows one segment's data, fit, tau markers, and annotation.
     """
     import matplotlib.pyplot as plt
 
-    t_us = time_s * 1e6
-    i_ua = current_A * 1e6
-    colors = plt.cm.tab10(np.linspace(0, 1, len(segments)))
+    n_seg = len(segments)
+    n_cols = 2
+    n_rows = (n_seg + 1) // 2 if n_seg > 1 else 1
+    if n_seg == 1:
+        n_cols = 1
 
-    ax1 = fig.add_subplot(111)
+    # Recreate figure with proper grid
+    fig.clf()
+    axes = fig.subplots(n_rows, n_cols, squeeze=False)
+
+    colors = plt.cm.tab10(np.linspace(0, 1, n_seg))
 
     for seg_i, (seg, result) in enumerate(zip(segments, segment_results)):
-        s, e = seg["start"], seg["end"]
+        row = seg_i // n_cols
+        col = seg_i % n_cols
+        ax = axes[row][col]
         c = colors[seg_i]
-        label = f"Seg {seg['segment_id']}"
-        if "error" not in result:
-            label += f" ({result['model']}, τ={result.get('tau1_ms', 0):.1f}ms)"
+        _plot_single_segment(ax, time_s, current_A, voltage_V, seg, result, c)
 
-        # Scatter
-        ax1.plot(t_us[s:e], i_ua[s:e], ".", color=c, markersize=2, alpha=0.5, label=label)
+    # Hide unused subplots
+    total_cells = n_rows * n_cols
+    for idx in range(n_seg, total_cells):
+        row = idx // n_cols
+        col = idx % n_cols
+        axes[row][col].set_visible(False)
 
-        if "error" not in result and result.get("tau1_ms") is not None:
-            t_seg = time_s[s:e]
-            t_fit = np.linspace(t_seg[0], t_seg[-1], 300)
-            t_fit_norm = t_fit - t_seg[0]
-            i_seg = np.abs(current_A[s:e])
-            steady = result.get("steady_state_current_ua", i_seg[-1]) * 1e-6
-            tau1 = result["tau1_ms"] * 1e-3  # ms -> s
-            a1 = result.get("a1") or (i_seg[0] - steady)
-
-            if result["model"] == "monoexponential":
-                i_fit = a1 * np.exp(-t_fit_norm / tau1) + steady
-            else:
-                a2 = result.get("a2") or (i_seg[0] - steady) * 0.3
-                tau2 = (result.get("tau2_ms") or tau1 * 1000) * 1e-3
-                i_fit = (a1 * np.exp(-t_fit_norm / tau1) + a2 * np.exp(-t_fit_norm / tau2)) + steady
-
-            ax1.plot(t_fit * 1e6, i_fit * 1e6, "-", color=c, linewidth=1.5, alpha=0.8)
-
-            # Marker at tau1 (green dot)
-            tau1_s = result["tau1_ms"] * 1e-3
-            idx_tau1 = int(tau1_s / (t_seg[-1] - t_seg[0]) * len(t_fit)) if (t_seg[-1] - t_seg[0]) > 0 else 0
-            if idx_tau1 < len(t_fit):
-                ax1.plot(t_fit[idx_tau1] * 1e6, i_fit[idx_tau1] * 1e6, "o", color="green", markersize=6,
-                         markeredgecolor="white", markeredgewidth=0.5)
-
-            # Marker at tau2 (orange dot, if biexp)
-            if result.get("tau2_ms"):
-                tau2_s = result["tau2_ms"] * 1e-3
-                idx_tau2 = int(tau2_s / (t_seg[-1] - t_seg[0]) * len(t_fit)) if (t_seg[-1] - t_seg[0]) > 0 else 0
-                if idx_tau2 < len(t_fit):
-                    ax1.plot(t_fit[idx_tau2] * 1e6, i_fit[idx_tau2] * 1e6, "o", color="orange", markersize=6,
-                             markeredgecolor="white", markeredgewidth=0.5)
-
-            # Annotation box
-            r2 = result.get("r_squared", 0)
-            tau1_str = f"τ₁={result['tau1_ms']:.1f}ms"
-            tau2_str = f" τ₂={result['tau2_ms']:.1f}ms" if result.get("tau2_ms") else ""
-            txt = (
-                f"Seg {seg['segment_id']}: {result['model']}\n"
-                f"{tau1_str}{tau2_str}\n"
-                f"R²={r2:.4f}"
-            )
-            # Position box near the segment data
-            seg_center = (s + e) // 2
-            x_pos = t_us[min(seg_center + len(t_us) // 20, len(t_us) - 1)]
-            y_pos = np.median(i_ua[s:e])
-            ax1.text(x_pos, y_pos, txt, fontsize=7,
-                     bbox=dict(boxstyle="round,pad=0.3", facecolor=c, alpha=0.15, edgecolor=c))
-
-    ax1.set_xlabel("Time (µs)")
-    ax1.set_ylabel("Current (µA)")
-    ax1.legend(fontsize=7, loc="upper right", ncol=min(3, len(segments)))
-    ax1.set_title(f"STP Decay — Segments Overview ({len(segments)} segments)", fontsize=10)
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
 
 
 def _print_segment_summary(file_name: str, segments: list[dict], segment_results: list[dict]) -> None:
@@ -520,6 +640,10 @@ def _fit_segment(time_s: np.ndarray, current_A: np.ndarray, seg: dict) -> dict:
     from science_cli.library.pulse.stp import analyze_stp_decay
 
     s, e = seg["start"], seg["end"]
+    n_pts = e - s
+    if n_pts < 5:
+        return {"error": f"Insufficient data points ({n_pts} < 5)", "model": "skip",
+                "n_points": n_pts}
     t_seg = time_s[s:e]
     i_seg = current_A[s:e]
     return analyze_stp_decay(t_seg, i_seg)
@@ -563,7 +687,7 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
             return
 
     try:
-        time_s, current_A, voltage_V, metadata = _load_stp_data(csv_path)
+        time_s, current_A, voltage_V, metadata, wf_voltage = _load_stp_data(csv_path)
     except (ValueError, FileNotFoundError) as e:
         from rich.console import Console
         Console().print(f"[bold red]Error:[/bold red] {e}")
@@ -574,8 +698,8 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
         Console().print(f"[yellow]Insufficient data: {csv_path.name}[/yellow]")
         return
 
-    # T1: Detect segments
-    segments = detect_stp_segments(time_s)
+    # T1: Detect segments by voltage-plateau boundaries (MeasResult1_value)
+    segments = detect_stp_segments(time_s, voltage_array=voltage_V)
 
     # T2: Fit each segment
     segment_results: list[dict] = []
@@ -586,12 +710,14 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
     # Print per-segment summary
     _print_segment_summary(csv_path.name, segments, segment_results)
 
-    # T2: Overview plot — all segments overlaid
-    fig = plt.figure(figsize=(8, 5))
+    # T2: Overview plot — one subpanel per segment
+    n_seg = len(segments)
+    n_cols = 2 if n_seg > 1 else 1
+    n_rows = (n_seg + 1) // 2 if n_seg > 1 else 1
+    fig = plt.figure(figsize=(5 * n_cols, 3.5 * n_rows))
     _plot_segment_overview(fig, time_s, current_A, voltage_V, segments, segment_results)
 
-    fig.suptitle(f"STP Decay Overview: {csv_path.name}", fontsize=11)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.suptitle(f"STP Decay Overview: {csv_path.name}", fontsize=11, y=0.98)
 
     _save_plot(fig, csv_path, "stp-decay-diagnostic_overview")
 
@@ -649,7 +775,7 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
         if "extracted-decay" not in remarks:
             continue
         try:
-            time_s, current_A, voltage_V, _ = _load_stp_data(fp)
+            time_s, current_A, voltage_V, _, _ = _load_stp_data(fp)
             result = analyze_stp_decay(time_s, current_A)
             if "error" not in result:
                 overlay_data.append({
