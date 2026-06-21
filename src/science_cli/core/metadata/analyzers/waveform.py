@@ -172,6 +172,122 @@ def detect_waveform_pattern_2d(df, max_points: int = 200) -> list[list[float]]:
     return [[float(ti), float(vi)] for ti, vi in zip(t, v)]
 
 
+def compute_waveform_transitions(df) -> dict | None:
+    """Compute compact waveform transition times from a DataFrame.
+
+    Returns clean square-pulse transitions (rise, plateau, fall, read)
+    as a dict with ~8 scalar values instead of 200-point arrays.
+
+    Returns None if voltage/time columns can't be found.
+    """
+    scalars = analyze_waveform_params(df, raw_lines=None, inputs={})
+    if not scalars or "v_set_v" not in scalars:
+        return None
+
+    v_set = scalars["v_set_v"]
+    v_read = scalars["v_read_v"]
+
+    # Detect crossing times at the voltage levels
+    voltage_col = _find_voltage_column(df)
+    time_col = _find_time_column(df)
+    if voltage_col is None or time_col is None:
+        return None
+
+    v_raw = df[voltage_col].values.astype(float)
+    t_raw = df[time_col].values.astype(float)
+    idx = np.argsort(t_raw)
+    t = t_raw[idx]
+    v = v_raw[idx]
+    t_us = t * 1e6
+
+    rise_10 = v_read + (v_set - v_read) * 0.1
+    rise_90 = v_read + (v_set - v_read) * 0.9
+    fall_90 = v_read + (v_set - v_read) * 0.9
+    fall_10 = v_read + (v_set - v_read) * 0.1
+
+    rise_start = _find_crossing_time(t_us, v, rise_10, "rising")
+    rise_end = _find_crossing_time(t_us, v, rise_90, "rising")
+
+    # Find when voltage first reaches v_set plateau (last point in upper quartile)
+    v_set_med = np.median(v[v >= np.percentile(v, 75)])
+    high_mask = v >= v_set_med * 0.95
+    high_indices = np.where(high_mask)[0]
+    if len(high_indices) > 0:
+        v_set_start_idx = high_indices[0]
+        v_set_end_idx = high_indices[-1]
+        v_set_start_us = float(t_us[v_set_start_idx])
+        v_set_end_us = float(t_us[v_set_end_idx])
+
+        # Fall transitions from post-plateau region
+        after_plateau = t_us[v_set_end_idx:]
+        v_after = v[v_set_end_idx:]
+        fall_start = _find_crossing_time(after_plateau, v_after, fall_90, "falling")
+        fall_end = _find_crossing_time(after_plateau, v_after, fall_10, "falling")
+    else:
+        v_set_start_us = v_set_end_us = fall_start = fall_end = None
+
+    return {
+        "rise_start_us": float(rise_start) if rise_start is not None else None,
+        "rise_end_us": float(rise_end) if rise_end is not None else None,
+        "v_set_start_us": v_set_start_us,
+        "v_set_end_us": v_set_end_us,
+        "fall_start_us": float(fall_start) if fall_start is not None else None,
+        "fall_end_us": float(fall_end) if fall_end is not None else None,
+        "v_set_v": v_set,
+        "v_read_v": v_read,
+        "set_width_us": scalars.get("set_width_us"),
+        "rise_us": scalars.get("rise_us"),
+        "fall_us": scalars.get("fall_us"),
+        "read_width_us": scalars.get("read_width_us"),
+        "repeat_pattern": scalars.get("repeat_pattern", "single"),
+    }
+
+
+def reconstruct_waveform(
+    transitions: dict,
+    n_points: int = 200,
+) -> list[list[float]]:
+    """Reconstruct a canonical 2D [[t, v], ...] array from compact transitions.
+
+    Produces *n_points* evenly-spaced samples matching the original
+    square-pulse shape for use in plotting generic overlays.
+    """
+    rise_s = _to_s(transitions.get("rise_start_us"), 0.0)
+    v_set_s = _to_s(transitions.get("v_set_start_us"), 5e-6)
+    v_set_e = _to_s(transitions.get("v_set_end_us"), 105e-6)
+    fall_e = _to_s(transitions.get("fall_end_us"), 110e-6)
+    v_set = transitions.get("v_set_v", 1.5)
+    v_read = transitions.get("v_read_v", 0.2)
+
+    dur = max(fall_e + 20e-6, 150e-6)  # total duration with margin
+    t = np.linspace(0, dur, n_points)
+    v = np.full_like(t, v_read)
+
+    # Rise ramp
+    if rise_s < v_set_s:
+        ramp = (t >= rise_s) & (t < v_set_s)
+        slope = (v_set - v_read) / (v_set_s - rise_s)
+        v[ramp] = v_read + slope * (t[ramp] - rise_s)
+
+    # Plateau
+    plateau = (t >= v_set_s) & (t < v_set_e)
+    v[plateau] = v_set
+
+    # Fall ramp
+    if v_set_e < fall_e:
+        fall_ramp = (t >= v_set_e) & (t < fall_e)
+        slope = (v_read - v_set) / (fall_e - v_set_e)
+        v[fall_ramp] = v_set + slope * (t[fall_ramp] - v_set_e)
+
+    return [[float(ti), float(vi)] for ti, vi in zip(t, v)]
+
+
+def _to_s(val_us, default):
+    if val_us is not None:
+        return val_us * 1e-6
+    return default
+
+
 def extract_waveform_metadata(
     df,
     study_name: str | None = None,
@@ -212,21 +328,30 @@ def extract_waveform_metadata(
 
     tier1 = parse_wgfmu_waveform_segments(df)
     if tier1 is not None:
-        return {
-            "waveform_pattern": tier1["waveform_2d"],
+        pattern = tier1["waveform_2d"]
+        transitions = compute_waveform_transitions(df)
+        result = {
+            "waveform_pattern": pattern,
             "waveform_programmed": True,
         }
+        if transitions:
+            result["waveform_transitions"] = transitions
+        return result
 
     # --- Tier 2: histogram-based fallback (full scalars for backwards compat) ---
     pattern = detect_waveform_pattern_2d(df)
     scalars = analyze_waveform_params(df, raw_lines=None, inputs={})
     repeats = detect_repeat_pattern(df)
-    return {
+    transitions = compute_waveform_transitions(df)
+    result = {
         "waveform_pattern": pattern,
         "waveform_programmed": False,
         **scalars,
         **repeats,
     }
+    if transitions:
+        result["waveform_transitions"] = transitions
+    return result
 
 
 def invert_current_sign(df):

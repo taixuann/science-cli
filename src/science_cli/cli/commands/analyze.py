@@ -34,6 +34,7 @@ ANALYZE_TECHNIQUE_FLAGS: dict[str, list[dict]] = {
     ],
     "pulse-stp": [
         {"name": "--yaml", "action": "store_true", "help": "Output analysis YAML"},
+        {"name": "--overwrite", "action": "store_true", "help": "Re-analyze even if already tagged with extracted_decay"},
         {"name": "--fit-model", "type": str, "help": "Decay fit model: biexponential|stretched"},
     ],
     "pulse-ppf": [
@@ -247,8 +248,10 @@ def analyze_handler(args: list) -> None:
 
     # Build display lines with per-study columns + status badge
     status = load_status(proj)
+    use_all = flags.get("all", False)
     display_items: list[str] = []
     display_to_path: dict[str, str] = {}
+    display_to_study: dict[str, str] = {}
     for f in files:
         name = f.name
         if name in file_step_map:
@@ -261,20 +264,55 @@ def analyze_handler(args: list) -> None:
                 metadata=metadata, study_name=study, status_badge=badge,
             )
             display_to_path[display.strip()] = str(f)
+            display_to_study[display.strip()] = study
             display_items.append(display)
         else:
             display_to_path[name] = str(f)
+            display_to_study[name] = ""
             display_items.append(name)
 
     selected = fzf_select(
-        display_items, prompt="Select a file to analyze:", multi=False
+        display_items,
+        prompt="Select file(s) to analyze (Tab for multi, Ctrl+A to select all):",
+        multi=use_all,
     )
     if not selected:
         console.print("[yellow]No file selected.[/yellow]")
         return
 
-    filepath = display_to_path.get(selected[0].strip(), str(raw_dir / selected[0]))
-    _analyze_direct([filepath], args)
+    from science_cli.core.interactive_menu import dispatch as menu_dispatch
+
+    # Group files by study → one menu per study
+    from collections import defaultdict
+    by_study: dict[str, list[Path]] = defaultdict(list)
+    no_study: list[str] = []
+
+    for sel in selected:
+        key = sel.strip()
+        filepath = display_to_path.get(key)
+        if filepath is None:
+            filepath = str(raw_dir / key)
+        study = display_to_study.get(key, "")
+        if study:
+            by_study[study].append(Path(filepath))
+        else:
+            no_study.append(filepath)
+
+    # Files with no recognized study → direct analysis
+    for fp in no_study:
+        _analyze_direct([fp], args)
+
+    # Files with study → one menu per unique study
+    # Pass flags like --overwrite through to the handler
+    extra_kwargs: dict = {}
+    if flags.get("overwrite"):
+        extra_kwargs["overwrite"] = True
+    for study, file_paths in by_study.items():
+        try:
+            menu_dispatch(study_key=study, menu_type="analyze", file_paths=file_paths, **extra_kwargs)
+        except (KeyError, ImportError, ModuleNotFoundError):
+            for fp in file_paths:
+                _analyze_direct([str(fp)], args)
 
 
 def _analyze_direct(files: list, rest_args: list) -> None:
@@ -914,7 +952,7 @@ def _analyze_with_technique(
     if resolved_study:
         try:
             from science_cli.core.interactive_menu import dispatch
-            dispatch(study_key=resolved_study, menu_type="analyze", file_path=Path(filepath))
+            dispatch(study_key=resolved_study, menu_type="analyze", file_paths=Path(filepath))
             return  # handled by menu dispatch
         except (KeyError, ImportError, ModuleNotFoundError):
             pass  # No interactive menu — fall through to default analyzer

@@ -19,7 +19,7 @@ HELP_SECTIONS = {
 }
 
 COMMAND_DESCRIPTIONS = {
-    "add":     "Add project/protocol/metadata/data (supports --study)",
+    "add":     "Add project/protocol/metadata/data/remarks/flags (supports --study)",
     "delete":  "Delete protocol/metadata",
     "edit":    "Edit protocol/metadata/study/instrument/device/grammar (supports --study)",
     "ls":      "List projects/protocols/steps/files/studies/instruments/grammar",
@@ -58,6 +58,8 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m protocol":    {"desc": "Create a protocol", "usage": "add -m protocol -n <name> [--desc <text>] [--step s1,s2] [-t ec-cv,ec-ca] [-s study-name] [--ins keithley-2400,keysight-b1500a]"},
             "add -m metadata":    {"desc": "Update protocol step metadata (technique + instrument)", "usage": "add -m metadata --step <steps> -pt <protocol> -t <techniques> [--ins <instruments>]"},
             "add -m data":        {"desc": "Interactive file assignment via fzf (shows assigned/unassigned status)", "usage": "add -m data [--all] [--step <name>]"},
+            "add -m remarks":    {"desc": "Assign remarks to data files (fzf select, prompt, rename)", "usage": "add -m remarks [--all]"},
+            "add -m flags":      {"desc": "Assign flags (important/valid/invalid/discard/questionable) to data files", "usage": "add -m flags [--all]"},
         },
         "flags": {
             "OPERATION": {
@@ -80,6 +82,8 @@ COMMAND_HELP: Dict[str, dict] = {
             "add -m metadata -step 1_iv -pt doping -s iv:iv-bipolar-sweep",
             "add -m data",
             "add -m data --all",
+            "add -m remarks --all",
+            "add -m flags",
         ],
     },
     "edit": {

@@ -18,6 +18,22 @@ import numpy as np
 
 
 # ---------------------------------------------------------------------------
+# Subsampling
+# ---------------------------------------------------------------------------
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursive dict merge — override keys win."""
+    result = dict(base)
+    for key, val in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -68,16 +84,28 @@ def _plot_single(x, y, cfg: dict, ax) -> None:
     """Single-axis X vs Y plot."""
     series_cfg = cfg.get("series", {})
     s = next(iter(series_cfg.values()), {}) if series_cfg else {}
-    ax.plot(
-        x, y,
-        color=s.get("color", "#1f77b4"),
-        linewidth=s.get("linewidth", 1.5),
-        linestyle=s.get("linestyle", "-"),
-        marker=s.get("marker", ""),
-        markersize=s.get("markersize", 0),
-        alpha=s.get("alpha", 1.0),
-        label=s.get("label", ""),
-    )
+    series_type = s.get("type", "line")
+    if series_type == "scatter":
+        ax.scatter(
+            x, y,
+            s=float(s.get("markersize", 6)) ** 2,
+            marker=s.get("marker", "o"),
+            color=s.get("color", "#1f77b4"),
+            alpha=s.get("alpha", 1.0),
+            label=s.get("label", ""),
+            linewidth=0,
+        )
+    else:
+        ax.plot(
+            x, y,
+            color=s.get("color", "#1f77b4"),
+            linewidth=s.get("linewidth", 1.5),
+            linestyle=s.get("linestyle", "-"),
+            marker=s.get("marker", ""),
+            markersize=s.get("markersize", 0),
+            alpha=s.get("alpha", 1.0),
+            label=s.get("label", ""),
+        )
 
 
 def _plot_dual_axis(x, y, df, y2_col: str | None, cfg: dict, ax1, ax2) -> None:
@@ -186,6 +214,84 @@ def _plot_waveform_panel(ax, waveform_pattern: list) -> None:
     ax.grid(True, alpha=0.2)
 
 
+def _apply_ylim_padding(ax, y_vals_list: list[np.ndarray], cfg: dict) -> None:
+    """Auto-compute y-limits from data with padding decades."""
+    padding = cfg.get("axes", {}).get("ylim_padding", {})
+    if not padding:
+        return  # no padding config — don't override
+    below = float(padding.get("below", 0.5))
+    above = float(padding.get("above", 0.5))
+    all_y = np.concatenate(y_vals_list) if y_vals_list else np.array([])
+    if len(all_y) == 0:
+        return
+    y_min = np.nanmin(all_y)
+    y_max = np.nanmax(all_y)
+    lo = 10 ** (np.floor(np.log10(y_min)) - below)
+    hi = 10 ** (np.ceil(np.log10(y_max)) + above)
+    ax.set_ylim(lo, hi)
+
+
+def _apply_yticks_show(ax, cfg: dict) -> None:
+    """Show only y-ticks in a configurable range."""
+    yticks_cfg = cfg.get("axes", {}).get("yticks_show", {})
+    if not yticks_cfg:
+        return
+    lo = float(yticks_cfg["min"])
+    hi = float(yticks_cfg["max"])
+    import math
+    lo_dec = int(math.ceil(math.log10(lo)))
+    hi_dec = int(math.floor(math.log10(hi)))
+    ticks = [10 ** d for d in range(lo_dec, hi_dec + 1)]
+    ax.set_yticks(ticks)
+
+
+def _plot_multi_series(x, series_data: dict[str, np.ndarray], cfg: dict, ax) -> None:
+    """Multi-series scatter plot — each series with its own style and annotation.
+
+    Reads ``columns.y_series`` for column-to-key mapping and ``series.<key>``
+    for per-series styling.
+    """
+    series_cfg = cfg.get("series", {})
+    for key, y_vals in series_data.items():
+        s = series_cfg.get(key, {})
+        series_type = s.get("type", "scatter")
+        if series_type == "line":
+            ax.plot(
+                x, y_vals,
+                color=s.get("color", "#1f77b4"),
+                linewidth=s.get("linewidth", 1.5),
+                linestyle=s.get("linestyle", "-"),
+                marker=s.get("marker", ""),
+                markersize=s.get("markersize", 0),
+                alpha=s.get("alpha", 0.6),
+                label=s.get("label", ""),
+            )
+        else:
+            ax.scatter(
+                x, y_vals,
+                s=float(s.get("markersize", 12)) ** 2,
+                marker=s.get("marker", "o"),
+                color=s.get("color", "#1f77b4"),
+                alpha=float(s.get("alpha", 0.6)),
+                linewidth=0,
+            )
+        # Per-series annotation
+        ann = s.get("annotation", {})
+        text = ann.get("text", "")
+        if text and len(x) > 0 and len(y_vals) > 0:
+            ax.annotate(
+                text,
+                xy=(x[-1], y_vals[-1]),
+                xytext=tuple(ann.get("xytext", [10, 0])),
+                textcoords="offset points",
+                fontsize=float(ann.get("fontsize", 6.5)),
+                color=ann.get("color", s.get("color", "#333")),
+                fontweight=ann.get("fontweight", "normal"),
+                ha=ann.get("ha", "left"),
+                va=ann.get("va", "center"),
+            )
+
+
 def _add_annotations(ax, cfg: dict, x=None, y=None) -> None:
     """Add text annotations from config near data points."""
     annotations = cfg.get("annotations", {})
@@ -244,8 +350,30 @@ def _plot_generic(
     from science_cli.theme import apply_theme
 
     console = Console()
-    plot_flat = resolve_plot_config(study_name)
+    scale = flags.get("scale")
+    plot_flat = resolve_plot_config(study_name, scale=scale)
     cfg = _unflatten(plot_flat)
+
+    # Handle plot_variant (e.g. "current" for pulse-endurance)
+    # Merges variant sub-block columns/axes over base config
+    plot_variant = flags.get("plot_variant")
+    if plot_variant and plot_variant in cfg:
+        variant_cfg = cfg[plot_variant]
+        if isinstance(variant_cfg, dict):
+            for key in ("columns", "axes"):
+                if key in variant_cfg:
+                    cfg[key] = _deep_merge(cfg.get(key, {}), variant_cfg[key])
+
+    # ── Protocol.yaml step-level overrides (highest priority) ────────
+    # Allows steps to override xlim, ylim, yscale, etc. via
+    # metadata.plot_overrides in protocol.yaml
+    from science_cli.core.plot_config import resolve_step_plot_overrides
+    step_overrides = resolve_step_plot_overrides(study_name, filepath=filepath)
+    if step_overrides:
+        # step_overrides are flat dot-separated — convert to nested and merge
+        step_cfg = _unflatten(step_overrides)
+        cfg = _deep_merge(cfg, step_cfg)
+
     layout = cfg.get("layout", "single")
 
     show_waveform = flags.get("show_waveform", False)
@@ -272,23 +400,50 @@ def _plot_generic(
         df = df.dropna(subset=[x_col])
     if y_col and y_col in df.columns:
         df = df.dropna(subset=[y_col])
+    # Also drop NaN in y_series columns
+    y_series_cfg = columns.get("y_series", {})
+    for key, col in y_series_cfg.items():
+        if col in df.columns:
+            df = df.dropna(subset=[col])
 
-    # Sort by time to prevent backward-time rendering glitches
+    # Sort by x to prevent backward-time rendering glitches
     if x_col and x_col in df.columns:
         df = df.sort_values(x_col).reset_index(drop=True)
+
+    # Multi-series data extraction
+    series_data: dict[str, np.ndarray] = {}
+    if y_series_cfg:
+        x_data = _get_column(df, x_col)
+        if x_data is None:
+            console.print(f"[red]Missing x column: {x_col}[/red]")
+            return
+        x_vals = x_data.values.astype(float)
+        for key, col in y_series_cfg.items():
+            yd = _get_column(df, col)
+            if yd is not None:
+                series_data[key] = yd.values.astype(float) * sign
+            else:
+                console.print(f"[yellow]Missing y_series column '{col}' for key '{key}'[/yellow]")
 
     x_data = _get_column(df, x_col)
     y_data = _get_column(df, y_col)
 
-    if x_data is None or y_data is None:
+    if x_data is None and not series_data:
         console.print(
             f"[red]Missing columns: x={x_col}, y={y_col}. "
             f"Available: {list(df.columns)}[/red]"
         )
         return
 
-    x_vals = x_data.values.astype(float)
-    y_vals = y_data.values.astype(float) * sign
+    if x_data is not None:
+        x_vals_maybe = x_data.values.astype(float)
+    else:
+        x_vals_maybe = None
+
+    if y_data is not None and not series_data:
+        y_vals = y_data.values.astype(float) * sign
+    else:
+        y_vals = None
 
     apply_theme(get_active_theme())
     figsize = (
@@ -304,36 +459,50 @@ def _plot_generic(
             figsize=(figsize[0] * 2, figsize[1]),
         )
         # Left axes: normal plot
-        if layout == "dual_axis":
+        if layout == "multi_series":
+            _plot_multi_series(x_vals_maybe, series_data, cfg, ax1)
+            _apply_axis_settings(ax1, cfg)
+            _apply_ylim_padding(ax1, list(series_data.values()), cfg)
+            _apply_yticks_show(ax1, cfg)
+        elif layout == "dual_axis":
             ax2 = ax1.twinx()
-            _plot_dual_axis(x_vals, y_vals, df, y2_col, cfg, ax1, ax2)
+            _plot_dual_axis(x_vals_maybe, y_vals, df, y2_col, cfg, ax1, ax2)
             _apply_axis_settings(ax1, cfg, ax2)
         else:
-            _plot_single(x_vals, y_vals, cfg, ax1)
+            _plot_single(x_vals_maybe, y_vals, cfg, ax1)
             _apply_axis_settings(ax1, cfg)
-        _add_annotations(ax1, cfg, x_vals, y_vals)
+        if layout != "multi_series":
+            _add_annotations(ax1, cfg, x_vals_maybe, y_vals)
         apply_figure_kw(ax1, flags, Path(filepath).stem)
 
-        # Right axes: waveform subfigure
+        # Right axes: describe panel — waveform or scalar metadata
         waveform_pattern = _info.get("analysis", {}).get("waveform_pattern")
         if waveform_pattern and isinstance(waveform_pattern, list) and len(waveform_pattern) >= 2:
             _plot_waveform_panel(axw, waveform_pattern)
-        else:
-            axw.text(0.5, 0.5, "No waveform data available",
+        elif not _render_metadata_panel(axw, _info, filepath):
+            axw.text(0.5, 0.5, "No describe data",
                      ha="center", va="center", transform=axw.transAxes,
                      fontsize=9, color="gray")
+    elif layout == "multi_series":
+        fig, ax1 = plt.subplots(figsize=figsize)
+        # No subsampling — plot all data points
+        _plot_multi_series(x_vals_maybe, series_data, cfg, ax1)
+        _apply_axis_settings(ax1, cfg)
+        _apply_ylim_padding(ax1, list(series_data.values()), cfg)
+        _apply_yticks_show(ax1, cfg)
+        apply_figure_kw(ax1, flags, Path(filepath).stem)
     elif layout == "dual_axis":
         fig, ax1 = plt.subplots(figsize=figsize)
         ax2 = ax1.twinx()
-        _plot_dual_axis(x_vals, y_vals, df, y2_col, cfg, ax1, ax2)
+        _plot_dual_axis(x_vals_maybe, y_vals, df, y2_col, cfg, ax1, ax2)
         _apply_axis_settings(ax1, cfg, ax2)
-        _add_annotations(ax1, cfg, x_vals, y_vals)
+        _add_annotations(ax1, cfg, x_vals_maybe, y_vals)
         apply_figure_kw(ax1, flags, Path(filepath).stem)
     elif layout == "single":
         fig, ax1 = plt.subplots(figsize=figsize)
-        _plot_single(x_vals, y_vals, cfg, ax1)
+        _plot_single(x_vals_maybe, y_vals, cfg, ax1)
         _apply_axis_settings(ax1, cfg)
-        _add_annotations(ax1, cfg, x_vals, y_vals)
+        _add_annotations(ax1, cfg, x_vals_maybe, y_vals)
         apply_figure_kw(ax1, flags, Path(filepath).stem)
     else:
         # dual_panel, grid_2x2 -- fall back to single with warning
@@ -450,3 +619,82 @@ def _overlay_generic(files: list, flags: dict, study_name: str | None = None) ->
     fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     console.print(f"[bold green]\u2713[/bold green] Overlay saved: {save_path}")
+
+
+def _render_metadata_panel(ax, info: dict, filepath: str) -> bool:
+    """Render scalar metadata on the describe panel axes.
+
+    Collects scalar values from ``info.metadata`` and ``info.analysis``,
+    preferring analysis (derived) values.  Falls back to reading the
+    raw file header lines (V_LRS/V_HRS format for endurance files).
+
+    Returns True if any content was rendered, False otherwise.
+    """
+    fields: dict[str, float] = {}
+
+    # 1. Try derived metadata + analysis scalars
+    for section in ("analysis", "metadata"):
+        data = info.get(section, {}) or {}
+        for k, v in data.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                # Pretty-name: v_set_v → "V_set", v_read_v → "V_read"
+                pretty = k.replace("_v", "").replace("_", " ").title()
+                fields[pretty] = float(v)
+
+    # 2. Fallback: parse raw file header (V_LRS,V_HRS format)
+    if not fields:
+        try:
+            with open(filepath, encoding="utf-8", errors="replace") as f:
+                line1 = f.readline().strip()
+                line2 = f.readline().strip()
+            vals = {}
+            if line1.startswith("V_LRS,"):
+                vals["V_set"] = float(line1.split(",")[1])
+            if line2.startswith("V_HRS,"):
+                vals["V_read"] = float(line2.split(",")[1])
+            fields.update(vals)
+        except (OSError, ValueError, IndexError):
+            pass
+
+    # 3. Render
+    if fields:
+        ax.set_frame_on(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        n = len(fields)
+        start_y = 0.55 if n <= 2 else 0.75
+        step = 0.25 if n <= 2 else 0.18
+        for i, (name, val) in enumerate(fields.items()):
+            y = start_y - i * step
+            ax.text(0.5, y, f"{name} = {val:.2f}",
+                    ha="center", va="center", transform=ax.transAxes,
+                    fontsize=10, fontweight="bold")
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Endurance plot wrappers — config-driven via config-studies.yaml multi_series
+# ---------------------------------------------------------------------------
+
+
+def plot_endurance_resistance(file_path: str | Path = None, scale: str | None = None, **kwargs) -> None:
+    """Plot R_HRS, R_LRS vs cycles — config-driven via ``_plot_generic``."""
+    flags: dict = {"plot_variant": "resistance"}
+    if scale:
+        flags["scale"] = scale
+    _plot_generic(str(file_path), flags, study_name="pulse:pulse-endurance")
+
+
+def plot_endurance_current(file_path: str | Path = None, scale: str | None = None, **kwargs) -> None:
+    """Plot I_LRS, I_HRS vs cycles — config-driven via ``_plot_generic``."""
+    flags: dict = {"plot_variant": "current"}
+    if scale:
+        flags["scale"] = scale
+    _plot_generic(str(file_path), flags, study_name="pulse:pulse-endurance")
+
+
+def plot_endurance_both(file_path: str | Path = None, scale: str | None = None, **kwargs) -> None:
+    """Plot both resistance and current as separate files."""
+    plot_endurance_resistance(file_path=file_path, scale=scale, **kwargs)
+    plot_endurance_current(file_path=file_path, scale=scale, **kwargs)

@@ -198,10 +198,16 @@ def _load_with_device_config(
             else None
         )
 
+    # Detect extracted-list endurance format (2-line voltage header: V_LRS, / V_HRS,)
+    if len(raw_lines) >= 2 and raw_lines[0].startswith("V_LRS,") and raw_lines[1].startswith("V_HRS,"):
+        skiprows = 2
+    else:
+        skiprows = header_lines
+
     read_kwargs = {
         "sep": delimiter or r"\s+",
         "decimal": decimal,
-        "skiprows": header_lines,
+        "skiprows": skiprows,
         "encoding": encoding,
         "engine": "python",
         "on_bad_lines": "skip",
@@ -278,14 +284,25 @@ def _load_with_device_config(
             _study_short = study_name.split(":")[1] if ":" in study_name else study_name
             study_cfg = (studies.get(_tech_name, {}).get(_study_short) or {})
             if study_cfg.get("data_shape", {}).get("kind") == "waveform_2d":
-                from science_cli.core.metadata.analyzers.waveform import extract_waveform_metadata
+                from science_cli.core.metadata.analyzers.waveform import (
+                    extract_waveform_metadata,
+                    reconstruct_waveform,
+                )
                 device_type = device_cfg.get("device_type") or device
                 pattern_meta = extract_waveform_metadata(df, study_name, device_type)
                 if pattern_meta:
                     analysis_meta["waveform_pattern"] = pattern_meta.get("waveform_pattern")
-                    analysis_meta.update({k: v for k, v in pattern_meta.items() if k != "waveform_pattern"})
-                    # Persist waveform_pattern to protocol.yaml if present
-                    if analysis_meta.get("waveform_pattern"):
+                    transitions = pattern_meta.get("waveform_transitions")
+                    analysis_meta["waveform_transitions"] = transitions
+                    analysis_meta.update({k: v for k, v in pattern_meta.items() if k not in ("waveform_pattern", "waveform_transitions")})
+                    # Persist compact waveform_transitions to protocol.yaml if present
+                    persist_meta = {}
+                    if transitions:
+                        persist_meta["waveform_transitions"] = transitions
+                    elif analysis_meta.get("waveform_pattern"):
+                        # Fallback: store full pattern (legacy)
+                        persist_meta["waveform_pattern"] = analysis_meta["waveform_pattern"]
+                    if persist_meta:
                         try:
                             from science_cli.core.protocol import write_file_metadata
 
@@ -302,10 +319,13 @@ def _load_with_device_config(
                                     protocol_yaml,
                                     step_name_proto,
                                     filename,
-                                    {"waveform_pattern": analysis_meta["waveform_pattern"]},
+                                    persist_meta,
                                 )
                         except Exception:
                             pass  # non-critical — don't let write failure break data loading
+                    # Reconstruct full waveform_pattern from transitions for plot backward compat
+                    if transitions and not analysis_meta.get("waveform_pattern"):
+                        analysis_meta["waveform_pattern"] = reconstruct_waveform(transitions)
         except Exception:
             pass  # non-critical — fall back to scalars-only
     if raman_meta:

@@ -9,7 +9,7 @@ from rich.console import Console
 
 from science_cli.cli.help import show_command_help
 from science_cli.core.file_utils import is_flag
-from science_cli.core.grammar import parse_filename
+from science_cli.core.grammar import parse_filename, build_filename
 
 console = Console()
 
@@ -57,6 +57,10 @@ def add_handler(args: list) -> None:
             _add_metadata(mode_args)
         elif mode == "data":
             _add_data(mode_args)
+        elif mode == "remarks":
+            _add_remarks(mode_args)
+        elif mode == "flags":
+            _add_flags(mode_args)
         else:
             console.print(f"[yellow]Unknown add mode: {mode}[/yellow]")
     else:
@@ -518,3 +522,212 @@ def _add_data(args: list) -> None:
     rprint(f"[bold green]\u2713[/bold green] Files assigned to protocol '{proto_name}'")
     for fname in selected:
         rprint(f"  [dim]\u2022 {fname}[/dim]")
+
+
+def _add_remarks(args: list) -> None:
+    """Assign remarks to selected files — renames raw + symlink, updates protocol.yaml.
+
+    Usage: add -m remarks [--all]
+    """
+    import questionary
+    _, flags = _parse_flags(args)
+    use_all = flags.get("all", False)
+
+    from science_cli.core.project import get_current_project_path
+    proj = get_current_project_path()
+    if not proj:
+        console.print("[yellow]No project open.[/yellow]")
+        return
+
+    raw_dir = proj / "data" / "raw"
+    if not raw_dir.exists():
+        console.print("[red]data/raw/ not found.[/red]")
+        return
+
+    files = sorted(raw_dir.iterdir())
+    if not files:
+        console.print("[yellow]No files in data/raw/[/yellow]")
+        return
+
+    from science_cli.core.fzf.display import fzf_select
+    item_names = [f.name for f in files]
+    selected = fzf_select(item_names, prompt="Select files to annotate (Tab for multi):", multi=True)
+    if not selected:
+        return
+
+    if use_all:
+        remarks = questionary.text("Remarks text (letters, hyphens only, no spaces):").ask()
+        if not remarks or not remarks.strip():
+            console.print("[yellow]No remarks entered. Aborting.[/yellow]")
+            return
+        remarks_map = {fname: remarks.strip() for fname in selected}
+    else:
+        remarks_map = {}
+        for fname in selected:
+            current = parse_filename(fname)
+            current_remarks = current.get("remarks", "") if current else ""
+            prompt_text = f"Remarks for '{fname}'"
+            if current_remarks:
+                prompt_text += f" (current: {current_remarks})"
+            remarks = questionary.text(prompt_text + ":").ask()
+            if remarks and remarks.strip():
+                remarks_map[fname] = remarks.strip()
+            else:
+                console.print(f"  [yellow]Skipped {fname}[/yellow]")
+
+    if not remarks_map:
+        console.print("[yellow]No changes made.[/yellow]")
+        return
+
+    _apply_annotations(raw_dir, proj, remarks_map, field="remarks")
+
+
+def _add_flags(args: list) -> None:
+    """Assign flags to selected files — renames raw + symlink, updates protocol.yaml.
+
+    Usage: add -m flags [--all]
+
+    Flags are single letters mapped to tokens:
+    i = important, v = valid, x = invalid, d = discard, ? = questionable
+    """
+    import questionary
+    _, flags = _parse_flags(args)
+    use_all = flags.get("all", False)
+
+    from science_cli.core.project import get_current_project_path
+    proj = get_current_project_path()
+    if not proj:
+        console.print("[yellow]No project open.[/yellow]")
+        return
+
+    raw_dir = proj / "data" / "raw"
+    if not raw_dir.exists():
+        console.print("[red]data/raw/ not found.[/red]")
+        return
+
+    files = sorted(raw_dir.iterdir())
+    if not files:
+        console.print("[yellow]No files in data/raw/[/yellow]")
+        return
+
+    from science_cli.core.fzf.display import fzf_select
+    item_names = [f.name for f in files]
+    selected = fzf_select(item_names, prompt="Select files to flag (Tab for multi):", multi=True)
+    if not selected:
+        return
+
+    FLAG_OPTIONS = {
+        "important": "★ Important — highlight in dashboards",
+        "valid": "✓ Valid — good data",
+        "invalid": "✗ Invalid — bad data",
+        "discard": "🗑 Discard — mark for removal",
+        "questionable": "? Questionable — needs review",
+    }
+
+    if use_all:
+        flag_name = questionary.select("Select flag for all files:", choices=list(FLAG_OPTIONS.keys())).ask()
+        if not flag_name:
+            return
+        flags_map = {fname: flag_name for fname in selected}
+    else:
+        flags_map = {}
+        for fname in selected:
+            current = parse_filename(fname)
+            current_flag = current.get("flags", "") if current else ""
+            prompt_text = f"Flag for '{fname}'"
+            if current_flag:
+                prompt_text += f" (current: {current_flag})"
+            flag_name = questionary.select(prompt_text, choices=list(FLAG_OPTIONS.keys())).ask()
+            if flag_name:
+                flags_map[fname] = flag_name
+            else:
+                console.print(f"  [yellow]Skipped {fname}[/yellow]")
+
+    if not flags_map:
+        console.print("[yellow]No changes made.[/yellow]")
+        return
+
+    _apply_annotations(raw_dir, proj, flags_map, field="flags")
+
+
+def _apply_annotations(raw_dir: Path, proj: Path, annotation_map: dict, field: str) -> None:
+    """Apply annotations (remarks or flags) to files — rename raw + symlink, update protocol.yaml.
+
+    1. Parse each old filename
+    2. Update the target field in parsed parts
+    3. Build new filename via build_filename()
+    4. Rename raw file: os.rename(old_path, new_path)
+    5. Find and rename symlink in protocol steps
+    6. Update protocol.yaml files[] entries + symlink entries
+    """
+    import os
+    import yaml
+
+    from science_cli.core.paths import ProjectPaths
+    paths = ProjectPaths(proj)
+
+    for old_name, annotation_value in annotation_map.items():
+        old_path = raw_dir / old_name
+        if not old_path.exists():
+            console.print(f"  [yellow]File not found: {old_name}[/yellow]")
+            continue
+
+        parsed = parse_filename(old_name)
+        if not parsed:
+            console.print(f"  [yellow]Cannot parse filename: {old_name}. Skipping.[/yellow]")
+            continue
+
+        # Update the target field
+        parsed[field] = annotation_value
+
+        new_name = build_filename(parsed)
+        if new_name == old_name:
+            console.print(f"  [dim]No change: {old_name}[/dim]")
+            continue
+
+        new_path = raw_dir / new_name
+
+        # Rename raw file
+        os.rename(str(old_path), str(new_path))
+        console.print(f"  [green]Renamed:[/green] {old_name} \u2192 {new_name}")
+
+        # Rename symlinks in protocol steps + update protocol.yaml
+        for py in paths.list_protocol_yamls():
+            pname = py.stem
+            with open(py) as f:
+                proto_data = yaml.safe_load(f) or {}
+            changed = False
+            for s in proto_data.get("steps", []):
+                step_dir = paths.step_dir(pname, s["name"])
+                link_path = step_dir / old_name
+                new_link_path = step_dir / new_name
+
+                # Rename symlink
+                if link_path.exists() or link_path.is_symlink():
+                    if new_link_path.exists():
+                        new_link_path.unlink()
+                    os.rename(str(link_path), str(new_link_path))
+
+                # Update files list in YAML
+                for i, entry in enumerate(s.get("files", [])):
+                    fname = entry["file"] if isinstance(entry, dict) else entry
+                    if fname == old_name:
+                        if isinstance(s["files"][i], dict):
+                            s["files"][i]["file"] = new_name
+                        else:
+                            s["files"][i] = new_name
+                        changed = True
+
+                # Update symlinks list if present
+                for i, entry in enumerate(s.get("symlinks", [])):
+                    if isinstance(entry, dict) and entry.get("file") == old_name:
+                        entry["file"] = new_name
+                        changed = True
+
+            if changed:
+                with open(py, "w") as f:
+                    yaml.dump(proto_data, f, default_flow_style=False, sort_keys=False)
+                console.print(f"  [dim]Updated: {py.name}[/dim]")
+
+    n = len(annotation_map)
+    console.print(f"[bold green]\u2713[/bold green] Updated {n} file(s) with {field}")

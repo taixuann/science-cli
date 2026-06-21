@@ -75,12 +75,27 @@ def analyze_stp_decay(time, current):
         k2 = 5
         aic2 = n2 * np.log(ss_res2 / n2) + 2 * k2 if ss_res2 > 0 else float("inf")
     except Exception:
+        tau_a1b = 0
         tau1b = None
+        tau_a2b = 0
         tau2b = None
+        a0_b = steady_state
         aic2 = float("inf")
         ss_res2 = float("inf")
     
     # Model selection
+    if aic1 == float("inf") and aic2 == float("inf"):
+        # Both fits failed
+        return {
+            "error": "Both monoexponential and biexponential fits failed",
+            "model": "none",
+            "tau1_ms": None, "tau2_ms": None,
+            "a1": None, "a2": None,
+            "initial_current_ua": initial_current * 1e6,
+            "steady_state_current_ua": np.nan,
+            "r_squared": 0.0,
+            "decay_pct": float((1 - steady_state / initial_current) * 100) if initial_current > 0 else 0,
+        }
     if aic1 < aic2:
         model = "monoexponential"
         r_squared = 1 - ss_res1 / np.sum((i_norm - np.mean(i_norm)) ** 2) if ss_res1 != float("inf") else 0

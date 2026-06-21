@@ -166,26 +166,6 @@ def _init_dedicated_plotters():
     Called lazily — imports happen inside this function to avoid circular deps."""
     from science_cli.plot.afm import _plot_afm_single
     from science_cli.plot.eis import _overlay_eis, _plot_eis_single
-    from science_cli.plot.pulse_endurance import (
-        _overlay_endurance_nonvolatile,
-        _overlay_endurance_volatile,
-        _plot_endurance,
-        _plot_endurance_nonvolatile,
-        _plot_endurance_volatile,
-    )
-
-    # Pulse endurance — pre-processed CSV, dual-panel, device variants
-    STUDY_PLOTTERS["pulse:pulse-endurance"].plot_fn = _plot_endurance
-    STUDY_PLOTTERS["pulse:pulse-endurance"].device_variants = {
-        "volatile-memristor": DevicePlotterVariant(
-            plot_fn=_plot_endurance_volatile,
-            overlay_fn=_overlay_endurance_volatile,
-        ),
-        "non-volatile-memristor": DevicePlotterVariant(
-            plot_fn=_plot_endurance_nonvolatile,
-            overlay_fn=_overlay_endurance_nonvolatile,
-        ),
-    }
     # EIS — dual-panel Nyquist + Bode
     STUDY_PLOTTERS["ec:ec-eis"].plot_fn = _plot_eis_single
     STUDY_PLOTTERS["ec:ec-eis"].overlay_fn = _overlay_eis

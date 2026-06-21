@@ -1,7 +1,8 @@
 """Config-driven interactive menu + routing.
 
-Reads menu options from config-studies.yaml, renders a Rich menu,
-and dynamically imports/calls the selected handler.
+Reads menu options from config-studies.yaml, renders an arrow-key
+scrollable questionary menu, and dynamically imports/calls the
+selected handler.
 """
 
 from importlib import import_module
@@ -9,29 +10,29 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.console import Console
-from rich.prompt import Prompt
-
-console = Console()
 
 
 def show_menu(title: str, options: list[dict], default: int = 1) -> int:
-    """Show a numbered Rich menu and return the user's 1-based choice."""
-    console.print(f"\n[bold cyan]{title}[/bold cyan]")
-    console.print("─" * 50)
+    """Show an arrow-key scrollable menu and return the user's 1-based choice."""
+    import questionary
+
+    choices = []
     for i, opt in enumerate(options, 1):
-        marker = "▸" if i == default else " "
-        console.print(f"  {marker} [bold]{i}[/bold]) {opt['name']}")
+        label = opt["name"]
         desc = opt.get("description", "")
         if desc:
-            console.print(f"      {desc}")
-    console.print()
-    choice = Prompt.ask(
-        "Enter choice",
-        choices=[str(i) for i in range(1, len(options) + 1)],
-        default=str(default),
-    )
-    return int(choice)
+            label += f" — {desc}"
+        choices.append(questionary.Choice(title=label, value=i))
+
+    result = questionary.select(
+        title,
+        choices=choices,
+        default=choices[default - 1] if default - 1 < len(choices) else choices[0],
+    ).ask()
+
+    if result is None:
+        return default  # Ctrl+C → fall back to default
+    return result
 
 
 def _get_config_path() -> Path:
@@ -108,12 +109,22 @@ def dispatch(
     choice = show_menu(menu["menu_title"], menu["options"])
     selected = menu["options"][choice - 1]
 
-    # Dynamic import: "science_cli.plot.pulse_endurance.plot_resistance"
+    # Dynamic import from handler path (e.g. "science_cli.plot.generic.plot_endurance_resistance")
     handler_path = selected["handler"]
     module_path, func_name = handler_path.rsplit(".", 1)
     module = import_module(module_path)
     handler = getattr(module, func_name)
 
-    for fp in file_paths:
-        kwargs["file_path"] = fp
+    # Pass optional scale from menu option config (e.g. "linear" or "log")
+    scale = selected.get("scale")
+    if scale:
+        kwargs["scale"] = scale
+
+    # Check for overlay/batch mode: pass all files at once
+    if selected.get("overlay"):
+        kwargs["file_paths"] = file_paths
         handler(**kwargs)
+    else:
+        for fp in file_paths:
+            kwargs["file_path"] = fp
+            handler(**kwargs)

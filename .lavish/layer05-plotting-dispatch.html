@@ -121,7 +121,7 @@
   <header style="position:sticky;top:0;z-index:50;background:#171a21;border-bottom:1px solid #2a2f3a;padding:0.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between">
     <div style="display:flex;align-items:center;gap:1rem">
       <h1 style="font-size:1.125rem;font-weight:750;letter-spacing:.02em">science-cli · Artifact Registry</h1>
-      <span style="font-size:0.875rem;color:#8c96aa">v3.21.0</span>
+      <span style="font-size:0.875rem;color:#8c96aa">v3.24.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:0.75rem">
       <span style="font-size:0.75rem;color:#8c96aa">7 layers · 29 artifacts</span>
@@ -178,22 +178,22 @@
           <div style="display:flex;align-items:center;gap:0.5rem">
             <span class="badge-star" style="font-size:1.125rem">★</span>
             <span style="color:#8c96aa">Highlight</span>
-            <span style="margin-left:auto;color:#8c96aa">4</span>
+            <span style="margin-left:auto;color:#8c96aa">3</span>
           </div>
           <div style="display:flex;align-items:center;gap:0.5rem">
             <span class="badge-keep" style="font-size:1.125rem">✓</span>
             <span style="color:#8c96aa">Keep</span>
-            <span style="margin-left:auto;color:#8c96aa">12</span>
+            <span style="margin-left:auto;color:#8c96aa">14</span>
           </div>
           <div style="display:flex;align-items:center;gap:0.5rem">
             <span class="badge-discard" style="font-size:1.125rem">✗</span>
             <span style="color:#8c96aa">Discard</span>
-            <span style="margin-left:auto;color:#8c96aa">0</span>
+            <span style="margin-left:auto;color:#8c96aa">1</span>
           </div>
           <div style="display:flex;align-items:center;gap:0.5rem">
             <span style="color:#f4c95d;font-size:1.125rem">🔄</span>
-            <span style="color:#8c96aa">Planning</span>
-            <span style="margin-left:auto;color:#8c96aa">1</span>
+            <span style="color:#8c96aa">In Progress</span>
+            <span style="margin-left:auto;color:#8c96aa">0</span>
           </div>
         </div>
       </div>
@@ -202,13 +202,13 @@
       <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2a2f3a">
         <h3 style="font-size:0.75rem;color:#8c96aa;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem;font-weight:600">Layer 5 Stats</h3>
         <div style="display:flex;flex-direction:column;gap:0.25rem;font-size:0.75rem;color:#8c96aa">
-          <div style="display:flex;justify-content:space-between"><span>Code files</span><span style="color:#aeb6c6">5</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Code files</span><span style="color:#aeb6c6">6</span></div>
           <div style="display:flex;justify-content:space-between"><span>Theme files</span><span style="color:#aeb6c6">2</span></div>
           <div style="display:flex;justify-content:space-between"><span>Plan artifacts</span><span style="color:#aeb6c6">8</span></div>
           <div style="display:flex;justify-content:space-between"><span>Deferred items</span><span style="color:#f06464">2</span></div>
           <div style="display:flex;justify-content:space-between;margin-top:0.25rem;padding-top:0.25rem;border-top:1px solid #2a2f3a">
             <span>Total LOC</span>
-            <span style="color:#c99ee3;font-weight:600">~1,342</span>
+            <span style="color:#c99ee3;font-weight:600">~1,614</span>
           </div>
         </div>
       </div>
@@ -253,9 +253,9 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
           <button class="section-toggle" onclick="toggleSection('section-A')" style="display:flex;align-items:center;gap:0.5rem">
             <span class="expand-arrow" style="font-size:0.75rem">▶</span>
-            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">A. Code Files (14 plot/*.py)</h3>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">A. Code Files (6 plot/*.py, 1 deleted)</h3>
           </button>
-          <span style="font-size:0.75rem;color:#8c96aa">14 artifacts · ~2,756 LOC</span>
+          <span style="font-size:0.75rem;color:#8c96aa">13 artifacts · ~1,614 LOC</span>
         </div>
         <div class="section-body">
           <div class="artifact-grid">
@@ -327,33 +327,99 @@
               </div>
             </button>
 
-            <!-- pulse_endurance.py — star, special -->
+            <!-- pulse_endurance.py — DELETED, ✗ discard -->
             <button class="card-btn" onclick="toggleCard(this)">
               <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
                 <div>
-                  <span class="badge-star" style="font-size:1.25rem">★</span>
+                  <span class="badge-discard" style="font-size:1.25rem">✗</span>
                   <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">pulse_endurance.py</span>
                   <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/pulse_endurance.py</span>
                 </div>
+                <span class="layer-tag layer-deferred">deleted</span>
               </div>
-              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">★ Pre-processed CSV support. Endurance cycling plots (LRS/HRS/ratio vs cycle). Two variants: volatile (R_decay) and non-volatile (R_high + R_low).</p>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0"><span style="color:#f06464">✗ DELETED in v3.22.2.</span> 3 endurance plot functions moved to <code style="color:#8fe39e">plot/generic.py</code>: <code>plot_endurance_resistance</code>, <code>plot_endurance_current</code>, <code>plot_endurance_both</code>. Was 77 lines of thin wrappers — all routing through <code>_plot_generic()</code> now.</p>
               <div class="size-bar" style="margin-bottom:0.5rem">
-                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">16.2 KB</span>
-                <div class="size-bar-inner"><div class="size-bar-fill gold" style="width:75%"></div></div>
-                <span style="font-size:0.7rem;color:#8c96aa">~450L</span>
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">deleted</span>
+                <div class="size-bar-inner"><div class="size-bar-fill" style="width:0%;background:#f06464"></div></div>
+                <span style="font-size:0.7rem;color:#f06464">-77L</span>
               </div>
               <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
-                <span>v3.20.0 DevicePlotterVariant</span><span>·</span><span>largest plot file</span>
+                <span>v3.22.2 removed</span><span>·</span><span>superseded by generic.py</span>
               </div>
               <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
                 <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
-                  <div style="color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Why Pre-Processed CSV</div>
-                  <div style="color:#aeb6c6">Keysight WGFMU endurance files contain per-pulse raw data. The parser (Layer 3) extracts LRS/HRS per cycle into a simplified CSV that this plotter reads directly — no raw file iteration needed.</div>
+                  <div style="color:#8c96aa;font-weight:600;margin-bottom:0.25rem">History</div>
+                  <div class="timeline" style="padding-left:1rem;border-left:2px solid #30363d;margin:0.5rem 0">
+                    <div class="tl-item" style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.35rem;font-size:0.75rem;position:relative">
+                      <span class="version-dot" style="margin-top:0.25rem;background:#f06464;border-color:#0f1115"></span>
+                      <span style="color:#f06464;font-weight:500">v3.22.2</span>
+                      <span style="color:#aeb6c6">DELETED — functions moved to generic.py</span>
+                    </div>
+                    <div class="tl-item" style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.35rem;font-size:0.75rem;position:relative">
+                      <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                      <span style="color:#8c96aa;font-weight:500">v3.18.0</span>
+                      <span style="color:#aeb6c6">Rewritten with device-type dispatch</span>
+                    </div>
+                    <div class="tl-item" style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.75rem;position:relative">
+                      <span class="version-dot version-dot-old" style="margin-top:0.25rem"></span>
+                      <span style="color:#8c96aa;font-weight:500">v3.12.0</span>
+                      <span style="color:#aeb6c6">Created as dedicated plot file</span>
+                    </div>
+                  </div>
                   <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
-                    <span class="dep-pill dep-green">fixed by: 190626f_fix-endurance-plot.md</span>
-                    <span class="dep-pill dep-blue">dep: core/plot_config.py</span>
+                    <span class="dep-pill dep-red">deleted v3.22.2</span>
+                    <span class="dep-pill dep-gold">superseded by: generic.py</span>
                   </div>
                 </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand history</span>
+              </div>
+            </button>
+
+            <!-- generic.py — new, now handles endurance -->
+            <button class="card-btn" onclick="toggleCard(this)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.5rem">
+                <div>
+                  <span class="badge-keep" style="font-size:1.25rem">✓</span>
+                  <span style="font-size:0.875rem;font-weight:600;margin-left:0.25rem">generic.py</span>
+                  <span style="font-size:0.75rem;color:#8c96aa;margin-left:0.5rem">plot/generic.py</span>
+                </div>
+                <span class="layer-tag layer-feature">generic</span>
+              </div>
+              <p style="font-size:0.75rem;color:#aeb6c6;margin:0 0 0.5rem 0">
+                ✓ Config-driven generic plot executor. Contains <code style="color:#c99ee3">_plot_generic()</code> — reads layout, columns, axis scale, and styling from <code>config-studies.yaml</code> via <code>resolve_plot_config()</code>.
+                <strong>v3.22.2:</strong> Now handles pulse-endurance plots via 3 public functions:
+                <code>plot_endurance_resistance</code>, <code>plot_endurance_current</code>, <code>plot_endurance_both</code> — each calls <code>_plot_generic()</code> with the right <code>plot_variant</code> and <code>study_name="pulse:pulse-endurance"</code>.
+                Also handles NaN-break insertion for multi-cycle WGFMU STP files (v3.22.1).
+              </p>
+              <div class="size-bar" style="margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;color:#8c96aa;width:3rem">22.2 KB</span>
+                <div class="size-bar-inner"><div class="size-bar-fill" style="width:85%"></div></div>
+                <span style="font-size:0.7rem;color:#8c96aa">~621L</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:#8c96aa">
+                <span>v3.22.2 endurance dispatch</span><span>·</span><span>largest plot file</span>
+              </div>
+              <div class="collapsed-content" style="margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid #2a2f3a">
+                <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.75rem">
+                  <div style="color:#8c96aa;font-weight:600;margin-bottom:0.25rem">Public API</div>
+                  <div style="color:#aeb6c6">
+                    <code>plot_endurance_resistance(df, flags, project_root, step_name, study) → fig</code><br>
+                    <code>plot_endurance_current(df, flags, project_root, step_name, study) → fig</code><br>
+                    <code>plot_endurance_both(df, flags, project_root, step_name, study) → fig</code><br>
+                    <code>_plot_generic(df, flags, project_root, step_name, study, plot_variant) → fig</code>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem">
+                    <span class="dep-pill dep-gold">supersedes: pulse_endurance.py (deleted)</span>
+                    <span class="dep-pill dep-blue">dep: config-studies.yaml (plot: blocks)</span>
+                    <span class="dep-pill dep-blue">dep: core/plot_config.py resolve_plot_config()</span>
+                    <span class="dep-pill dep-purple">feeds: registry.py STUDY_PLOTTERS</span>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:0.5rem;font-size:0.7rem;color:#4a4f5a;display:flex;align-items:center;gap:0.25rem">
+                <span>▸ click to expand public API</span>
               </div>
             </button>
 
@@ -634,8 +700,8 @@
             <div class="feature-item">
               <span style="font-size:1.125rem;flex-shrink:0">✅</span>
               <div>
-                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">ALL 12 plot files migrated to config lookups</div>
-                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Every per-study plot file now calls <code>resolve_plot_config()</code> instead of inline hardcoded values.</p>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">ALL plot files migrated to config lookups</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">Every plot file calls <code>resolve_plot_config()</code> instead of inline hardcoded values. 9 study-specific files consolidated into <code>generic.py</code>; 6 plot files remain.</p>
               </div>
             </div>
             <div class="feature-item">
@@ -675,10 +741,10 @@
               </div>
             </div>
             <div class="gap-card">
-              <span style="font-size:1rem;flex-shrink:0;color:#f06464">❌</span>
+              <span style="font-size:1rem;flex-shrink:0;color:#72c96e;opacity:0.6">✅</span>
               <div>
-                <div style="font-size:0.875rem;font-weight:500;color:#f06464">Per-study plot file consolidation</div>
-                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">9 near-identical per-study files (iv.py, cv.py, ca.py, raman.py, uv_vis.py, stp.py, ppf.py, pulse_retention.py, overlays.py) with 60-80% duplicated boilerplate. Consolidation deferred to Phase 4.</p>
+                <div style="font-size:0.875rem;font-weight:500;color:#8fe39e">Per-study plot file consolidation (PARTIAL — v3.22.0–v3.22.2)</div>
+                <p style="font-size:0.75rem;color:#aeb6c6;margin:0.125rem 0 0 0">9 old per-study files (stp.py, iv.py, cv.py, ca.py, raman.py, uv_vis.py, ppf.py, pulse_retention.py, overlays.py) removed in v3.22.0. <code>pulse_endurance.py</code> removed in v3.22.2 — endurance dispatch moved to <code>generic.py</code>. Remaining: generic.py, registry.py, base.py, eis.py, afm.py (5 core + README.md + __init__.py = 6 plot/*.py files). LOC reduced from ~2,756 to ~1,614.</p>
               </div>
             </div>
           </div>
@@ -984,6 +1050,48 @@
                 <div><span style="color:#c99ee3">plot/*.py</span> &rarr; matplotlib figure &rarr; <span style="color:#8fe39e">saved to results/</span></div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section H: Registered Work (Planned) -->
+      <section style="margin-bottom:2rem" id="section-H">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <button class="section-toggle" onclick="toggleSection('section-H')" style="display:flex;align-items:center;gap:0.5rem">
+            <span class="expand-arrow" style="font-size:0.75rem">▶</span>
+            <h3 style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin:0;color:#d8deea">H. Registered Work (Planned)</h3>
+          </button>
+          <span style="font-size:0.75rem;color:#8c96aa">1 work item · ✓ done</span>
+        </div>
+        <div class="section-body">
+          <div style="background:#11141a;border:1px solid #303745;border-radius:12px;padding:1rem">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.8rem">
+
+              <!-- Scale blocks (common/linear/log) + per-series type + protocol overrides -->
+              <div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem;background:#0f1115;border-radius:8px;border:1px solid #2a2f3a">
+                <span style="color:#3fb950;font-size:1.25rem">✓</span>
+                <div style="flex:1">
+                  <div style="font-weight:600;color:#d8deea;font-size:0.875rem">Scale blocks (common/linear/log) + per-series type + protocol overrides</div>
+                  <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem">
+                    <span class="dep-pill" style="font-size:0.65rem;background:#241a2e;color:#c99ee3">plot: generic.py</span>
+                    <span class="dep-pill" style="font-size:0.65rem;background:#1c1f2e;color:#8ca4e3">config: plot_config.py</span>
+                    <span class="dep-pill" style="font-size:0.65rem;background:#172419;color:#8fe39e">menu: interactive_menu.py</span>
+                    <span class="dep-pill" style="font-size:0.65rem;background:#2a1a1a;color:#e38c8c">pulse_endurance.py deleted</span>
+                  </div>
+                </div>
+                <div style="text-align:right;font-size:0.7rem;color:#8c96aa;white-space:nowrap">
+                  <div>v3.22.0</div>
+                  <span class="badge-keep" style="font-size:1.125rem">✓</span>
+                  <div class="assignee assignee-docs" style="display:inline-block;margin-top:0.25rem">docs</div>
+                </div>
+              </div>
+
+            </div>
+            <p style="font-size:0.7rem;color:#484f58;margin-top:0.75rem">
+              🔄 = in progress · 🚫 = blocked · — = not started · ✓ = done · ★ = highlight · ✗ = discard
+              <br>
+              Artifact: <a href="artifacts/210626-generic-plot-config-scale.md" style="color:#58a6ff">210626-generic-plot-config-scale.md</a>
+            </p>
           </div>
         </div>
       </section>

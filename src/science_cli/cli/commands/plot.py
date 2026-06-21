@@ -21,6 +21,11 @@ def _parse_flags(args: list) -> tuple:
         a = args[i]
         if is_flag(a):
             key = a.lstrip("-")
+            # Normalize --linear / --log
+            if key in ("linear", "log"):
+                flags["scale"] = key
+                i += 1
+                continue
             if i + 1 < len(args) and not is_flag(args[i + 1]):
                 i += 1
                 tokens = []

@@ -138,6 +138,37 @@ for (_study, _device), _cols in STUDY_COLUMN_REGISTRY.items():
         _STUDY_BY_NAME[_study] = _cols
 
 
+def flag_badge_for_file(filename: str) -> str:
+    """Return a single-char flag badge parsed from the filename.
+    
+    Reads the ``flags`` field from the universal grammar pattern and maps
+    to a symbol::
+        important    → ★ (star)
+        valid        → ✓ (check)
+        invalid      → ✗ (cross)
+        discard      → 🗑 (trash)
+        questionable → ? (question)
+    
+    Returns:
+        Single-char badge string, or empty string if no flags or unrecognized.
+    """
+    from science_cli.core.grammar import parse_filename
+    parsed = parse_filename(filename)
+    if not parsed:
+        return ""
+    flags = parsed.get("flags", "")
+    if not flags:
+        return ""
+    _FLAG_BADGE_MAP = {
+        "important": "★",
+        "valid": "✓",
+        "invalid": "✗",
+        "discard": "🗑",
+        "questionable": "?",
+    }
+    return _FLAG_BADGE_MAP.get(flags.lower(), "")
+
+
 def status_badge_for_file(
     file_key: str, status_dict: dict | None
 ) -> str:

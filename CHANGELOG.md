@@ -5,6 +5,85 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.24.0] — 2026-06-21
+
+### Added
+- Pulse endurance analyzer functions (`ratio_vs_cycles`, `i_ratio_vs_cycles`, `ratio_histogram`, `current_ratio_histogram`) in `library/pulse/pulse_endurance.py`
+- `_save_analysis_plot()` — analysis output with `{kind}_{full-csv-stem}.pdf` naming convention
+- Log-normal PDF fit overlay on ratio histograms (black dashed line)
+- Batch analyze flow (`analyze --all`) — one interactive menu per unique study, not per file
+- Questionary-based scrollable arrow-key menu for analyze selections
+- Generic describe panel: waveform pattern for stp-decay, metadata labels for other studies, header fallback
+- Results directory resolution for `data/raw` files (scans protocol YAMLs when file is outside protocol path)
+
+### Changed
+- `pulse-endurance.py` (hyphen) removed → `pulse_endurance.py` (underscore) is canonical module
+- Histogram bar color: `#8B0000` (dark red) → `#2EA043` (green)
+- Y-axis scale on histograms: log → linear (auto ticks with 1, 10, 100, 1000)
+- Legend position on histograms: auto → `upper left` to avoid overlap
+- `.mean()`/`.median()`/`.std()` methods → `np.mean()`/`np.median()`/`np.std()` (avoids ndarray attribute bug)
+- Interactive menu: Rich numbered prompt → `questionary.select()` arrow-key scrollable menu
+- `describe:` config block removed — describe panel is now fully generic
+- `_show_endurance_voltages()` removed — replaced by generic describe flow
+
+### Fixed
+- `_save_and_close()` renamed to `_save_analysis_plot()` (was referenced by old name)
+- `dispatch()` kwarg name: `file_path=` → `file_paths=` (match signature)
+- Save path for `data/raw` files: protocol step results dir now correctly resolved
+- `analyze --all` no longer double-dispatches (files from menu_dispatch skip _analyze_direct)
+
+## [3.23.0] — 2026-06-21
+
+### Added
+- Scale blocks for plot config: `common`/`linear`/`log` sub-blocks with per-scale styling (colors, markers, annotations, axes)
+- Per-series `type: line|scatter` in config-studies.yaml plot config
+- `--linear`/`--log` CLI flags for `sci plot` commands
+- Interactive menu `scale:` field — menu options pre-configure linear/log scale
+- Protocol.yaml step-level plot overrides (xlim, ylim, etc.) via `metadata.plot_overrides`
+- Pulse endurance analyzer: 4 new `sci analyze --study pulse:pulse-endurance` options (ratio vs cycles, current ratio vs cycles, ratio histogram, current ratio histogram)
+- `sci add -m remarks [--all]` mode — assign human-readable remarks to data files via bracket-delimited `{remarks}` in filename
+- `sci add -m flags [--all]` mode — assign flags (important/valid/invalid/discard/questionable) via bracket-delimited `[flags]` in filename
+- `build_filename()` in grammar.py — reconstruct filenames from parsed parts
+- `flag_badge_for_file()` in fzf/columns.py — visual flag badge parsing
+- `study_has_scale_blocks()` helper for checking study plot config
+
+### Changed
+- `resolve_plot_config()` now accepts `scale` parameter for scale-block merging
+- Generic plot executor (`_plot_single()`, `_plot_multi_series()`) respects per-series `type` field
+- Filename grammar: remarks use `{...}` brackets, flags use `[...]` brackets (prevents ambiguity with underscores)
+- `build_fzf_display()` column header changed from `Flags` to `[Flags]` and `Remarks` to `{Remarks}`
+- Interactive menu dispatch passes `option["scale"]` to handler kwargs
+- Endurance plot wrappers accept `scale` kwarg and pass through to `_plot_generic`
+- Removed subsampling from pulse-endurance plot config (plots all data points)
+- Removed `_subsample_log_spaced()` function (dead code)
+- Moved ratio histogram functions from `library/pulse/endurance.py` to `library/pulse/pulse-endurance.py`
+- Endurance wrapper dispatch updated (removed DevicePlotterVariant)
+
+### Fixed
+- `analyze --all` now properly dispatches through interactive_menu.dispatch() instead of legacy technique detection
+- `import questionary` scope bug in `add.py` (moved to top of function)
+- Right-to-left filename parsing: bracket delimiters prevent remarks/flags from colliding with study names
+- File recovery for overwritten raw CSV during flag rename bug
+
+### Removed
+- `_subsample_log_spaced()` function
+- Subsample config from pulse-endurance plot block
+- `ratio_histogram()` and `current_ratio_histogram()` from library/pulse/endurance.py (moved to pulse-endurance.py)
+
+## [3.22.2] - 2026-06-21
+
+### Changed
+- **`pulse_endurance.py` removed** — 3 endurance plot functions moved to `plot/generic.py`:
+  `plot_endurance_resistance`, `plot_endurance_current`, `plot_endurance_both`
+  — each calls `_plot_generic()` with the correct `plot_variant` and `study_name="pulse:pulse-endurance"`
+- Handler paths in `config/config-studies.yaml` updated from `science_cli.plot.pulse_endurance.*` to `science_cli.plot.generic.*`
+
+### Removed
+- `plot/pulse_endurance.py` (was 77 lines of thin wrappers — all routing through generic.py now)
+
+### Fixed
+- Stale comment in `core/interactive_menu.py` cleaned
+
 ## [3.22.1] - 2026-06-21
 
 ### Fixed

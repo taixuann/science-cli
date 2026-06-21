@@ -11,20 +11,20 @@ studies:
     iv-bipolar-sweep:
       label: "Bipolar IV Sweep 0\u2192+V\u2192-V\u21920"
       patterns:
-      - iv-sweep
-      - _IV
-      - iv-bipolar
-      - sweep_
+        - iv-sweep
+        - _IV
+        - iv-bipolar
+        - sweep_
       legacy_codes:
-      - iv
-      - iv-sweep
-      - iv_dc
+        - iv
+        - iv-sweep
+        - iv_dc
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - voltage_v
-        - current_a
+          - time_s
+          - voltage_v
+          - current_a
       instruments:
         keithley-2400:
           header_lines: 23
@@ -45,7 +45,7 @@ studies:
           column_mapping:
             x: voltage
             y: current
-          current_sign: -1  # Keysight outputs negative current for bipolar switching
+          current_sign: -1 # Keysight outputs negative current for bipolar switching
           metadata:
             set_voltage:
               method: parse
@@ -67,12 +67,12 @@ studies:
               method: analyze
               function: analyze_iv_compliance
               inputs:
-              - voltage
-              - current
+                - voltage
+                - current
               outputs:
-              - in_compliance
-              - compliance_current
-              - compliance_voltage
+                - in_compliance
+                - compliance_current
+                - compliance_voltage
               description: Compliance detection from IV data
       plot:
         layout: single
@@ -82,23 +82,23 @@ studies:
         axis:
           xlabel: "Voltage (V)"
           ylabel: "Current (A)"
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
     iv-breakdown:
       label: "Breakdown \u2014 ramped voltage to breakdown"
       patterns:
-      - breakdown
-      - _bd
-      - _Vbd
-      - bd_
+        - breakdown
+        - _bd
+        - _Vbd
+        - bd_
       legacy_codes:
-      - bd
-      - breakdown
+        - bd
+        - breakdown
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - voltage_v
-        - current_a
+          - time_s
+          - voltage_v
+          - current_a
       instruments: {}
       plot:
         layout: single
@@ -108,22 +108,22 @@ studies:
         axis:
           xlabel: "Voltage (V)"
           ylabel: "Current (A)"
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
     iv-leakage:
       label: "Leakage \u2014 low-bias leakage current"
       patterns:
-      - leakage
-      - _leak
-      - leak_
+        - leakage
+        - _leak
+        - leak_
       legacy_codes:
-      - leak
-      - leakage
+        - leak
+        - leakage
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - voltage_v
-        - current_a
+          - time_s
+          - voltage_v
+          - current_a
       instruments: {}
       plot:
         layout: single
@@ -133,7 +133,7 @@ studies:
         axis:
           xlabel: "Voltage (V)"
           ylabel: "Current (A)"
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
         figure: {}
         axes:
           yscale: log
@@ -142,35 +142,35 @@ studies:
     pulse-stp-decay:
       label: "STP Decay \u2014 set pulse + current decay read"
       patterns:
-      - stp
-      - _STP
-      - stp_decay
-      - short-term
+        - stp
+        - _STP
+        - stp_decay
+        - short-term
       legacy_codes:
-      - stp
-      - pulse-stp
-      - short-term-plasticity
+        - stp
+        - pulse-stp
+        - short-term-plasticity
       data_shape:
         kind: waveform_2d
         columns:
-        - time_s
-        - voltage_v
+          - time_s
+          - voltage_v
         units:
-        - s
-        - V
+          - s
+          - V
       derived_metadata:
-      - v_set_v
-      - v_read_v
-      - set_width_us
-      - read_width_us
-      - rise_us
-      - fall_us
-      - repeat_pattern
+        - v_set_v
+        - v_read_v
+        - set_width_us
+        - read_width_us
+        - rise_us
+        - fall_us
+        - repeat_pattern
       device_overrides:
         volatile-memristor:
           add:
-          - decay_tau_ms
-          - r_read_ohm
+            - decay_tau_ms
+            - r_read_ohm
       instruments:
         keysight-b1500a:
           header_lines: 147
@@ -181,7 +181,7 @@ studies:
           column_mapping:
             x: time
             y: current
-          current_sign: -1  # Keysight outputs negative current for bipolar switching
+          current_sign: -1 # Keysight outputs negative current for bipolar switching
           metadata:
             compliance:
               method: parse
@@ -195,13 +195,13 @@ studies:
               method: analyze
               function: analyze_waveform_params
               inputs:
-              - waveform_time
-              - waveform_voltage
+                - waveform_time
+                - waveform_voltage
               outputs:
-              - rise_us
-              - fall_us
-              - set_width_us
-              - read_width_us
+                - rise_us
+                - fall_us
+                - set_width_us
+                - read_width_us
               description: Extracted pulse parameters from waveform definition
       plot:
         layout: dual_axis
@@ -213,12 +213,12 @@ studies:
           xlabel: "Time (µs)"
           ylabel: "Current (A)"
           ylabel2: "Voltage (V)"
-          ycolor: "#CC0000"     # match current series color
-          y2color: "#0055CC"    # match voltage series color
+          ycolor: "#CC0000" # match current series color
+          y2color: "#0055CC" # match voltage series color
         filter:
           field: voltage
           min: 0.05
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
         series:
           current:
             color: "#CC0000"
@@ -228,33 +228,44 @@ studies:
             color: "#0055CC"
             linewidth: 1.0
             label: "V(t)"
+      interactive:
+        analyze:
+          menu_title: "Select analysis for STP decay:"
+          options:
+            - name: "Extract decay — fit segments, plot overview"
+              handler: "science_cli.library.pulse.pulse_stp_decay.analyze_all"
+              description: "Segment-aware: detect segments, fit each, overview plot, metadata"
+            - name: "Overlay decay curves"
+              handler: "science_cli.library.pulse.pulse_stp_decay.analyze_overlay"
+              description: "Compare: plot fit curves of extracted-decay files"
+              overlay: true
 
     pulse-ppf:
       label: "Paired-Pulse Facilitation"
       patterns:
-      - ppf
-      - _PPF
-      - paired-pulse
+        - ppf
+        - _PPF
+        - paired-pulse
       legacy_codes:
-      - ppf
-      - pulse-ppf
-      - paired-pulse
+        - ppf
+        - pulse-ppf
+        - paired-pulse
       data_shape:
         kind: waveform_2d
         columns:
-        - time_s
-        - voltage_v
+          - time_s
+          - voltage_v
         units:
-        - s
-        - V
+          - s
+          - V
       derived_metadata:
-      - v_set_v
-      - v_read_v
-      - set_width_us
-      - read_width_us
-      - rise_us
-      - fall_us
-      - repeat_pattern
+        - v_set_v
+        - v_read_v
+        - set_width_us
+        - read_width_us
+        - rise_us
+        - fall_us
+        - repeat_pattern
       instruments:
         keysight-b1500a:
           header_lines: 147
@@ -265,7 +276,7 @@ studies:
           column_mapping:
             x: time
             y: current
-          current_sign: -1  # Keysight outputs negative current for bipolar switching
+          current_sign: -1 # Keysight outputs negative current for bipolar switching
       plot:
         layout: single
         columns:
@@ -274,37 +285,43 @@ studies:
         axis:
           xlabel: "Time (µs)"
           ylabel: "Current (A)"
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
 
     pulse-endurance:
       label: Pulse Endurance Cycling
       patterns:
-      - endurance
-      - _endurance
-      - endurance_
+        - endurance
+        - _endurance
+        - endurance_
       legacy_codes:
-      - endurance
-      - pulse-endurance
+        - endurance
+        - pulse-endurance
       data_shape:
         kind: waveform_2d
         columns:
-        - time_s
-        - voltage_v
+          - time_s
+          - voltage_v
         units:
-        - s
-        - V
+          - s
+          - V
       derived_metadata:
-      - v_set_v
-      - v_read_v
-      - set_width_us
-      - read_width_us
-      - rise_us
-      - fall_us
-      - repeat_pattern
+        - v_set_v
+        - v_read_v
+        - set_width_us
+        - read_width_us
+        - rise_us
+        - fall_us
+        - repeat_pattern
+      required_fields:
+        - cycle
+        - r_hrs_ohm
+        - r_lrs_ohm
+        - i_hrs_A
+        - i_lrs_A
       device_overrides:
         volatile-memristor:
           add:
-          - r_decay_ohm
+            - r_decay_ohm
           plot:
             series:
               hrs:
@@ -312,8 +329,8 @@ studies:
                 label: "R_decay"
         non-volatile-memristor:
           add:
-          - r_high_ohm
-          - r_low_ohm
+            - r_high_ohm
+            - r_low_ohm
       instruments:
         keysight-b1500a:
           header_lines: 147
@@ -324,108 +341,166 @@ studies:
           column_mapping:
             x: time
             y: current
-          current_sign: -1  # Keysight outputs negative current for bipolar switching
+          current_sign: -1 # Keysight outputs negative current for bipolar switching
       plot:
-        layout: single
-        columns:
-          x: cycle
-          y_hrs: r_hrs_ohm
-          y_lrs: r_lrs_ohm
-          y_ratio: ratio
-        figure:
-          figsize: [3.46, 2.75]
-        axes:
-          xscale: log
-          yscale: log
-          grid: true
-          grid_alpha: 0.25
-        legend: true
-        series:
-          hrs:
-            label: "HRS"
-            color: "#CC0000"
-            marker: "o"
-            markersize: 10
-            linestyle: "none"
-            alpha: 0.7
-          lrs:
-            label: "LRS"
-            color: "#0055CC"
-            marker: "s"
-            markersize: 10
-            linestyle: "none"
-            alpha: 0.7
-          ratio:
-            label: "Ratio"
-            color: "#CC7700"
-            marker: "^"
-            markersize: 10
-            linestyle: "none"
-            alpha: 0.7
-        annotations:
-          hrs:
-            text: "HRS"
-            position: last
-            color: "#CC0000"
-            fontweight: bold
-          lrs:
-            text: "LRS"
-            position: last
-            color: "#0055CC"
-            fontweight: bold
+        common:
+          layout: multi_series
+          axes:
+            grid: false
+          legend: false
+          # No subsample — plot all data points
+        log:
+          columns:
+            x: cycle
+            y_series:
+              hrs: r_hrs_ohm
+              lrs: r_lrs_ohm
+          axes:
+            xscale: log
+            yscale: log
+            ylim_padding:
+              below: 1.0
+              above: 1.0
+            yticks_show:
+              min: 100
+              max: 10000000
+          series:
+            hrs:
+              color: "#CC0000"
+              marker: "o"
+              markersize: 10
+              alpha: 0.7
+              annotation:
+                text: "HRS"
+                ha: "right"
+                va: "bottom"
+                xytext: [-5, 12]
+                fontweight: bold
+                color: "#CC0000"
+            lrs:
+              color: "#0055CC"
+              marker: "o"
+              markersize: 10
+              alpha: 0.7
+              annotation:
+                text: "LRS"
+                ha: "right"
+                va: "bottom"
+                xytext: [-5, 12]
+                fontweight: bold
+                color: "#0055CC"
+          current:
+            columns:
+              x: cycle
+              y_series:
+                lrs: i_lrs_A
+                hrs: i_hrs_A
+            axes:
+              ylim_padding:
+                below: 1.0
+                above: 1.0
+              yticks_show:
+                min: 1e-8
+                max: 1
+        linear:
+          columns:
+            x: cycle
+            y_series:
+              hrs: r_hrs_ohm
+              lrs: r_lrs_ohm
+          axes:
+            xscale: linear
+            yscale: linear
+            grid: true
+          series:
+            hrs:
+              color: "#CC0000"
+              marker: "o"
+              markersize: 4
+              alpha: 1
+              type: scatter
+            lrs:
+              color: "#0055CC"
+              marker: "s"
+              markersize: 4
+              alpha: 1
+              type: scatter
+          current:
+            columns:
+              x: cycle
+              y_series:
+                lrs: i_lrs_A
+                hrs: i_hrs_A
+            axes:
+              ylim_padding:
+                below: 0.5
+                above: 0.5
 
       interactive:
         plot:
           menu_title: "Select plot type for pulse-endurance:"
           options:
             - name: "Resistance vs Cycles"
-              handler: "science_cli.plot.pulse_endurance.plot_resistance"
+              handler: "science_cli.plot.generic.plot_endurance_resistance"
               description: "R_HRS, R_LRS, ratio over cycle number"
+              scale: log
             - name: "Current vs Cycles"
-              handler: "science_cli.plot.pulse_endurance.plot_current"
+              handler: "science_cli.plot.generic.plot_endurance_current"
               description: "I_LRS (V_set), I_HRS (V_read) over cycle number"
+              scale: log
             - name: "Both"
-              handler: "science_cli.plot.pulse_endurance.plot_both"
+              handler: "science_cli.plot.generic.plot_endurance_both"
               description: "Both resistance and current as separate files"
+              scale: log
+            - name: "Both (linear)"
+              handler: "science_cli.plot.generic.plot_endurance_both"
+              description: "Linear scale - both resistance and current"
+              scale: linear
         analyze:
           menu_title: "Select analysis for pulse-endurance:"
           options:
+            - name: "Ratio vs Cycles"
+              handler: "science_cli.library.pulse.pulse_endurance.ratio_vs_cycles"
+              description: "R_HRS/R_LRS ratio trend over cycle number"
+            - name: "Current Ratio vs Cycles"
+              handler: "science_cli.library.pulse.pulse_endurance.i_ratio_vs_cycles"
+              description: "I_LRS/I_HRS ratio trend over cycle number"
             - name: "Ratio Histogram"
-              handler: "science_cli.library.pulse.endurance.ratio_histogram"
+              handler: "science_cli.library.pulse.pulse_endurance.ratio_histogram"
               description: "Distribution of R_HRS / R_LRS ratio values"
             - name: "Current Ratio Histogram"
-              handler: "science_cli.library.pulse.endurance.current_ratio_histogram"
+              handler: "science_cli.library.pulse.pulse_endurance.current_ratio_histogram"
               description: "Distribution of I_LRS / I_HRS ratio values"
 
     pulse-retention:
       label: Pulse Retention Time
       patterns:
-      - retention
-      - _retention
-      - retention_
+        - retention
+        - _retention
+        - retention_
       legacy_codes:
-      - retention
-      - pulse-retention
+        - retention
+        - pulse-retention
       data_shape:
         kind: waveform_2d
         columns:
-        - time_s
-        - voltage_v
+          - time_s
+          - voltage_v
         units:
-        - s
-        - V
+          - s
+          - V
       derived_metadata:
-      - v_set_v
-      - v_read_v
-      - set_width_us
-      - read_width_us
-      - rise_us
-      - fall_us
-      - repeat_pattern
+        - v_set_v
+        - v_read_v
+        - set_width_us
+        - read_width_us
+        - rise_us
+        - fall_us
+        - repeat_pattern
       device_overrides:
         non-volatile-memristor:
           add:
-          - r_read_ohm
+            - r_read_ohm
       instruments:
         keysight-b1500a:
           header_lines: 147
@@ -441,7 +516,7 @@ studies:
         axis:
           xlabel: "Time (s)"
           ylabel: "Current (A)"
-        current_sign: -1  # Keysight outputs negative current for bipolar switching
+        current_sign: -1 # Keysight outputs negative current for bipolar switching
         figure: {}
         axes:
           xscale: log
@@ -450,22 +525,22 @@ studies:
     raman-spectrum:
       label: Raman Spectroscopy
       patterns:
-      - _raman
-      - _sers
-      - raman-sers
-      - _SERS
+        - _raman
+        - _sers
+        - raman-sers
+        - _SERS
       legacy_codes:
-      - raman
-      - sers
-      - raman-sers
+        - raman
+        - sers
+        - raman-sers
       data_shape:
         kind: spectrum_2d
         columns:
-        - wavelength_nm
-        - intensity
+          - wavelength_nm
+          - intensity
         units:
-        - nm
-        - counts
+          - nm
+          - counts
       instruments:
         horiba-usth:
           header_lines: 45
@@ -482,22 +557,22 @@ studies:
     uv-vis-spectrum:
       label: UV-Vis Transmittance
       patterns:
-      - _uv-vis
-      - _uvvis
-      - uv-vis
-      - uvvis
+        - _uv-vis
+        - _uvvis
+        - uv-vis
+        - uvvis
       legacy_codes:
-      - uv-vis
-      - uvvis
-      - uv_vis
+        - uv-vis
+        - uvvis
+        - uv_vis
       data_shape:
         kind: spectrum_2d
         columns:
-        - wavelength_nm
-        - absorbance
+          - wavelength_nm
+          - absorbance
         units:
-        - nm
-        - au
+          - nm
+          - au
       instruments:
         spectrometer-iop:
           header_lines: 1
@@ -514,17 +589,17 @@ studies:
     ec-cv:
       label: Cyclic Voltammetry
       patterns:
-      - _CV.
-      - .cv
-      - cv_
-      - cv-
+        - _CV.
+        - .cv
+        - cv_
+        - cv-
       legacy_codes: []
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - potential_v
-        - current_a
+          - time_s
+          - potential_v
+          - current_a
       instruments:
         autolab-usth:
           header_lines: 0
@@ -540,17 +615,17 @@ studies:
     ec-ca:
       label: Chronoamperometry
       patterns:
-      - _CA.
-      - .ca
-      - ca_
-      - ca-
+        - _CA.
+        - .ca
+        - ca_
+        - ca-
       legacy_codes: []
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - potential_v
-        - current_a
+          - time_s
+          - potential_v
+          - current_a
       instruments:
         autolab-usth:
           header_lines: 0
@@ -566,18 +641,18 @@ studies:
     ec-eis:
       label: Electrochemical Impedance Spectroscopy
       patterns:
-      - .mpt
-      - _EIS.
-      - .eis
-      - _impedance
-      - .z
+        - .mpt
+        - _EIS.
+        - .eis
+        - _impedance
+        - .z
       legacy_codes: []
       data_shape:
         kind: trace_2d
         columns:
-        - time_s
-        - potential_v
-        - current_a
+          - time_s
+          - potential_v
+          - current_a
       instruments:
         autolab-usth:
           header_lines: 0
@@ -604,19 +679,19 @@ studies:
     afm-topography:
       label: AFM/SPM Surface Topography
       patterns:
-      - .gwy
-      - .spm
-      - .ibw
-      - .jpk
-      - .stp
-      - .top
+        - .gwy
+        - .spm
+        - .ibw
+        - .jpk
+        - .stp
+        - .top
       legacy_codes: []
       data_shape:
         kind: image_2d
         columns:
-        - x_um
-        - y_um
-        - height_nm
+          - x_um
+          - y_um
+          - height_nm
       instruments: {}
       plot:
         layout: single
