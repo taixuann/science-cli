@@ -488,6 +488,11 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
+    # X-axis scale (log for skewed distributions, linear otherwise)
+    xscale = plot_cfg.get("xscale", "linear")
+    if xscale == "log":
+        ax.set_xscale("log")
+
     # Log-normal PDF fit
     fit_color = plot_cfg.get("series.fit.color", "black")
     fit_style = plot_cfg.get("series.fit.style", "--")
@@ -495,7 +500,10 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     if len(ratios) > 1 and ratios.min() > 0:
         params = lognorm.fit(ratios)
-        x_pdf = np.linspace(ratios.min(), ratios.max(), 300)
+        if xscale == "log":
+            x_pdf = np.logspace(np.log10(ratios.min()), np.log10(ratios.max()), 300)
+        else:
+            x_pdf = np.linspace(ratios.min(), ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
         bin_width = bins_arr[1] - bins_arr[0]
         pdf_scaled = pdf * len(ratios) * bin_width
@@ -505,32 +513,8 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
             label="Log-normal fit",
         )
 
-    mean_color = plot_cfg.get("series.mean_line.color", "red")
-    mean_style = plot_cfg.get("series.mean_line.style", "--")
-    median_color = plot_cfg.get("series.median_line.color", "blue")
-    median_style = plot_cfg.get("series.median_line.style", ":")
-
-    ax.axvline(
-        np.mean(ratios),
-        color=mean_color,
-        linestyle=mean_style,
-        linewidth=1.0,
-        label=f"Mean: {np.mean(ratios):.0f}",
-    )
-    ax.axvline(
-        np.median(ratios),
-        color=median_color,
-        linestyle=median_style,
-        linewidth=1.0,
-        label=f"Median: {np.median(ratios):.0f}",
-    )
-
     ax.set_xlabel("R$_{\\mathrm{HRS}}$ / R$_{\\mathrm{LRS}}$ Ratio")
     ax.set_ylabel("Count")
-    # Tight x-limit around data range with 5% padding
-    x_min, x_max = ratios.min(), ratios.max()
-    x_pad = (x_max - x_min) * 0.05
-    ax.set_xlim(x_min - x_pad, x_max + x_pad)
 
     legend_loc = plot_cfg.get("legend.loc", "upper right")
     legend_fs = int(plot_cfg.get("legend.fontsize", 8))
@@ -620,6 +604,11 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
+    # X-axis scale (log for skewed distributions)
+    xscale = plot_cfg.get("xscale", "linear")
+    if xscale == "log":
+        ax.set_xscale("log")
+
     fit_color = plot_cfg.get("series.fit.color", "black")
     fit_style = plot_cfg.get("series.fit.style", "--")
     fit_lw = float(plot_cfg.get("series.fit.linewidth", 1.2))
@@ -627,7 +616,10 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
     # Log-normal PDF fit
     if len(i_ratios) > 1 and i_ratios.min() > 0:
         params = lognorm.fit(i_ratios)
-        x_pdf = np.linspace(i_ratios.min(), i_ratios.max(), 300)
+        if xscale == "log":
+            x_pdf = np.logspace(np.log10(i_ratios.min()), np.log10(i_ratios.max()), 300)
+        else:
+            x_pdf = np.linspace(i_ratios.min(), i_ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
         bin_width = bins_arr[1] - bins_arr[0]
         pdf_scaled = pdf * len(i_ratios) * bin_width
@@ -637,31 +629,8 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
             label="Log-normal fit",
         )
 
-    mean_color = plot_cfg.get("series.mean_line.color", "red")
-    mean_style = plot_cfg.get("series.mean_line.style", "--")
-    median_color = plot_cfg.get("series.median_line.color", "blue")
-    median_style = plot_cfg.get("series.median_line.style", ":")
-
-    ax.axvline(
-        np.mean(i_ratios),
-        color=mean_color,
-        linestyle=mean_style,
-        linewidth=1.0,
-        label=f"Mean: {np.mean(i_ratios):.0f}",
-    )
-    ax.axvline(
-        np.median(i_ratios),
-        color=median_color,
-        linestyle=median_style,
-        linewidth=1.0,
-        label=f"Median: {np.median(i_ratios):.0f}",
-    )
-
     ax.set_xlabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
     ax.set_ylabel("Count")
-    x_min, x_max = i_ratios.min(), i_ratios.max()
-    x_pad = (x_max - x_min) * 0.05
-    ax.set_xlim(x_min - x_pad, x_max + x_pad)
 
     legend_loc = plot_cfg.get("legend.loc", "upper right")
     legend_fs = int(plot_cfg.get("legend.fontsize", 8))
