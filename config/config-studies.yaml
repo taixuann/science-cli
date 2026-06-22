@@ -476,6 +476,12 @@ studies:
                   color: "black"
                   style: "--"
                   linewidth: 1.2
+                mean_line:
+                  color: "red"
+                  style: "--"
+                median_line:
+                  color: "blue"
+                  style: ":"
               legend:
                 loc: "upper right"
                 fontsize: 8
@@ -499,6 +505,12 @@ studies:
                   color: "black"
                   style: "--"
                   linewidth: 1.2
+                mean_line:
+                  color: "red"
+                  style: "--"
+                median_line:
+                  color: "blue"
+                  style: ":"
               legend:
                 loc: "upper right"
                 fontsize: 8

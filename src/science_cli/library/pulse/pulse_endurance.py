@@ -456,16 +456,29 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
+    # X-axis scale (log for skewed distributions, linear otherwise)
+    xscale = plot_cfg.get("xscale", "linear")
+
     # Config-driven histogram bar styling
-    bins = int(plot_cfg.get("bins", 50))
+    n_bins = int(plot_cfg.get("bins", 50))
     bar_color = plot_cfg.get("series.bar.color", "#2EA043")
     bar_alpha = float(plot_cfg.get("series.bar.alpha", 0.7))
     bar_edgecolor = plot_cfg.get("series.bar.edgecolor", "black")
     bar_linewidth = float(plot_cfg.get("series.bar.linewidth", 0.5))
 
-    n, bins_arr, _ = ax.hist(
+    # Use log-spaced bins when xscale is log for even bin distribution
+    if xscale == "log":
+        bins_arr = np.logspace(
+            np.log10(max(ratios.min(), 1)),
+            np.log10(ratios.max()),
+            n_bins + 1,
+        )
+    else:
+        bins_arr = n_bins
+
+    n, bins_edges, _ = ax.hist(
         ratios,
-        bins=bins,
+        bins=bins_arr,
         color=bar_color,
         alpha=bar_alpha,
         edgecolor=bar_edgecolor,
@@ -488,10 +501,12 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
-    # X-axis scale (log for skewed distributions, linear otherwise)
-    xscale = plot_cfg.get("xscale", "linear")
+    # Apply log-scale and clean tick formatting
     if xscale == "log":
         ax.set_xscale("log")
+        from matplotlib import ticker
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
 
     # Log-normal PDF fit
     fit_color = plot_cfg.get("series.fit.color", "black")
@@ -505,7 +520,7 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
         else:
             x_pdf = np.linspace(ratios.min(), ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
-        bin_width = bins_arr[1] - bins_arr[0]
+        bin_width = bins_edges[1] - bins_edges[0]
         pdf_scaled = pdf * len(ratios) * bin_width
         ax.plot(
             x_pdf, pdf_scaled,
@@ -515,6 +530,26 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     ax.set_xlabel("R$_{\\mathrm{HRS}}$ / R$_{\\mathrm{LRS}}$ Ratio")
     ax.set_ylabel("Count")
+
+    mean_color = plot_cfg.get("series.mean_line.color", "red")
+    mean_style = plot_cfg.get("series.mean_line.style", "--")
+    median_color = plot_cfg.get("series.median_line.color", "blue")
+    median_style = plot_cfg.get("series.median_line.style", ":")
+
+    ax.axvline(
+        np.mean(ratios),
+        color=mean_color,
+        linestyle=mean_style,
+        linewidth=1.0,
+        label=f"Mean: {np.mean(ratios):.0f}",
+    )
+    ax.axvline(
+        np.median(ratios),
+        color=median_color,
+        linestyle=median_style,
+        linewidth=1.0,
+        label=f"Median: {np.median(ratios):.0f}",
+    )
 
     legend_loc = plot_cfg.get("legend.loc", "upper right")
     legend_fs = int(plot_cfg.get("legend.fontsize", 8))
@@ -574,15 +609,28 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    bins = int(plot_cfg.get("bins", 50))
+    # X-axis scale (log for skewed distributions)
+    xscale = plot_cfg.get("xscale", "linear")
+
+    n_bins = int(plot_cfg.get("bins", 50))
     bar_color = plot_cfg.get("series.bar.color", "#2EA043")
     bar_alpha = float(plot_cfg.get("series.bar.alpha", 0.7))
     bar_edgecolor = plot_cfg.get("series.bar.edgecolor", "black")
     bar_linewidth = float(plot_cfg.get("series.bar.linewidth", 0.5))
 
-    n, bins_arr, _ = ax.hist(
+    # Use log-spaced bins when xscale is log
+    if xscale == "log":
+        bins_arr = np.logspace(
+            np.log10(max(i_ratios.min(), 1)),
+            np.log10(i_ratios.max()),
+            n_bins + 1,
+        )
+    else:
+        bins_arr = n_bins
+
+    n, bins_edges, _ = ax.hist(
         i_ratios,
-        bins=bins,
+        bins=bins_arr,
         color=bar_color,
         alpha=bar_alpha,
         edgecolor=bar_edgecolor,
@@ -604,10 +652,12 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
-    # X-axis scale (log for skewed distributions)
-    xscale = plot_cfg.get("xscale", "linear")
+    # Apply log-scale and clean tick formatting
     if xscale == "log":
         ax.set_xscale("log")
+        from matplotlib import ticker
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
 
     fit_color = plot_cfg.get("series.fit.color", "black")
     fit_style = plot_cfg.get("series.fit.style", "--")
@@ -621,7 +671,7 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
         else:
             x_pdf = np.linspace(i_ratios.min(), i_ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
-        bin_width = bins_arr[1] - bins_arr[0]
+        bin_width = bins_edges[1] - bins_edges[0]
         pdf_scaled = pdf * len(i_ratios) * bin_width
         ax.plot(
             x_pdf, pdf_scaled,
@@ -631,6 +681,26 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     ax.set_xlabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
     ax.set_ylabel("Count")
+
+    mean_color = plot_cfg.get("series.mean_line.color", "red")
+    mean_style = plot_cfg.get("series.mean_line.style", "--")
+    median_color = plot_cfg.get("series.median_line.color", "blue")
+    median_style = plot_cfg.get("series.median_line.style", ":")
+
+    ax.axvline(
+        np.mean(i_ratios),
+        color=mean_color,
+        linestyle=mean_style,
+        linewidth=1.0,
+        label=f"Mean: {np.mean(i_ratios):.0f}",
+    )
+    ax.axvline(
+        np.median(i_ratios),
+        color=median_color,
+        linestyle=median_style,
+        linewidth=1.0,
+        label=f"Median: {np.median(i_ratios):.0f}",
+    )
 
     legend_loc = plot_cfg.get("legend.loc", "upper right")
     legend_fs = int(plot_cfg.get("legend.fontsize", 8))
