@@ -1,3 +1,3 @@
 """science-cli — Scientific Data Analysis CLI."""
 
-__version__ = "3.24.3"
+__version__ = "3.25.0"

@@ -5,6 +5,22 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.25.0] — 2026-06-22
+
+### Added
+- `resolve_analysis_plot_config()` in core/plot_config.py — analyzes config resolution from config-studies.yaml + per-file protocol.yaml overrides
+- `resolve_file_analyze_config()` in core/protocol.py — reads per-file analyze config from protocol.yaml entries
+- `--show-config` flag for all 4 pulse-endurance analyze functions — dumps resolved config for debugging
+- Key-based analyze schema in config-studies.yaml — each function self-contained with `menu_title`, `handler`, and inline `plot:` block
+
+### Changed
+- `interactive_menu.py:dispatch()` now detects key-based vs array-based menu format — analyze functions use key-based with `function_name` kwarg
+- `ratio_histogram()`, `current_ratio_histogram()`, `ratio_vs_cycles()`, `i_ratio_vs_cycles()` now read plot parameters from config with hardcoded defaults as fallback
+- `config-studies.yaml` pulse-endurance `interactive.analyze` — removed array-based `options:` + `plot_defaults:` in favor of key-based structure
+
+### How it works
+Config resolution order: `config-studies.yaml:interactive.analyze.<function>.plot` ← `protocol.yaml:steps[].files[].analyze.<function>`. Per-file overrides live at the top-level `analyze:` key (not inside `metadata:`).
+
 ## [3.24.3] — 2026-06-21
 
 ### Fixed

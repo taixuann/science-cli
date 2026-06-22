@@ -161,7 +161,10 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     Reads from extracted-list CSV (2 header lines: V_set, V_read; then
     data rows with columns including ``cycle`` and ``ratio``).  Saves
     the plot to results/ and writes fit metrics to protocol.yaml.
+
+    Config-driven via resolve_analysis_plot_config().
     """
+    import json as _json
     import pandas as pd
     import matplotlib as mpl
 
@@ -169,10 +172,23 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     import matplotlib.pyplot as plt
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
+    from science_cli.core.plot_config import resolve_analysis_plot_config
 
     apply_theme(get_active_theme())
 
+    function_name = kwargs.get("function_name", "ratio_vs_cycles")
     csv_path = Path(file_path)
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-endurance",
+        function_name,
+        filepath=str(csv_path),
+    )
+
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
+
     with open(csv_path) as f:
         v_set = float(f.readline().split(",")[1])
         v_read = float(f.readline().split(",")[1])
@@ -194,7 +210,14 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    ax.scatter(cycles, ratio, s=6, color="#CC7700", alpha=0.6, label="Data")
+    scatter_color = plot_cfg.get("series.scatter.color", "#CC7700")
+    scatter_size = int(plot_cfg.get("series.scatter.size", 6))
+    scatter_alpha = float(plot_cfg.get("series.scatter.alpha", 0.6))
+    scatter_label = plot_cfg.get("series.scatter.label", "Data")
+
+    ax.scatter(cycles, ratio,
+               s=scatter_size, color=scatter_color,
+               alpha=scatter_alpha, label=scatter_label)
 
     if len(log_c) >= 3:
         coeffs = np.polyfit(log_c, log_r, 1)
@@ -213,12 +236,17 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
             np.log10(cycles[valid].min()), np.log10(cycles[valid].max()), 200
         )
         fit_y = 10 ** (np.log10(fit_x) * fit_slope + fit_intercept)
+
+        fit_color = plot_cfg.get("series.fit.color", "red")
+        fit_style = plot_cfg.get("series.fit.style", "--")
+        fit_lw = float(plot_cfg.get("series.fit.linewidth", 1.2))
+
         ax.plot(
             fit_x,
             fit_y,
-            color="red",
-            linestyle="--",
-            linewidth=1.2,
+            color=fit_color,
+            linestyle=fit_style,
+            linewidth=fit_lw,
             label=f"Fit: slope={fit_slope:.3f}\n$R^2$={r_squared:.4f}",
         )
     else:
@@ -229,9 +257,11 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("Cycle")
     ax.set_ylabel("R$_{\\mathrm{HRS}}$ / R$_{\\mathrm{LRS}}$ Ratio")
-    # Tight x-limit around data range
     ax.set_xlim(cycles[valid].min() * 0.9, cycles[valid].max() * 1.1)
-    ax.legend(fontsize=8, loc="upper right")
+
+    legend_loc = plot_cfg.get("legend.loc", "upper right")
+    legend_fs = int(plot_cfg.get("legend.fontsize", 8))
+    ax.legend(fontsize=legend_fs, loc=legend_loc)
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "ratio-vs-cycles")
@@ -257,7 +287,10 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     Reads from extracted-list CSV (2 header lines: V_set, V_read; then
     data rows with columns including ``cycle`` and ``i_ratio``).  Saves
     the plot to results/ and writes fit metrics to protocol.yaml.
+
+    Config-driven — see :func:`ratio_vs_cycles` for the pattern.
     """
+    import json as _json
     import pandas as pd
     import matplotlib as mpl
 
@@ -265,10 +298,23 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     import matplotlib.pyplot as plt
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
+    from science_cli.core.plot_config import resolve_analysis_plot_config
 
     apply_theme(get_active_theme())
 
+    function_name = kwargs.get("function_name", "i_ratio_vs_cycles")
     csv_path = Path(file_path)
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-endurance",
+        function_name,
+        filepath=str(csv_path),
+    )
+
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
+
     with open(csv_path) as f:
         v_set = float(f.readline().split(",")[1])
         v_read = float(f.readline().split(",")[1])
@@ -290,7 +336,14 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    ax.scatter(cycles, i_ratio, s=6, color="#2176AE", alpha=0.6, label="Data")
+    scatter_color = plot_cfg.get("series.scatter.color", "#2176AE")
+    scatter_size = int(plot_cfg.get("series.scatter.size", 6))
+    scatter_alpha = float(plot_cfg.get("series.scatter.alpha", 0.6))
+    scatter_label = plot_cfg.get("series.scatter.label", "Data")
+
+    ax.scatter(cycles, i_ratio,
+               s=scatter_size, color=scatter_color,
+               alpha=scatter_alpha, label=scatter_label)
 
     if len(log_c) >= 3:
         coeffs = np.polyfit(log_c, log_ir, 1)
@@ -309,12 +362,17 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
             np.log10(cycles[valid].min()), np.log10(cycles[valid].max()), 200
         )
         fit_y = 10 ** (np.log10(fit_x) * fit_slope + fit_intercept)
+
+        fit_color = plot_cfg.get("series.fit.color", "red")
+        fit_style = plot_cfg.get("series.fit.style", "--")
+        fit_lw = float(plot_cfg.get("series.fit.linewidth", 1.2))
+
         ax.plot(
             fit_x,
             fit_y,
-            color="red",
-            linestyle="--",
-            linewidth=1.2,
+            color=fit_color,
+            linestyle=fit_style,
+            linewidth=fit_lw,
             label=f"Fit: slope={fit_slope:.3f}\n$R^2$={r_squared:.4f}",
         )
     else:
@@ -325,9 +383,11 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("Cycle")
     ax.set_ylabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
-    # Tight x-limit around data range
     ax.set_xlim(cycles[valid].min() * 0.9, cycles[valid].max() * 1.1)
-    ax.legend(fontsize=8, loc="upper right")
+
+    legend_loc = plot_cfg.get("legend.loc", "upper right")
+    legend_fs = int(plot_cfg.get("legend.fontsize", 8))
+    ax.legend(fontsize=legend_fs, loc=legend_loc)
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "i-ratio-vs-cycles")
@@ -355,7 +415,11 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     Reads from extracted-list CSV, saves plot to results/ directory.
     Updates protocol.yaml with ratio statistics.
+
+    Config-driven via resolve_analysis_plot_config() — hardcoded values
+    serve as fallback defaults when config is absent.
     """
+    import json as _json
     import pandas as pd
     import matplotlib as mpl
 
@@ -364,10 +428,25 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
     from scipy.stats import lognorm
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
+    from science_cli.core.plot_config import resolve_analysis_plot_config
 
     apply_theme(get_active_theme())
 
+    # Resolve config
+    function_name = kwargs.get("function_name", "ratio_histogram")
     csv_path = Path(file_path)
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-endurance",
+        function_name,
+        filepath=str(csv_path),
+    )
+
+    # --show-config support
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
+
     with open(csv_path) as f:
         v_set = float(f.readline().split(",")[1])
         v_read = float(f.readline().split(",")[1])
@@ -377,39 +456,71 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    n, bins, _ = ax.hist(
+    # Config-driven histogram bar styling
+    bins = int(plot_cfg.get("bins", 50))
+    bar_color = plot_cfg.get("series.bar.color", "#2EA043")
+    bar_alpha = float(plot_cfg.get("series.bar.alpha", 0.7))
+    bar_edgecolor = plot_cfg.get("series.bar.edgecolor", "black")
+    bar_linewidth = float(plot_cfg.get("series.bar.linewidth", 0.5))
+
+    n, bins_arr, _ = ax.hist(
         ratios,
-        bins=50,
-        color="#2EA043",
-        alpha=0.7,
-        edgecolor="black",
-        linewidth=0.5,
+        bins=bins,
+        color=bar_color,
+        alpha=bar_alpha,
+        edgecolor=bar_edgecolor,
+        linewidth=bar_linewidth,
     )
 
+    # Y-axis max method: supports "2nd-bin*1.5" (default) and
+    # "percentile_N*M" (e.g. "percentile_99*1.2").
+    sorted_n = np.sort(n)
+    y_max_method = plot_cfg.get("y_max_method", "2nd-bin*1.5")
+    if y_max_method.startswith("percentile_") and "*" in y_max_method:
+        parts = y_max_method.replace("percentile_", "").split("*")
+        try:
+            pct = float(parts[0])
+            mult = float(parts[1])
+            y_max = np.percentile(n, pct) * mult
+        except (ValueError, IndexError):
+            y_max = sorted_n[-2] * 1.5
+    else:
+        y_max = sorted_n[-2] * 1.5
+    ax.set_ylim(0, y_max)
+
     # Log-normal PDF fit
+    fit_color = plot_cfg.get("series.fit.color", "black")
+    fit_style = plot_cfg.get("series.fit.style", "--")
+    fit_lw = float(plot_cfg.get("series.fit.linewidth", 1.2))
+
     if len(ratios) > 1 and ratios.min() > 0:
         params = lognorm.fit(ratios)
         x_pdf = np.linspace(ratios.min(), ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
-        bin_width = bins[1] - bins[0]
+        bin_width = bins_arr[1] - bins_arr[0]
         pdf_scaled = pdf * len(ratios) * bin_width
         ax.plot(
             x_pdf, pdf_scaled,
-            color="black", linestyle="--", linewidth=1.2,
+            color=fit_color, linestyle=fit_style, linewidth=fit_lw,
             label="Log-normal fit",
         )
 
+    mean_color = plot_cfg.get("series.mean_line.color", "red")
+    mean_style = plot_cfg.get("series.mean_line.style", "--")
+    median_color = plot_cfg.get("series.median_line.color", "blue")
+    median_style = plot_cfg.get("series.median_line.style", ":")
+
     ax.axvline(
         np.mean(ratios),
-        color="red",
-        linestyle="--",
+        color=mean_color,
+        linestyle=mean_style,
         linewidth=1.0,
         label=f"Mean: {np.mean(ratios):.0f}",
     )
     ax.axvline(
         np.median(ratios),
-        color="blue",
-        linestyle=":",
+        color=median_color,
+        linestyle=median_style,
         linewidth=1.0,
         label=f"Median: {np.median(ratios):.0f}",
     )
@@ -420,7 +531,10 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
     x_min, x_max = ratios.min(), ratios.max()
     x_pad = (x_max - x_min) * 0.05
     ax.set_xlim(x_min - x_pad, x_max + x_pad)
-    ax.legend(fontsize=8, loc="upper right")
+
+    legend_loc = plot_cfg.get("legend.loc", "upper right")
+    legend_fs = int(plot_cfg.get("legend.fontsize", 8))
+    ax.legend(fontsize=legend_fs, loc=legend_loc)
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "ratio-histogram")
@@ -437,7 +551,11 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
 
 def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
-    """Generate histogram of I_LRS / I_HRS ratio distribution."""
+    """Generate histogram of I_LRS / I_HRS ratio distribution.
+
+    Config-driven — see :func:`ratio_histogram` for the pattern.
+    """
+    import json as _json
     import pandas as pd
     import matplotlib as mpl
 
@@ -446,10 +564,23 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
     from scipy.stats import lognorm
     from science_cli.core.session import get_active_theme
     from science_cli.theme import apply_theme
+    from science_cli.core.plot_config import resolve_analysis_plot_config
 
     apply_theme(get_active_theme())
 
+    function_name = kwargs.get("function_name", "current_ratio_histogram")
     csv_path = Path(file_path)
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-endurance",
+        function_name,
+        filepath=str(csv_path),
+    )
+
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
+
     with open(csv_path) as f:
         v_set = float(f.readline().split(",")[1])
         v_read = float(f.readline().split(",")[1])
@@ -459,50 +590,82 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     fig, ax = plt.subplots(figsize=(3.46, 2.75))
 
-    n, bins, _ = ax.hist(
+    bins = int(plot_cfg.get("bins", 50))
+    bar_color = plot_cfg.get("series.bar.color", "#2EA043")
+    bar_alpha = float(plot_cfg.get("series.bar.alpha", 0.7))
+    bar_edgecolor = plot_cfg.get("series.bar.edgecolor", "black")
+    bar_linewidth = float(plot_cfg.get("series.bar.linewidth", 0.5))
+
+    n, bins_arr, _ = ax.hist(
         i_ratios,
-        bins=50,
-        color="#2EA043",
-        alpha=0.7,
-        edgecolor="black",
-        linewidth=0.5,
+        bins=bins,
+        color=bar_color,
+        alpha=bar_alpha,
+        edgecolor=bar_edgecolor,
+        linewidth=bar_linewidth,
     )
+
+    # Y-axis max method
+    sorted_n = np.sort(n)
+    y_max_method = plot_cfg.get("y_max_method", "2nd-bin*1.5")
+    if y_max_method.startswith("percentile_") and "*" in y_max_method:
+        parts = y_max_method.replace("percentile_", "").split("*")
+        try:
+            pct = float(parts[0])
+            mult = float(parts[1])
+            y_max = np.percentile(n, pct) * mult
+        except (ValueError, IndexError):
+            y_max = sorted_n[-2] * 1.5
+    else:
+        y_max = sorted_n[-2] * 1.5
+    ax.set_ylim(0, y_max)
+
+    fit_color = plot_cfg.get("series.fit.color", "black")
+    fit_style = plot_cfg.get("series.fit.style", "--")
+    fit_lw = float(plot_cfg.get("series.fit.linewidth", 1.2))
 
     # Log-normal PDF fit
     if len(i_ratios) > 1 and i_ratios.min() > 0:
         params = lognorm.fit(i_ratios)
         x_pdf = np.linspace(i_ratios.min(), i_ratios.max(), 300)
         pdf = lognorm.pdf(x_pdf, *params)
-        bin_width = bins[1] - bins[0]
+        bin_width = bins_arr[1] - bins_arr[0]
         pdf_scaled = pdf * len(i_ratios) * bin_width
         ax.plot(
             x_pdf, pdf_scaled,
-            color="black", linestyle="--", linewidth=1.2,
+            color=fit_color, linestyle=fit_style, linewidth=fit_lw,
             label="Log-normal fit",
         )
 
+    mean_color = plot_cfg.get("series.mean_line.color", "red")
+    mean_style = plot_cfg.get("series.mean_line.style", "--")
+    median_color = plot_cfg.get("series.median_line.color", "blue")
+    median_style = plot_cfg.get("series.median_line.style", ":")
+
     ax.axvline(
         np.mean(i_ratios),
-        color="red",
-        linestyle="--",
+        color=mean_color,
+        linestyle=mean_style,
         linewidth=1.0,
         label=f"Mean: {np.mean(i_ratios):.0f}",
     )
     ax.axvline(
         np.median(i_ratios),
-        color="blue",
-        linestyle=":",
+        color=median_color,
+        linestyle=median_style,
         linewidth=1.0,
         label=f"Median: {np.median(i_ratios):.0f}",
     )
 
     ax.set_xlabel("I$_{\\mathrm{LRS}}$ / I$_{\\mathrm{HRS}}$ Ratio")
     ax.set_ylabel("Count")
-    # Tight x-limit around data range with 5% padding
     x_min, x_max = i_ratios.min(), i_ratios.max()
     x_pad = (x_max - x_min) * 0.05
     ax.set_xlim(x_min - x_pad, x_max + x_pad)
-    ax.legend(fontsize=8, loc="upper right")
+
+    legend_loc = plot_cfg.get("legend.loc", "upper right")
+    legend_fs = int(plot_cfg.get("legend.fontsize", 8))
+    ax.legend(fontsize=legend_fs, loc=legend_loc)
     ax.set_title(f"V_set={v_set:.2f}V, V_read={v_read:.2f}V", fontsize=9)
 
     _save_analysis_plot(fig, csv_path, "current-ratio-histogram")

@@ -237,6 +237,62 @@ def resolve_step_plot_overrides(
     return _flatten_dict(overrides)
 
 
+# ── Analyze config resolver ────────────────────────────────────────────────
+
+
+def resolve_analysis_plot_config(
+    study_name: str,
+    function_name: str,
+    device_type: str | None = None,
+    filepath: str | None = None,
+) -> dict:
+    """Resolve plot config for an **analyze** function.
+
+    Resolution order (lowest → highest priority):
+        1. ``config-studies.yaml`` → ``interactive.analyze.<function>.plot``
+        2. ``protocol.yaml`` → per-file ``analyze:<function>:`` section
+        3. (reserved) device-level overrides
+
+    Args:
+        study_name: Qualified study name, e.g. ``"pulse:pulse-endurance"``.
+        function_name: Analyze function key, e.g. ``"ratio_histogram"``.
+        device_type: Optional device type slug (reserved for future use).
+        filepath: Optional file path for per-file protocol overrides.
+
+    Returns:
+        Flat dict with dot-separated keys. Returns empty dict if the
+        function has no config — callers fall back to hardcoded defaults.
+    """
+    cfg = load_global_config()
+    from science_cli.core.studies import parse_study_name
+
+    technique, study_key = parse_study_name(study_name)
+    studies_dict = cfg.get("studies", {})
+    study_cfg: dict = {}
+    if technique in studies_dict and study_key in studies_dict[technique]:
+        study_cfg = studies_dict[technique][study_key]
+
+    # Navigate to interactive.analyze.<function>.plot
+    interactive = study_cfg.get("interactive", {})
+    analyze_menu = interactive.get("analyze", {})
+    func_entry = analyze_menu.get(function_name, {})
+    func_plot = func_entry.get("plot", {}) if isinstance(func_entry, dict) else {}
+
+    # Per-file overrides from protocol.yaml
+    proto_cfg: dict = {}
+    if filepath:
+        try:
+            from science_cli.core.protocol import resolve_file_analyze_config
+
+            proto_cfg = resolve_file_analyze_config(filepath, function_name)
+        except ImportError:
+            pass  # safe fallback
+
+    # Deep merge (study config ← protocol overrides)
+    merged = _deep_merge(func_plot, proto_cfg)
+    return _flatten_dict(merged)
+
+
 # ── CLI test ────────────────────────────────────────────────────────────
 
 

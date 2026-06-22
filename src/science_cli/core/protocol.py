@@ -1007,6 +1007,66 @@ def get_pulse_steps_with_metadata(
     return results
 
 
+# ── Per-file analyze config ──────────────────────────────────────────
+
+
+def resolve_file_analyze_config(
+    filepath: str | Path,
+    function_name: str,
+) -> dict:
+    """Read per-file analyze overrides from protocol.yaml.
+
+    Walks up from *filepath* to find ``protocol/<dir>/<dir>.yaml``,
+    locates the matching file entry in ``steps[*].files[*]``, and
+    returns the ``analyze:<function_name>:`` dict (a top-level key on the
+    file entry, **not** inside ``metadata:``).
+
+    Args:
+        filepath: Path to the data file (must be inside a protocol/ dir).
+        function_name: Analyze function key, e.g. ``"ratio_histogram"``.
+
+    Returns:
+        Config dict for the given function, or ``{}`` if not found.
+    """
+    fp = Path(filepath)
+    parts = fp.parts
+
+    # Walk up to find protocol/<dirname>/<dirname>.yaml
+    try:
+        proto_idx = parts.index("protocol")
+        proto_name = parts[proto_idx + 1]
+        proto_yaml = Path(*parts[: proto_idx + 2]) / f"{proto_name}.yaml"
+    except (ValueError, IndexError):
+        return {}
+
+    if not proto_yaml.exists():
+        return {}
+
+    try:
+        data = yaml.safe_load(proto_yaml.read_text()) or {}
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    fname = fp.name
+    for step in data.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        for entry in step.get("files", []) or []:
+            entry_file = entry["file"] if isinstance(entry, dict) else entry
+            if entry_file == fname:
+                # Top-level 'analyze' key (not inside metadata)
+                if isinstance(entry, dict):
+                    analyze = entry.get("analyze", {})
+                    if isinstance(analyze, dict):
+                        return analyze.get(function_name, {})
+                return {}
+
+    return {}
+
+
 # NOTE: get_step_columns() is defined in `science_cli.core.fzf_columns` to
 # avoid a circular dependency between protocol.py and fzf_utils/fzf_columns.
 # Callers should import from `science_cli.core.fzf_columns`.

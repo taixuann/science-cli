@@ -106,8 +106,28 @@ def dispatch(
         file_paths = [file_paths]
 
     menu = load_study_menu(study_key, menu_type)
-    choice = show_menu(menu["menu_title"], menu["options"])
-    selected = menu["options"][choice - 1]
+
+    # Detect format: key-based (analyze) vs array-based (plot)
+    if "options" not in menu:
+        # Key-based format: {function_key: {menu_title, handler, description, ...}}
+        keys = list(menu.keys())
+        options = [
+            {
+                "name": menu[k].get("menu_title", k),
+                "handler": menu[k]["handler"],
+                "description": menu[k].get("description", ""),
+            }
+            for k in keys
+        ]
+        title = f"Select {study_key} analysis:"
+        choice_idx = show_menu(title, options) - 1
+        selected_key = keys[choice_idx]
+        selected = menu[selected_key]
+        kwargs["function_name"] = selected_key
+    else:
+        # Array-based format (plot): unchanged
+        choice = show_menu(menu["menu_title"], menu["options"])
+        selected = menu["options"][choice - 1]
 
     # Dynamic import from handler path (e.g. "science_cli.plot.generic.plot_endurance_resistance")
     handler_path = selected["handler"]
