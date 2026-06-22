@@ -457,20 +457,105 @@ studies:
               description: "Linear scale - both resistance and current"
               scale: linear
         analyze:
-          menu_title: "Select analysis for pulse-endurance:"
-          options:
-            - name: "Ratio vs Cycles"
-              handler: "science_cli.library.pulse.pulse_endurance.ratio_vs_cycles"
-              description: "R_HRS/R_LRS ratio trend over cycle number"
-            - name: "Current Ratio vs Cycles"
-              handler: "science_cli.library.pulse.pulse_endurance.i_ratio_vs_cycles"
-              description: "I_LRS/I_HRS ratio trend over cycle number"
-            - name: "Ratio Histogram"
-              handler: "science_cli.library.pulse.pulse_endurance.ratio_histogram"
-              description: "Distribution of R_HRS / R_LRS ratio values"
-            - name: "Current Ratio Histogram"
-              handler: "science_cli.library.pulse.pulse_endurance.current_ratio_histogram"
-              description: "Distribution of I_LRS / I_HRS ratio values"
+          ratio_histogram:
+            menu_title: "Ratio Histogram"
+            handler: "science_cli.library.pulse.pulse_endurance.ratio_histogram"
+            description: "Distribution of R_HRS / R_LRS ratio values"
+            plot:
+              bins: 50
+              y_max_method: "2nd-bin*1.5"
+              series:
+                bar:
+                  color: "#2EA043"
+                  alpha: 0.7
+                  edgecolor: "black"
+                  linewidth: 0.5
+                fit:
+                  type: "log-normal"
+                  color: "black"
+                  style: "--"
+                  linewidth: 1.2
+                mean_line:
+                  color: "red"
+                  style: "--"
+                median_line:
+                  color: "blue"
+                  style: ":"
+              legend:
+                loc: "upper right"
+                fontsize: 8
+
+          current_ratio_histogram:
+            menu_title: "Current Ratio Histogram"
+            handler: "science_cli.library.pulse.pulse_endurance.current_ratio_histogram"
+            description: "Distribution of I_LRS / I_HRS ratio values"
+            plot:
+              bins: 50
+              y_max_method: "2nd-bin*1.5"
+              series:
+                bar:
+                  color: "#2EA043"
+                  alpha: 0.7
+                  edgecolor: "black"
+                  linewidth: 0.5
+                fit:
+                  type: "log-normal"
+                  color: "black"
+                  style: "--"
+                  linewidth: 1.2
+                mean_line:
+                  color: "red"
+                  style: "--"
+                median_line:
+                  color: "blue"
+                  style: ":"
+              legend:
+                loc: "upper right"
+                fontsize: 8
+
+          ratio_vs_cycles:
+            menu_title: "Ratio vs Cycles"
+            handler: "science_cli.library.pulse.pulse_endurance.ratio_vs_cycles"
+            description: "R_HRS/R_LRS ratio trend over cycle number"
+            plot:
+              axes:
+                xscale: log
+                yscale: log
+              series:
+                scatter:
+                  color: "#CC7700"
+                  size: 6
+                  alpha: 0.6
+                  label: "Data"
+                fit:
+                  color: "red"
+                  style: "--"
+                  linewidth: 1.2
+              legend:
+                loc: "upper right"
+                fontsize: 8
+
+          i_ratio_vs_cycles:
+            menu_title: "Current Ratio vs Cycles"
+            handler: "science_cli.library.pulse.pulse_endurance.i_ratio_vs_cycles"
+            description: "I_LRS/I_HRS ratio trend over cycle number"
+            plot:
+              axes:
+                xscale: log
+                yscale: log
+              series:
+                scatter:
+                  color: "#2176AE"
+                  size: 6
+                  alpha: 0.6
+                  label: "Data"
+                fit:
+                  color: "red"
+                  style: "--"
+                  linewidth: 1.2
+              legend:
+                loc: "upper right"
+                fontsize: 8
 
     pulse-retention:
       label: Pulse Retention Time
