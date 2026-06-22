@@ -508,8 +508,10 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
         # Push x-axis lower bound to the left so data centers visually
-        x_pad_factor = float(plot_cfg.get("x_pad_factor", 0.3))
-        ax.set_xlim(ratios.min() * x_pad_factor, ratios.max() * 1.1)
+        # Only applied when configured per-file in protocol.yaml
+        x_pad_factor = plot_cfg.get("x_pad_factor")
+        if x_pad_factor is not None:
+            ax.set_xlim(ratios.min() * float(x_pad_factor), ratios.max() * 1.1)
 
     # Log-normal PDF fit
     fit_color = plot_cfg.get("series.fit.color", "black")
@@ -661,8 +663,11 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
         from matplotlib import ticker
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
-        x_pad_factor = float(plot_cfg.get("x_pad_factor", 0.3))
-        ax.set_xlim(i_ratios.min() * x_pad_factor, i_ratios.max() * 1.1)
+        # Push x-axis lower bound to the left so data centers visually
+        # Only applied when configured per-file in protocol.yaml
+        x_pad_factor = plot_cfg.get("x_pad_factor")
+        if x_pad_factor is not None:
+            ax.set_xlim(i_ratios.min() * float(x_pad_factor), i_ratios.max() * 1.1)
 
     fit_color = plot_cfg.get("series.fit.color", "black")
     fit_style = plot_cfg.get("series.fit.style", "--")
