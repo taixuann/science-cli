@@ -5,6 +5,26 @@ All notable changes to science-cli will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.26.0] — 2026-06-22
+
+### Added
+- **Config-driven STP decay analyze plots** — `pulse_stp_decay.py` now calls `resolve_analysis_plot_config()` for both `analyze_all()` and `analyze_overlay()`, moving hardcoded plot parameters to `config-studies.yaml` key-based `interactive.analyze` with inline `plot:` blocks
+- **Per-function metadata structure** — `write_file_analyze_metadata()` in `core/protocol.py` writes per-file metadata namespaced under `analyze.<func_name>.metadata.extracted_decay` (e.g., `analyze.analyze_all.metadata.extracted_decay`)
+- **`.config` sub-key for per-file overrides** — `resolve_file_analyze_config()` checks `analyze.<func>.config` sub-key first, falls back to flat dict for backwards compatibility
+- **`--show-config` flag** for `pulse_stp_decay.py` `analyze_all()` and `analyze_overlay()` — dumps resolved config for debugging
+- **`required_fields`** for `pulse:pulse-stp-decay` in config-studies.yaml (`time_s`, `current_a`, `voltage_v`)
+- **`sci-stp-decay` skill** created at `~/.config/opencode/skills/sci-stp-decay/SKILL.md` documenting config + metadata schema
+
+### Changed
+- `pulse_stp_decay.py` restructured metadata from flat `extracted_decay` to per-function keys under `analyze.analyze_all.metadata.extracted_decay` with generic `seg_NNN` (start+end points) format
+- `pulse_stp_decay.py` `_plot_full_waveform`, `_plot_rise_zoom`, `_plot_decay_zoom`, `_plot_single_segment`, `_plot_segment_overview` now accept config dict params instead of hardcoded values
+
+### Fixed
+- **Step-level metadata overwrite bug** in `pulse_endurance.py` — replaced `_update_protocol_metadata()` calls with `write_file_analyze_metadata()` to write per-file under correct `analyze.<func>.metadata` namespace instead of overwriting step-level metadata
+
+### Docs
+- New `~/.config/opencode/skills/sci-stp-decay/SKILL.md` skill documenting STP decay config schema, metadata schema, and analysis workflow
+
 ## [3.25.0] — 2026-06-22
 
 ### Added
