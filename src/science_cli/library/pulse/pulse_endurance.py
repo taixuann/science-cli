@@ -501,12 +501,15 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
-    # Apply log-scale and clean tick formatting
+    # Apply log-scale with padding and clean tick formatting
     if xscale == "log":
         ax.set_xscale("log")
         from matplotlib import ticker
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+        # Push x-axis lower bound to the left so data centers visually
+        x_pad_factor = float(plot_cfg.get("x_pad_factor", 0.3))
+        ax.set_xlim(ratios.min() * x_pad_factor, ratios.max() * 1.1)
 
     # Log-normal PDF fit
     fit_color = plot_cfg.get("series.fit.color", "black")
@@ -652,12 +655,14 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
         y_max = sorted_n[-2] * 1.5
     ax.set_ylim(0, y_max)
 
-    # Apply log-scale and clean tick formatting
+    # Apply log-scale with padding and clean tick formatting
     if xscale == "log":
         ax.set_xscale("log")
         from matplotlib import ticker
         ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+        x_pad_factor = float(plot_cfg.get("x_pad_factor", 0.3))
+        ax.set_xlim(i_ratios.min() * x_pad_factor, i_ratios.max() * 1.1)
 
     fit_color = plot_cfg.get("series.fit.color", "black")
     fit_style = plot_cfg.get("series.fit.style", "--")
