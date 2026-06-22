@@ -959,6 +959,116 @@ def write_file_metadata(
     return False
 
 
+def write_file_analyze_metadata(
+    protocol_path: Path,
+    step_name: str,
+    filename: str,
+    function_name: str,
+    metadata_dict: dict,
+) -> bool:
+    """Write analysis metadata under ``analyze.<function_name>.metadata`` for a specific file.
+
+    Loads the protocol YAML, finds the step matching *step_name*, locates
+    the file entry matching *filename* within that step's ``files`` list,
+    and merges *metadata_dict* into the file entry's
+    ``analyze.<function_name>.metadata`` sub-dict (creating the full
+    nested path if absent).
+
+    If the file entry is currently a plain string (e.g. ``"data.csv"``),
+    it is promoted to a dict with a ``file`` key.
+
+    Matching on *step_name* also tries normalizing spaces to underscores.
+    Matching on *filename* also tries comparing just the basename.
+
+    Writes the file back atomically using :func:`_atomic_write_yaml` to
+    prevent corruption on partial writes.
+
+    Parameters
+    ----------
+    protocol_path:
+        Path to the protocol YAML file.
+    step_name:
+        Name of the step containing the file entry.
+    filename:
+        Filename to match (basename or full relative path).
+    function_name:
+        Analyze function key, e.g. ``"analyze_all"`` or ``"ratio_histogram"``.
+    metadata_dict:
+        Dict of key-value pairs to merge into
+        ``analyze.<function_name>.metadata``.
+
+    Returns
+    -------
+    bool
+        ``True`` if the step and file entry were found and updated,
+        ``False`` otherwise.
+    """
+    path = Path(protocol_path)
+    if not path.exists():
+        return False
+
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except Exception:
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    steps = data.get("steps", [])
+    if not isinstance(steps, list):
+        return False
+
+    # Also try normalizing spaces to underscores for step name matching
+    step_names_to_try = {step_name, step_name.replace(" ", "_")}
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("name") not in step_names_to_try:
+            continue
+
+        # Found the step — now find the file entry by filename
+        files = step.get("files", [])
+        if not isinstance(files, list):
+            return False
+
+        fname_base = Path(filename).name
+
+        for i, entry in enumerate(files):
+            if isinstance(entry, str):
+                # Plain string entry — match and promote to dict
+                if entry == filename or Path(entry).name == fname_base:
+                    files[i] = {
+                        "file": entry,
+                        "analyze": {
+                            function_name: {
+                                "metadata": dict(metadata_dict),
+                            },
+                        },
+                    }
+                    _atomic_write_yaml(path, data)
+                    return True
+            elif isinstance(entry, dict):
+                # Dict entry — match by "file" key, also try basename
+                entry_file = entry.get("file", "")
+                if entry_file == filename or Path(entry_file).name == fname_base:
+                    entry.setdefault("analyze", {})
+                    entry["analyze"].setdefault(function_name, {})
+                    entry["analyze"][function_name].setdefault("metadata", {})
+                    entry["analyze"][function_name]["metadata"].update(
+                        metadata_dict
+                    )
+                    _atomic_write_yaml(path, data)
+                    return True
+
+        # File not found in this step
+        return False
+
+    # Step not found
+    return False
+
+
 def get_pulse_steps_with_metadata(
     project_root: Path, study_filter: str = "",
 ) -> list[dict]:
@@ -1014,12 +1124,19 @@ def resolve_file_analyze_config(
     filepath: str | Path,
     function_name: str,
 ) -> dict:
-    """Read per-file analyze overrides from protocol.yaml.
+    """Resolve per-file analyze config from protocol.yaml.
 
     Walks up from *filepath* to find ``protocol/<dir>/<dir>.yaml``,
     locates the matching file entry in ``steps[*].files[*]``, and
-    returns the ``analyze:<function_name>:`` dict (a top-level key on the
-    file entry, **not** inside ``metadata:``).
+    returns the config for *function_name* from the ``analyze`` key.
+
+    .. admonition:: Backwards-compatible resolution
+       :class: note
+
+       If ``analyze.<function_name>`` has a ``config`` sub-key, returns
+       ``result["config"]`` (new structured format with per-file plot
+       overrides).  Otherwise returns the whole dict as-is (legacy flat
+       format, e.g. ``{x_pad_factor: 0.5}``).
 
     Args:
         filepath: Path to the data file (must be inside a protocol/ dir).
@@ -1061,7 +1178,10 @@ def resolve_file_analyze_config(
                 if isinstance(entry, dict):
                     analyze = entry.get("analyze", {})
                     if isinstance(analyze, dict):
-                        return analyze.get(function_name, {})
+                        func_cfg = analyze.get(function_name, {})
+                        if isinstance(func_cfg, dict) and "config" in func_cfg:
+                            return func_cfg["config"]
+                        return func_cfg
                 return {}
 
     return {}

@@ -9,6 +9,7 @@ I-ratio columns.
 from pathlib import Path
 
 import numpy as np
+from science_cli.core.protocol import write_file_analyze_metadata
 
 
 # ── Helpers ──
@@ -110,8 +111,39 @@ def _to_native(obj):
     return obj
 
 
+def _get_protocol_info(csv_path: Path) -> tuple[Path | None, str | None]:
+    """Extract protocol.yaml path and step_name from a CSV path.
+
+    Duplicates the path-resolving logic from ``_update_protocol_metadata``
+    but returns the values rather than using them internally.
+
+    Returns
+    -------
+    tuple[Path | None, str | None]
+        ``(protocol_yaml_path, step_name)`` or ``(None, None)`` if the
+        protocol path cannot be resolved.
+    """
+    parts = csv_path.parts
+    try:
+        proto_idx = parts.index("protocol")
+        proto_name = parts[proto_idx + 1]
+        proto_yaml = Path(*parts[: proto_idx + 2]) / f"{proto_name}.yaml"
+    except (ValueError, IndexError):
+        return None, None
+    if not proto_yaml.exists():
+        return None, None
+    step_name = csv_path.parent.name
+    return proto_yaml, step_name
+
+
 def _update_protocol_metadata(csv_path: Path, metadata: dict) -> None:
     """Update the protocol.yaml step metadata with analysis results.
+
+    .. deprecated::
+        This function writes to ``step.metadata`` which gets overwritten
+        when analyzing multiple files.  Prefer
+        :func:`write_file_analyze_metadata` which writes per-file under
+        ``entry.analyze.<function_name>.metadata``.
 
     Locates the protocol YAML file from csv_path, finds the step
     containing this file, and updates step.metadata.  All values
@@ -266,18 +298,15 @@ def ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
 
     _save_analysis_plot(fig, csv_path, "ratio-vs-cycles")
 
-    if fit_slope is not None:
-        _update_protocol_metadata(
-            csv_path,
-            {
-                "ratio_fit_slope": fit_slope,
-                "ratio_fit_r_squared": r_squared,
-            },
-        )
-    else:
-        _update_protocol_metadata(
-            csv_path,
-            {"ratio_fit_slope": None, "ratio_fit_r_squared": None},
+    metadata = (
+        {"ratio_fit_slope": fit_slope, "ratio_fit_r_squared": r_squared}
+        if fit_slope is not None
+        else {"ratio_fit_slope": None, "ratio_fit_r_squared": None}
+    )
+    proto_path, step_name = _get_protocol_info(csv_path)
+    if proto_path and step_name:
+        write_file_analyze_metadata(
+            proto_path, step_name, csv_path.name, function_name, metadata,
         )
 
 
@@ -392,18 +421,15 @@ def i_ratio_vs_cycles(file_path: Path = None, **kwargs) -> None:
 
     _save_analysis_plot(fig, csv_path, "i-ratio-vs-cycles")
 
-    if fit_slope is not None:
-        _update_protocol_metadata(
-            csv_path,
-            {
-                "i_ratio_fit_slope": fit_slope,
-                "i_ratio_fit_r_squared": r_squared,
-            },
-        )
-    else:
-        _update_protocol_metadata(
-            csv_path,
-            {"i_ratio_fit_slope": None, "i_ratio_fit_r_squared": None},
+    metadata = (
+        {"i_ratio_fit_slope": fit_slope, "i_ratio_fit_r_squared": r_squared}
+        if fit_slope is not None
+        else {"i_ratio_fit_slope": None, "i_ratio_fit_r_squared": None}
+    )
+    proto_path, step_name = _get_protocol_info(csv_path)
+    if proto_path and step_name:
+        write_file_analyze_metadata(
+            proto_path, step_name, csv_path.name, function_name, metadata,
         )
 
 
@@ -563,15 +589,17 @@ def ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     _save_analysis_plot(fig, csv_path, "ratio-histogram")
 
-    # Update protocol.yaml metadata
-    _update_protocol_metadata(
-        csv_path,
-        {
-            "ratio_mean": float(np.mean(ratios)),
-            "ratio_median": float(np.median(ratios)),
-            "ratio_std": float(np.std(ratios)),
-        },
-    )
+    # Update per-file analyze metadata in protocol.yaml
+    proto_path, step_name = _get_protocol_info(csv_path)
+    if proto_path and step_name:
+        write_file_analyze_metadata(
+            proto_path, step_name, csv_path.name, function_name,
+            {
+                "ratio_mean": float(np.mean(ratios)),
+                "ratio_median": float(np.median(ratios)),
+                "ratio_std": float(np.std(ratios)),
+            },
+        )
 
 
 def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
@@ -719,11 +747,13 @@ def current_ratio_histogram(file_path: Path = None, **kwargs) -> None:
 
     _save_analysis_plot(fig, csv_path, "current-ratio-histogram")
 
-    _update_protocol_metadata(
-        csv_path,
-        {
-            "i_ratio_mean": float(np.mean(i_ratios)),
-            "i_ratio_median": float(np.median(i_ratios)),
-            "i_ratio_std": float(np.std(i_ratios)),
-        },
-    )
+    proto_path, step_name = _get_protocol_info(csv_path)
+    if proto_path and step_name:
+        write_file_analyze_metadata(
+            proto_path, step_name, csv_path.name, function_name,
+            {
+                "i_ratio_mean": float(np.mean(i_ratios)),
+                "i_ratio_median": float(np.median(i_ratios)),
+                "i_ratio_std": float(np.std(i_ratios)),
+            },
+        )

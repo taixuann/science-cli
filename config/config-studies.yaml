@@ -166,6 +166,10 @@ studies:
         - rise_us
         - fall_us
         - repeat_pattern
+      required_fields:
+        - time_s
+        - current_a
+        - voltage_v
       device_overrides:
         volatile-memristor:
           add:
@@ -230,15 +234,50 @@ studies:
             label: "V(t)"
       interactive:
         analyze:
-          menu_title: "Select analysis for STP decay:"
-          options:
-            - name: "Extract decay — fit segments, plot overview"
-              handler: "science_cli.library.pulse.pulse_stp_decay.analyze_all"
-              description: "Segment-aware: detect segments, fit each, overview plot, metadata"
-            - name: "Overlay decay curves"
-              handler: "science_cli.library.pulse.pulse_stp_decay.analyze_overlay"
-              description: "Compare: plot fit curves of extracted-decay files"
-              overlay: true
+          analyze_all:
+            menu_title: "Extract decay — fit segments, plot overview"
+            handler: "science_cli.library.pulse.pulse_stp_decay.analyze_all"
+            description: "Segment-aware: detect segments, fit each, overview plot, metadata"
+            plot:
+              figure:
+                figsize: [10, 6]
+                dpi: 150
+              waveform:
+                current_color: "#CC0000"
+                current_label: "I(t)"
+                voltage_color: "#0055CC"
+                voltage_label: "V(t)"
+                linewidth: 1.0
+              fit:
+                color: "black"
+                style: "--"
+                linewidth: 1.2
+                markers: false
+              rise_zoom:
+                xpad: 0.15
+                time_unit: "µs"
+              segment_overview:
+                layout: "grid"
+                ncols: 3
+                figsize: [12, 8]
+                dpi: 150
+
+          analyze_overlay:
+            menu_title: "Overlay decay curves"
+            handler: "science_cli.library.pulse.pulse_stp_decay.analyze_overlay"
+            description: "Compare: plot fit curves of extracted-decay files"
+            overlay: true
+            plot:
+              figure:
+                figsize: [8, 3.5]
+                dpi: 150
+              colors: ["#CC0000", "#0055CC", "#2EA043", "#CC7700"]
+              fit:
+                style: "--"
+                linewidth: 1.0
+              legend:
+                loc: "upper right"
+                fontsize: 8
 
     pulse-ppf:
       label: "Paired-Pulse Facilitation"

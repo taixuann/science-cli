@@ -14,6 +14,9 @@ from pathlib import Path
 
 import numpy as np
 
+from science_cli.core.plot_config import resolve_analysis_plot_config
+from science_cli.core.protocol import write_file_analyze_metadata
+
 # ── Helpers ──
 
 
@@ -205,7 +208,9 @@ def _add_seg(segs: list, cs: int, ce: int, t: np.ndarray, vc: np.ndarray) -> Non
 def _has_extracted_decay(file_path: Path, project_root: Path) -> bool:
     """Check if a file already has extracted_decay tags in protocol.yaml (T4).
 
-    Returns True if the file entry's metadata contains ``extracted_decay.segment_001``.
+    Returns True if the file entry's metadata contains ``extracted_decay.segment_001``
+    in either the old flat location (``metadata.extracted_decay``) or the new
+    per-function location (``analyze.analyze_all.metadata.extracted_decay``).
     """
     import yaml
     from science_cli.core.paths import ProjectPaths
@@ -219,13 +224,20 @@ def _has_extracted_decay(file_path: Path, project_root: Path) -> bool:
         for s in proto_data.get("steps", []):
             for entry in s.get("files", []):
                 entry_name = entry["file"] if isinstance(entry, dict) else entry
-                if entry_name == fname:
-                    meta = entry.get("metadata", {}) if isinstance(entry, dict) else {}
+                if entry_name == fname and isinstance(entry, dict):
+                    # Check old location: metadata.extracted_decay
+                    meta = entry.get("metadata", {})
                     extracted = meta.get("extracted_decay", {})
                     if isinstance(extracted, dict) and extracted.get("segment_001"):
                         return True
                     if isinstance(extracted, bool) and extracted:
                         return True
+                    # Check new location: analyze.analyze_all.metadata.extracted_decay
+                    analyze_all = entry.get("analyze", {}).get("analyze_all", {})
+                    if isinstance(analyze_all, dict):
+                        new_extracted = analyze_all.get("metadata", {}).get("extracted_decay", {})
+                        if isinstance(new_extracted, dict) and new_extracted.get("seg_001"):
+                            return True
     return False
 
 
@@ -240,51 +252,21 @@ def _to_native(val):
 
 
 def _tag_with_segment_metadata(
-    file_path: Path, project_root: Path, segment_results: list[dict],
-    step_name: str = "",
+    csv_path: Path, project_root: Path, metadata_dict: dict,
+    function_name: str = "analyze_all", step_name: str = "",
 ) -> None:
-    """Tag a file with per-segment decay metadata in protocol.yaml (T3).
+    """Tag a file with extracted_decay metadata under ``analyze.<function_name>.metadata``.
 
-    Writes a structured ``extracted_decay`` dict:
-    .. code-block:: yaml
+    Writes via :func:`write_file_analyze_metadata` so metadata lands in the
+    per-function namespace rather than the flat ``metadata`` key.
 
-        extracted_decay:
-          segments: 3
-          segment_001:
-            model: monoexponential
-            tau1_ms: 12.3
-            ...
+    *metadata_dict* should have the form ``{"extracted_decay": {...}}``.
     """
     import yaml
-    from science_cli.core.protocol import write_file_metadata
     from science_cli.core.paths import ProjectPaths
 
-    fname = file_path.name
+    fname = csv_path.name
     paths = ProjectPaths(project_root)
-
-    extracted: dict = {"segments": len(segment_results)}
-    for i, seg in enumerate(segment_results, 1):
-        key = f"segment_{i:03d}"
-        entry: dict = {
-            "model": seg.get("model", "unknown"),
-        }
-        if seg.get("tau1_ms") is not None:
-            entry["tau1_ms"] = _to_native(seg["tau1_ms"])
-        if seg.get("tau2_ms") is not None:
-            entry["tau2_ms"] = _to_native(seg["tau2_ms"])
-        if seg.get("a1") is not None:
-            entry["a1"] = _to_native(seg["a1"])
-        if seg.get("a2") is not None:
-            entry["a2"] = _to_native(seg["a2"])
-        if seg.get("initial_current_ua") is not None:
-            entry["initial_current_ua"] = _to_native(seg["initial_current_ua"])
-        if seg.get("steady_state_current_ua") is not None:
-            entry["steady_state_current_ua"] = _to_native(seg["steady_state_current_ua"])
-        if seg.get("decay_pct") is not None:
-            entry["decay_pct"] = _to_native(seg["decay_pct"])
-        if seg.get("r_squared") is not None:
-            entry["r_squared"] = _to_native(seg["r_squared"])
-        extracted[key] = entry
 
     # Find protocol YAML + step name from file
     resolved_step = step_name
@@ -302,11 +284,12 @@ def _tag_with_segment_metadata(
                     break
 
     if resolved_py is not None and resolved_step:
-        write_file_metadata(resolved_py, resolved_step, fname, {"extracted_decay": extracted})
+        write_file_analyze_metadata(resolved_py, resolved_step, fname, function_name, metadata_dict)
         from rich.console import Console
+        n_segs = len([k for k in metadata_dict.get("extracted_decay", {}) if k.startswith("seg_")])
         Console().print(
             f"  [green]Tagged:[/green] {fname} -> protocol.yaml "
-            f"(extracted_decay.segments={len(segment_results)})"
+            f"(analyze.{function_name}.metadata.extracted_decay, {n_segs} segments)"
         )
 
 
@@ -325,10 +308,17 @@ def _save_plot(fig, csv_path: Path, kind: str) -> None:
     Console().print(f"[bold green]\u2713[/bold green] Saved: {save_path}")
 
 
-def _plot_full_waveform(ax, time_s, current_A, voltage_V, result) -> None:
+def _plot_full_waveform(ax, time_s, current_A, voltage_V, result, plot_cfg=None) -> None:
     """Plot full STP decay waveform on given axes."""
+    cfg = plot_cfg or {}
+    current_color = cfg.get("waveform.current_color", "#CC0000")
+    current_label = cfg.get("waveform.current_label", "I(t)")
+    voltage_color = cfg.get("waveform.voltage_color", "#0055CC")
+    voltage_label = cfg.get("waveform.voltage_label", "V(t)")
+    linewidth = float(cfg.get("waveform.linewidth", 1.0))
+
     t_us = time_s * 1e6
-    ax.plot(t_us, current_A * 1e6, ".", color="#CC0000", markersize=2, alpha=0.6, label="I(t) data")
+    ax.plot(t_us, current_A * 1e6, ".", color=current_color, markersize=2, alpha=0.6, label=f"{current_label} data")
 
     # Fitted decay line
     if result and "error" not in result and result.get("tau1_ms") is not None:
@@ -344,13 +334,13 @@ def _plot_full_waveform(ax, time_s, current_A, voltage_V, result) -> None:
             a2 = result.get("a2") or (i_norm[0] - steady) * 0.3
             tau2 = result.get("tau2_ms") or tau1
             i_fit = (a1 * np.exp(-t_fit_norm / tau1) + a2 * np.exp(-t_fit_norm / tau2)) + steady
-        ax.plot(t_fit * 1e6, i_fit * 1e6, "-", color="#CC0000", linewidth=1.5, label=f"Fit: {result['model']}")
+        ax.plot(t_fit * 1e6, i_fit * 1e6, "-", color=current_color, linewidth=linewidth, label=f"Fit: {result['model']}")
 
     # Voltage on right axis
     ax2 = ax.twinx()
-    ax2.plot(t_us, voltage_V, "-", color="#0055CC", linewidth=0.8, alpha=0.7, label="V(t)")
-    ax2.set_ylabel("Voltage (V)", color="#0055CC")
-    ax2.tick_params(axis="y", colors="#0055CC")
+    ax2.plot(t_us, voltage_V, "-", color=voltage_color, linewidth=0.8, alpha=0.7, label=voltage_label)
+    ax2.set_ylabel("Voltage (V)", color=voltage_color)
+    ax2.tick_params(axis="y", colors=voltage_color)
 
     ax.set_xlabel("Time (µs)")
     ax.set_ylabel("Current (µA)")
@@ -372,8 +362,12 @@ def _plot_full_waveform(ax, time_s, current_A, voltage_V, result) -> None:
                 verticalalignment="top", bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
 
 
-def _plot_rise_zoom(ax, time_s, voltage_V, result) -> None:
+def _plot_rise_zoom(ax, time_s, voltage_V, result, plot_cfg=None) -> None:
     """Plot zoomed rise phase on given axes."""
+    cfg = plot_cfg or {}
+    xpad = float(cfg.get("rise_zoom.xpad", 0.15))
+    time_unit = cfg.get("rise_zoom.time_unit", "µs")
+
     t_us = time_s * 1e6
     # Find the rise + plateau region (first ~20% of duration)
     mid = max(10, len(t_us) // 5)
@@ -387,13 +381,18 @@ def _plot_rise_zoom(ax, time_s, voltage_V, result) -> None:
     ax.text(t_us[0], v_set, f" V_set = {v_set:.3f} V", fontsize=7, color="green", va="bottom")
     ax.text(t_us[0], v_read, f" V_read = {v_read:.3f} V", fontsize=7, color="gray", va="top")
 
-    ax.set_xlabel("Time (µs)")
+    ax.set_xlabel(f"Time ({time_unit})")
     ax.set_ylabel("Voltage (V)")
     ax.set_title("Rise Phase (Zoom)", fontsize=10)
 
 
-def _plot_decay_zoom(ax, time_s, current_A, result) -> None:
+def _plot_decay_zoom(ax, time_s, current_A, result, plot_cfg=None) -> None:
     """Plot zoomed decay phase with fit line."""
+    cfg = plot_cfg or {}
+    fit_color = cfg.get("fit.color", "black")
+    fit_style = cfg.get("fit.style", "--")
+    fit_linewidth = float(cfg.get("fit.linewidth", 1.2))
+
     t_us = time_s * 1e6
     i_ua = current_A * 1e6
 
@@ -419,7 +418,7 @@ def _plot_decay_zoom(ax, time_s, current_A, result) -> None:
             tau2 = result.get("tau2_ms") or tau1
             i_fit = (a1 * np.exp(-t_fit_norm / tau1) + a2 * np.exp(-t_fit_norm / tau2)) + steady
         i_fit_ua = i_fit * 1e6
-        ax.plot(t_fit * 1e6, i_fit_ua, "-", color="red", linewidth=1.5, label="Fit")
+        ax.plot(t_fit * 1e6, i_fit_ua, fit_style, color=fit_color, linewidth=fit_linewidth, label="Fit")
 
         tau1 = result.get("tau1_ms", 0)
         tau2 = result.get("tau2_ms")
@@ -438,7 +437,7 @@ def _plot_decay_zoom(ax, time_s, current_A, result) -> None:
     ax.set_title("Decay Phase (Zoom)", fontsize=10)
 
 
-def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: dict, color) -> None:
+def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: dict, color, plot_cfg=None) -> None:
     """Plot a single voltage-plateau segment with context before the jump.
 
     Shows:
@@ -447,6 +446,11 @@ def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: di
     - The pre-jump context window marked
     - Tau markers and annotation box for the decay fit
     """
+    cfg = plot_cfg or {}
+    fit_color = cfg.get("fit.color", "black")
+    fit_style = cfg.get("fit.style", "--")
+    fit_linewidth = float(cfg.get("fit.linewidth", 1.2))
+
     s, e = seg["start"], seg["end"]
     t_seg_us = time_s[s:e] * 1e6
     i_seg_ua = np.abs(current_A[s:e]) * 1e6
@@ -505,7 +509,7 @@ def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: di
                     i_fit = (a1_val * np.exp(-t_fit_norm / tau1) +
                              a2 * np.exp(-t_fit_norm / tau2)) + steady
 
-                ax.plot(t_fit * 1e6, i_fit * 1e6, "-", color=color, linewidth=1.5, alpha=0.9, label="Fit")
+                ax.plot(t_fit * 1e6, i_fit * 1e6, fit_style, color=fit_color, linewidth=fit_linewidth, alpha=0.9, label="Fit")
 
                 # Green dot at tau₁
                 tau1_s = result["tau1_ms"] * 1e-3
@@ -550,6 +554,7 @@ def _plot_single_segment(ax, time_s, current_A, voltage_V, seg: dict, result: di
 
 def _plot_segment_overview(
     fig, time_s, current_A, voltage_V, segments: list[dict], segment_results: list[dict],
+    plot_cfg=None,
 ) -> None:
     """Plot each segment in its own subpanel for clear visual inspection (T2 redesign).
 
@@ -562,13 +567,18 @@ def _plot_segment_overview(
 
     Each subpanel shows one segment's data, fit, tau markers, and annotation.
     """
+    cfg = plot_cfg or {}
+    layout = cfg.get("segment_overview.layout", "grid")
+    ncols = int(cfg.get("segment_overview.ncols", 3))
     import matplotlib.pyplot as plt
 
     n_seg = len(segments)
-    n_cols = 2
-    n_rows = (n_seg + 1) // 2 if n_seg > 1 else 1
-    if n_seg == 1:
+    if layout == "grid":
+        n_cols = min(ncols, n_seg)
+        n_rows = (n_seg + n_cols - 1) // n_cols
+    else:
         n_cols = 1
+        n_rows = n_seg
 
     # Recreate figure with proper grid
     fig.clf()
@@ -581,7 +591,7 @@ def _plot_segment_overview(
         col = seg_i % n_cols
         ax = axes[row][col]
         c = colors[seg_i]
-        _plot_single_segment(ax, time_s, current_A, voltage_V, seg, result, c)
+        _plot_single_segment(ax, time_s, current_A, voltage_V, seg, result, c, plot_cfg=plot_cfg)
 
     # Hide unused subplots
     total_cells = n_rows * n_cols
@@ -663,7 +673,7 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
     5. Save per-segment metadata to protocol.yaml
     6. Respect ``--overwrite`` flag (T4)
     """
-    from science_cli.library.pulse.stp import analyze_stp_decay
+    function_name = kwargs.get("function_name", "analyze_all")
     import matplotlib as mpl
 
     mpl.use("Agg")
@@ -675,6 +685,17 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
 
     csv_path = Path(file_path)
     project_root = _get_project_root(csv_path)
+
+    # Resolve plot config from config-studies.yaml + per-file protocol.yaml overrides
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-stp-decay", function_name, filepath=str(csv_path),
+    )
+    # --show-config support
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        import json as _json
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
 
     # T4: Check if already analyzed
     if project_root and not overwrite:
@@ -712,16 +733,16 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
 
     # T2: Overview plot — one subpanel per segment
     n_seg = len(segments)
-    n_cols = 2 if n_seg > 1 else 1
-    n_rows = (n_seg + 1) // 2 if n_seg > 1 else 1
-    fig = plt.figure(figsize=(5 * n_cols, 3.5 * n_rows))
-    _plot_segment_overview(fig, time_s, current_A, voltage_V, segments, segment_results)
+    figsize_cfg = plot_cfg.get("segment_overview.figsize", [12, 8])
+    dpi_cfg = int(plot_cfg.get("segment_overview.dpi", 150))
+    fig = plt.figure(figsize=figsize_cfg, dpi=dpi_cfg)
+    _plot_segment_overview(fig, time_s, current_A, voltage_V, segments, segment_results, plot_cfg=plot_cfg)
 
     fig.suptitle(f"STP Decay Overview: {csv_path.name}", fontsize=11, y=0.98)
 
     _save_plot(fig, csv_path, "stp-decay-diagnostic_overview")
 
-    # T3: Tag with per-segment metadata
+    # T3: Tag with per-segment metadata under analyze.<function_name>.metadata.extracted_decay
     if project_root:
         # Find the step name
         from science_cli.core.paths import ProjectPaths
@@ -737,9 +758,30 @@ def analyze_all(file_path: Path = None, overwrite: bool = False, **kwargs) -> No
                     resolved_step = s["name"]
                     break
 
+        # Build new-format extracted_decay metadata
+        extracted_dict: dict = {}
+        for i, (seg, seg_result) in enumerate(zip(segments, segment_results), 1):
+            s, e = seg["start"], seg["end"]
+            extracted_dict[f"seg_{i:03d}"] = {
+                "t1_s": _to_native(time_s[s]),
+                "v1_v": _to_native(voltage_V[s]),
+                "i1_a": _to_native(np.abs(current_A[s])),
+                "t2_s": _to_native(time_s[min(e - 1, len(time_s) - 1)]),
+                "v2_v": _to_native(voltage_V[min(e - 1, len(time_s) - 1)]),
+                "i2_a": _to_native(np.abs(current_A[min(e - 1, len(time_s) - 1)])),
+            }
+        # Decay params from first successful fit
+        for seg_result in segment_results:
+            if "error" not in seg_result and seg_result.get("tau1_ms") is not None:
+                extracted_dict["decay"] = {
+                    "tau_ms": _to_native(seg_result["tau1_ms"]),
+                    "r_squared": _to_native(seg_result.get("r_squared", 0)),
+                }
+                break
+
         _tag_with_segment_metadata(
-            csv_path, project_root, segment_results,
-            step_name=resolved_step,
+            csv_path, project_root, {"extracted_decay": extracted_dict},
+            function_name=function_name, step_name=resolved_step,
         )
 
 
@@ -749,6 +791,7 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
     Reads all files tagged with ``[extracted-decay]`` and plots their
     decay fit curves on the same axes for cross-file comparison.
     """
+    function_name = kwargs.get("function_name", "analyze_overlay")
     from science_cli.library.pulse.stp import analyze_stp_decay
     from science_cli.core.grammar import parse_filename
     import matplotlib as mpl
@@ -764,6 +807,26 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
         from rich.console import Console
         Console().print("[yellow]No files selected for overlay.[/yellow]")
         return
+
+    # Resolve plot config for overlay mode
+    plot_cfg = resolve_analysis_plot_config(
+        "pulse:pulse-stp-decay", function_name,
+    )
+    # --show-config support
+    if kwargs.get("show_config") or kwargs.get("show-config"):
+        import json as _json
+        print(f"--- Resolved config for {function_name} ---")
+        print(_json.dumps(plot_cfg, indent=2, default=str))
+        return
+
+    # Config-driven parameters
+    colors_list = plot_cfg.get("colors", ["#CC0000", "#0055CC", "#2EA043", "#CC7700"])
+    figsize = plot_cfg.get("figure.figsize", [8, 3.5])
+    dpi = int(plot_cfg.get("figure.dpi", 150))
+    fit_style = plot_cfg.get("fit.style", "--")
+    fit_linewidth = float(plot_cfg.get("fit.linewidth", 1.0))
+    legend_loc = plot_cfg.get("legend.loc", "upper right")
+    legend_fontsize = int(plot_cfg.get("legend.fontsize", 8))
 
     # Filter to files tagged with [extracted-decay]
     overlay_data: list[dict] = []
@@ -803,8 +866,11 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
         return
 
     # Plot comparison
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize, dpi=dpi)
     colors = plt.cm.Set1(np.linspace(0, 1, len(overlay_data)))
+    # Replace colors with config-driven list if enough entries
+    if len(colors_list) >= len(overlay_data):
+        colors = colors_list[:len(overlay_data)]
 
     for i, entry in enumerate(overlay_data):
         time_s = entry["time_s"]
@@ -833,7 +899,7 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
         i_fit_ua = i_fit * 1e6
         tau = result["tau1_ms"]
         label = f"{entry['name'][:25]} ($\\tau$={tau:.1f})"
-        ax1.plot(t_fit * 1e6, i_fit_ua, "-", color=c, linewidth=1.2, label=label, alpha=0.8)
+        ax1.plot(t_fit * 1e6, i_fit_ua, fit_style, color=c, linewidth=fit_linewidth, label=label, alpha=0.8)
 
         # Decay zoom (right panel) — normalize time to start of decay
         skip = max(1, len(time_s) // 4)
@@ -844,7 +910,7 @@ def analyze_overlay(file_paths: list[Path] = None, **kwargs) -> None:
     ax1.set_xlabel("Time (µs)")
     ax1.set_ylabel("Current (µA)")
     ax1.set_title("Full Decay Overlay", fontsize=10)
-    ax1.legend(fontsize=6, loc="upper right", ncol=2)
+    ax1.legend(fontsize=legend_fontsize, loc=legend_loc, ncol=2)
 
     ax2.set_xlabel("Time (µs) from decay start")
     ax2.set_ylabel("Current (µA)")
